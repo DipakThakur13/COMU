@@ -1,0 +1,18 @@
+{
+  "name": "@comu/context-engine",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@comu/tool-core": "workspace:*",
+    "@comu/tool-filesystem": "workspace:*",
+    "@comu/protocol": "workspace:*",
+    "@comu/shared": "workspace:*"
+  }
+}

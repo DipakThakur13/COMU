@@ -1,0 +1,78 @@
+{
+  "name": "comu-ai",
+  "displayName": "COMU AI Coding Agent",
+  "description": "Multi-Model AI Coding Agent for VS Code",
+  "version": "0.1.0",
+  "publisher": "comu",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "comu.openChat",
+        "title": "COMU: Open Chat"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "comu-sidebar",
+          "title": "COMU AI",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "views": {
+      "comu-sidebar": [
+        {
+          "type": "webview",
+          "id": "comu.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "COMU AI",
+      "properties": {
+        "comu.runtime.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:3456",
+          "description": "Base URL of the COMU Agent Runtime"
+        },
+        "comu.defaultModel": {
+          "type": "string",
+          "default": "nvidia-nemotron-3-ultra",
+          "description": "Default model ID to use"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "pnpm run compile",
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsup src/extension.ts --format cjs --external vscode",
+    "watch": "tsup src/extension.ts --format cjs --external vscode --watch",
+    "test-compile": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "pnpm run test-compile && node ./dist/test/runTest.js"
+  },
+  "dependencies": {
+    "@comu/protocol": "workspace:*",
+    "eventsource-parser": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/glob": "^9.0.0",
+    "@types/mocha": "^10.0.10",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "glob": "^13.0.6",
+    "mocha": "^12.0.0"
+  }
+}
