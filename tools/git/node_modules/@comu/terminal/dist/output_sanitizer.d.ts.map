@@ -1,1 +1,0 @@
-{"version":3,"file":"output_sanitizer.d.ts","sourceRoot":"","sources":["../src/output_sanitizer.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,MAAM,gBAAgB,CAAC;AAE/C,qBAAa,eAAe;IAE1B,OAAO,CAAC,MAAM,CAAC,QAAQ,CAAC,eAAe,CAAwE;WAEjG,cAAc,CAAC,MAAM,EAAE,aAAa,GAAG,aAAa;IAQlE,OAAO,CAAC,MAAM,CAAC,MAAM;CAOtB"}

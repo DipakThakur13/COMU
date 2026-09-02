@@ -1,1 +1,0 @@
-{"version":3,"file":"command_resolver.d.ts","sourceRoot":"","sources":["../src/command_resolver.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,WAAW,EAAE,MAAM,gBAAgB,CAAC;AAC7C,OAAO,EAAE,iBAAiB,EAAe,MAAM,SAAS,CAAC;AAKzD,qBAAa,eAAe;WACZ,OAAO,CAAC,OAAO,EAAE,iBAAiB,GAAG,WAAW,GAAG,IAAI;IA0BrE,OAAO,CAAC,MAAM,CAAC,iBAAiB;CA4CjC"}
