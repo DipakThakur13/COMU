@@ -8,6 +8,10 @@ import { ChatViewProvider } from './providers/chat_provider';
 import { ProviderManager } from './providers/provider_manager';
 import { globalDiffProvider } from './diff/diff_viewer';
 
+import { ServerProcessManager } from './runtime/server_process_manager';
+
+let serverManager: ServerProcessManager | undefined;
+
 export function activate(context: vscode.ExtensionContext) {
   console.log('COMU AI Coding Agent is now active!');
 
@@ -17,6 +21,18 @@ export function activate(context: vscode.ExtensionContext) {
   const sessionStore = new TaskSessionStore();
   const providerManager = new ProviderManager();
   
+  // Auto-start local Agent Runtime backend if not already running
+  serverManager = new ServerProcessManager(context.extensionUri, runtimeClient);
+  serverManager.ensureServerRunning().catch(err => {
+      console.warn('[COMU] Error during auto-start backend:', err);
+  });
+
+  context.subscriptions.push({
+      dispose: () => {
+          serverManager?.stopServer();
+      }
+  });
+
   let chatProvider: ChatViewProvider;
 
   const sseClient = new SSEClient(
@@ -89,4 +105,9 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
-export function deactivate() {}
+export function deactivate() {
+  if (serverManager) {
+    serverManager.stopServer();
+    serverManager = undefined;
+  }
+}

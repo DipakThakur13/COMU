@@ -4,10 +4,36 @@
   "description": "Multi-Model AI Coding Agent for VS Code",
   "version": "0.1.0",
   "publisher": "comu",
+  "author": {
+    "name": "Dipak Kumar (Boswas Group)",
+    "url": "https://www.boswas.co.in"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DipakThakur13/COMU.git",
+    "directory": "apps/vscode-extension"
+  },
+  "homepage": "https://github.com/DipakThakur13/COMU#readme",
+  "bugs": {
+    "url": "https://github.com/DipakThakur13/COMU/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "nemotron",
+    "nvidia",
+    "byok",
+    "autonomous",
+    "developer-tools"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
+    "AI",
+    "Programming Languages",
+    "Machine Learning",
     "Other"
   ],
   "activationEvents": [],
@@ -66,8 +92,9 @@
     }
   },
   "scripts": {
-    "build": "pnpm run compile",
-    "vscode:prepublish": "pnpm run compile",
+    "copy-server": "node -e \"const fs = require('fs'); fs.mkdirSync('server', { recursive: true }); fs.copyFileSync('../agent-runtime/dist/server.js', 'server/index.js');\"",
+    "build": "pnpm run copy-server && pnpm run compile",
+    "vscode:prepublish": "pnpm --filter @comu/agent-runtime build && pnpm run copy-server && pnpm run compile",
     "compile": "tsup src/extension.ts --format cjs --external vscode",
     "watch": "tsup src/extension.ts --format cjs --external vscode --watch",
     "test-compile": "tsc -p tsconfig.json",

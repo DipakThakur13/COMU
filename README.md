@@ -37,6 +37,13 @@
 
 ---
 
+## 🏢 Organization & Author
+
+COMU is created by **Dipak Kumar** and sponsored by **[Boswas Group](https://www.boswas.co.in)**.  
+It is **100% open-source software** under the MIT License, and open for developers worldwide to use, fork, and contribute.
+
+---
+
 ## 🌍 The Vision
 
 **COMU is an open-source AI software engineering agent built for everyone.**
