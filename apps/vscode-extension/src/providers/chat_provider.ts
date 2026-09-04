@@ -75,13 +75,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     await this.sendProvidersToWebview();
                     break;
                 case 'save_provider_key':
-                    await this.providerManager.setProviderKey(data.providerId, data.key);
+                    if (data.key && data.key.trim()) {
+                        await this.providerManager.setProviderKey(data.providerId, data.key);
+                    }
                     if (data.endpoint !== undefined) {
                         await this.providerManager.setProviderEndpoint(data.providerId, data.endpoint);
                     }
                     await this.sendProvidersToWebview();
                     await this.pushConfigToRuntime();
-                    vscode.window.showInformationMessage(`API key for ${data.providerId} saved securely.`);
+                    vscode.window.showInformationMessage(`Configuration for ${data.providerId} saved.`);
                     break;
                 case 'remove_provider_key':
                     await this.providerManager.setProviderKey(data.providerId, '');
@@ -90,7 +92,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     vscode.window.showInformationMessage(`API key for ${data.providerId} removed.`);
                     break;
                 case 'test_provider': {
-                    const result = await this.providerManager.testConnection(data.providerId);
+                    const result = await this.providerManager.testConnection(data.providerId, data.key, data.endpoint);
                     if (this._view) {
                         const msg: ExtensionMessage = {
                             type: 'provider_test_result',
@@ -101,6 +103,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     }
                     if (result.status === 'CONNECTED') {
                         vscode.window.showInformationMessage(`Connection to ${data.providerId} successful!${result.latencyMs ? ` (${result.latencyMs}ms)` : ''}`);
+                        await this.sendProvidersToWebview();
+                        await this.pushConfigToRuntime();
                     } else {
                         vscode.window.showErrorMessage(`Connection test failed for ${data.providerId}: ${result.message || 'Unknown error'}`);
                     }

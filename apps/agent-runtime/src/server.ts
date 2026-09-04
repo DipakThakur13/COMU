@@ -201,7 +201,8 @@ app.post('/v1/tasks', async (req, res) => {
     try {
       // Setup provider dynamically
       const nvidiaKey = runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
-      const model = new NvidiaProvider(nvidiaKey);
+      const nvidiaEndpoint = runtimeConfig.providers?.['nvidia']?.endpoint;
+      const model = new NvidiaProvider(nvidiaKey, nvidiaEndpoint);
       
       const orchestrator = new AgentOrchestrator(model, registry, executor, diffEngine, {
         planner: new TaskPlanner(),

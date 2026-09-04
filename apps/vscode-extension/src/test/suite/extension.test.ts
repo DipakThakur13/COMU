@@ -6,11 +6,12 @@ suite('Extension Test Suite', () => {
     vscode.window.showInformationMessage('Start all tests.');
 
     test('Extension should be present', () => {
-        assert.ok(vscode.extensions.getExtension('comu.comu-ai'));
+        const ext = vscode.extensions.getExtension('DipakKumarBoswasGroup.comu-ai') || vscode.extensions.getExtension('comu.comu-ai');
+        assert.ok(ext, 'Extension should be present');
     });
 
     test('Should activate extension', async () => {
-        const ext = vscode.extensions.getExtension('comu.comu-ai');
+        const ext = vscode.extensions.getExtension('DipakKumarBoswasGroup.comu-ai') || vscode.extensions.getExtension('comu.comu-ai');
         if (ext) {
             await ext.activate();
             assert.ok(ext.isActive);

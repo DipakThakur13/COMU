@@ -5,6 +5,7 @@ export default defineConfig({
     exclude: [
       "**/node_modules/**",
       "**/dist/**",
+      "**/.vscode-test/**",
       "apps/vscode-extension/src/test/**"
     ]
   }

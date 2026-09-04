@@ -33,7 +33,7 @@ export type WebviewMessage =
   | { type: "select_model"; modelId: string }
   | { type: "save_provider_key"; providerId: string; key: string; endpoint?: string }
   | { type: "remove_provider_key"; providerId: string }
-  | { type: "test_provider"; providerId: string }
+  | { type: "test_provider"; providerId: string; key?: string; endpoint?: string }
   | { type: "request_providers" }
   | { type: "open_settings"; targetProviderId?: string }
   | { type: "respond_interaction"; taskId: string; interactionId: string; response: InteractionResponse }

@@ -10,10 +10,10 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/Version-v0.1.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-v0.1.4-blue.svg)](package.json)
 [![Open Source](https://img.shields.io/badge/Open%20Source-Community%20Driven-brightgreen)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue)](https://www.typescriptlang.org/)
-[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.1.0-007ACC)](https://code.visualstudio.com/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.1.4-007ACC)](https://code.visualstudio.com/)
 [![Model Agnostic](https://img.shields.io/badge/AI-Model%20Agnostic-purple)](#-bring-your-own-ai-provider-byok)
 [![Contributions Welcome](https://img.shields.io/badge/Contributions-Welcome-orange)](#contributing)
 
@@ -25,12 +25,12 @@
 
 | Component | Current Specification | Status |
 | :--- | :--- | :--- |
-| **Release Version** | `v0.1.0` | Active Development |
+| **Release Version** | `v0.1.4` | Active Development |
 | **Milestone Track** | **Milestone 7 (M7)** | ✅ Completed & Validated |
 | **Monorepo Architecture** | 22 Workspace Packages (`pnpm`) | ✅ Passing Typecheck & Build |
-| **Protocol Specification** | `@comu/protocol v0.1.0` | Active RPC & Event Schema |
-| **Extension Host** | `comu-ai v0.1.0` (VS Code `^1.85.0`) | Built & Packaged |
-| **Agent Runtime** | `@comu/agent-runtime v0.1.0` | Node.js `>= 20.0.0` |
+| **Protocol Specification** | `@comu/protocol v0.1.4` | Active RPC & Event Schema |
+| **Extension Host** | `comu-ai v0.1.4` (VS Code `^1.85.0`) | Built & Packaged |
+| **Agent Runtime** | `@comu/agent-runtime v0.1.4` | Node.js `>= 20.0.0` |
 | **Primary Cloud Provider** | NVIDIA Nemotron 3 Ultra (`@comu/provider-nvidia`) | BYOK with Live Testing |
 | **Local Model Engine** | Ollama Local (`llama3`) | Zero External Network |
 | **Validation Campaign** | 23 Test Files · 157 Tests Passing | 100% Pass Rate |

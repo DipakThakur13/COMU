@@ -130,11 +130,11 @@ export class ProviderManager {
         }
     }
 
-    public async testConnection(providerId: string): Promise<ProviderTestResult> {
+    public async testConnection(providerId: string, customKey?: string, customEndpoint?: string): Promise<ProviderTestResult> {
         this.providerStatuses.set(providerId, 'CONNECTING');
 
         const secrets = SecretManager.getInstance();
-        let key = await secrets.getProviderKey(providerId);
+        let key = customKey?.trim() || await secrets.getProviderKey(providerId);
 
         if (providerId === 'nvidia') {
             if (!key && process.env.NVIDIA_API_KEY) {
@@ -151,9 +151,21 @@ export class ProviderManager {
                 return res;
             }
 
-            const endpoint = this.providerEndpoints.get('nvidia') || NvidiaProvider.DEFAULT_ENDPOINT;
+            const rawEndpoint = customEndpoint?.trim() || this.providerEndpoints.get('nvidia') || NvidiaProvider.DEFAULT_ENDPOINT;
+            const endpoint = NvidiaProvider.normalizeEndpoint(rawEndpoint);
             const res = await NvidiaProvider.testConnection(key, endpoint);
             this.providerStatuses.set(providerId, res.status);
+
+            // If test succeeded, persist the verified key and endpoint
+            if (res.status === 'CONNECTED') {
+                if (customKey && customKey.trim()) {
+                    await secrets.setProviderKey('nvidia', customKey.trim());
+                }
+                if (customEndpoint !== undefined && customEndpoint.trim()) {
+                    await this.setProviderEndpoint('nvidia', customEndpoint);
+                }
+            }
+
             return res;
         }
 

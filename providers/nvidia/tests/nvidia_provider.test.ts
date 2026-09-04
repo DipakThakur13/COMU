@@ -90,4 +90,34 @@ describe("NvidiaProvider BYOK & Connection Testing", () => {
     // Security check
     expect(JSON.stringify(res)).not.toContain(canaryKey);
   });
+
+  it("normalizes NVIDIA integrate endpoints to chat/completions", () => {
+    expect(NvidiaProvider.normalizeEndpoint("https://integrate.api.nvidia.com")).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(NvidiaProvider.normalizeEndpoint("https://integrate.api.nvidia.com/v1")).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(NvidiaProvider.normalizeEndpoint("https://integrate.api.nvidia.com/v1/")).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(NvidiaProvider.normalizeEndpoint("https://integrate.api.nvidia.com/v1/chat/c")).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(NvidiaProvider.normalizeEndpoint("https://integrate.api.nvidia.com/v1/chat/completions")).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+    expect(NvidiaProvider.normalizeEndpoint("")).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
+  });
+
+  it("falls back to secondary model when primary model returns 404", async () => {
+    const fakeFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found"
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: "pong" } }] })
+      });
+    vi.stubGlobal("fetch", fakeFetch);
+
+    const res = await NvidiaProvider.testConnection("nvapi-valid-key");
+    expect(res.status).toBe("CONNECTED");
+    expect(res.model).toBe("Nemotron 4 340B");
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+  });
 });
+

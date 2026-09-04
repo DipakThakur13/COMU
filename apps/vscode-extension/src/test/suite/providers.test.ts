@@ -20,8 +20,8 @@ suite('ProviderManager Test Suite', () => {
         
         assert.ok(providers.length > 0);
         
-        const nvidia = providers.find((p: any) => p.id === 'nvidia');
+        const nvidia = providers.find((p: any) => p.providerId === 'nvidia' || p.id === 'nvidia');
         assert.ok(nvidia, 'NVIDIA provider should be registered');
-        assert.strictEqual(nvidia?.isLocal, undefined);
+        assert.strictEqual(nvidia?.isLocal, false);
     });
 });

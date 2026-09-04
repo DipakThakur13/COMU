@@ -402,8 +402,15 @@
 
                 if (testBtn) {
                     testBtn.addEventListener('click', () => {
+                        const keyVal = keyInput ? keyInput.value.trim() : '';
+                        const endpointVal = endpointInput ? endpointInput.value.trim() : undefined;
                         setTestingState(p.providerId);
-                        vscode.postMessage({ type: 'test_provider', providerId: p.providerId });
+                        vscode.postMessage({
+                            type: 'test_provider',
+                            providerId: p.providerId,
+                            key: keyVal || undefined,
+                            endpoint: endpointVal || undefined
+                        });
                     });
                 }
 

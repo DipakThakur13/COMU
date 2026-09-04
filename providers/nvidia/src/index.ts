@@ -10,7 +10,8 @@ export class NvidiaProvider implements ModelProvider {
   public selectedModel = "Nemotron 3 Ultra";
 
   public static readonly DEFAULT_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
-  public static readonly DEFAULT_MODEL = "nvidia/nemotron-4-340b-instruct";
+  public static readonly DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
+  public static readonly FALLBACK_MODEL = "nvidia/nemotron-4-340b-instruct";
 
   private apiKey: string;
   private endpoint: string;
@@ -20,14 +21,17 @@ export class NvidiaProvider implements ModelProvider {
       return NvidiaProvider.DEFAULT_ENDPOINT;
     }
     let ep = endpoint.trim().replace(/\/+$/, "");
+
+    // NVIDIA integrated NIM endpoints always use /v1/chat/completions
+    if (ep.includes("integrate.api.nvidia.com")) {
+      return "https://integrate.api.nvidia.com/v1/chat/completions";
+    }
+
     if (ep.endsWith("/v1")) {
       return `${ep}/chat/completions`;
     }
-    if (ep === "https://integrate.api.nvidia.com") {
-      return "https://integrate.api.nvidia.com/v1/chat/completions";
-    }
     if (ep.endsWith("/v1/chat") || ep.endsWith("/v1/chat/c")) {
-      return ep.replace(/\/v1\/chat(\/c)?$/, "/v1/chat/completions");
+      return ep.replace(/\/v1\/chat(\/c.*)?$/, "/v1/chat/completions");
     }
     return ep;
   }
@@ -48,7 +52,8 @@ export class NvidiaProvider implements ModelProvider {
   public static async testConnection(
     apiKey: string,
     endpoint = NvidiaProvider.DEFAULT_ENDPOINT,
-    timeoutMs = 6000
+    timeoutMs = 6000,
+    model = NvidiaProvider.DEFAULT_MODEL
   ): Promise<ProviderTestResult> {
     const resolvedEndpoint = NvidiaProvider.normalizeEndpoint(endpoint);
     if (!apiKey || !apiKey.trim()) {
@@ -63,14 +68,14 @@ export class NvidiaProvider implements ModelProvider {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    const body = {
-      model: NvidiaProvider.DEFAULT_MODEL,
-      messages: [{ role: "user", content: "ping" }],
-      max_tokens: 1
-    };
+    const ping = async (modelToTest: string) => {
+      const body = {
+        model: modelToTest,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 1
+      };
 
-    try {
-      const response = await fetch(resolvedEndpoint, {
+      return await fetch(resolvedEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -79,6 +84,17 @@ export class NvidiaProvider implements ModelProvider {
         body: JSON.stringify(body),
         signal: controller.signal
       });
+    };
+
+    try {
+      let activeModel = model;
+      let response = await ping(activeModel);
+
+      // If primary model returns 404, try fallback model
+      if (response.status === 404 && activeModel !== NvidiaProvider.FALLBACK_MODEL) {
+        activeModel = NvidiaProvider.FALLBACK_MODEL;
+        response = await ping(activeModel);
+      }
 
       clearTimeout(timer);
       const latencyMs = Date.now() - startTime;
@@ -87,7 +103,7 @@ export class NvidiaProvider implements ModelProvider {
         return {
           provider: "nvidia",
           status: "CONNECTED",
-          model: "Nemotron 3 Ultra",
+          model: activeModel === NvidiaProvider.FALLBACK_MODEL ? "Nemotron 4 340B" : "Nemotron 3 Ultra",
           latencyMs
         };
       }
@@ -97,6 +113,14 @@ export class NvidiaProvider implements ModelProvider {
           provider: "nvidia",
           status: "INVALID_CREDENTIAL",
           message: "The NVIDIA API key was rejected."
+        };
+      }
+
+      if (response.status === 404) {
+        return {
+          provider: "nvidia",
+          status: "CONNECTION_ERROR",
+          message: `NVIDIA API returned HTTP 404. Neither Nemotron 3 Ultra nor Nemotron 4 could be accessed on this endpoint. Check model access or endpoint.`
         };
       }
 
@@ -131,7 +155,7 @@ export class NvidiaProvider implements ModelProvider {
     return {
       toolCalling: true,
       streaming: true,
-      reasoning: false,
+      reasoning: true,
       vision: false,
       structuredOutput: true,
       maxContextTokens: 128000
@@ -197,7 +221,8 @@ export class NvidiaProvider implements ModelProvider {
       model: NvidiaProvider.DEFAULT_MODEL,
       messages,
       temperature: request.temperature ?? 0.1,
-      max_tokens: request.maxTokens ?? 1024
+      max_tokens: request.maxTokens ?? 1024,
+      chat_template_kwargs: { enable_thinking: true }
     };
 
     if (tools) {
@@ -242,8 +267,13 @@ export class NvidiaProvider implements ModelProvider {
         });
       }
 
+      let responseText = message.content || "";
+      if (!responseText && message.reasoning_content) {
+        responseText = message.reasoning_content;
+      }
+
       return {
-        text: message.content || "",
+        text: responseText,
         toolCalls,
         usage: {
           promptTokens: data.usage?.prompt_tokens ?? 0,

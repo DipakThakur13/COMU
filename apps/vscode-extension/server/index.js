@@ -30619,7 +30619,8 @@ var require_dist16 = __commonJS({
       displayName = "NVIDIA";
       selectedModel = "Nemotron 3 Ultra";
       static DEFAULT_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
-      static DEFAULT_MODEL = "nvidia/nemotron-4-340b-instruct";
+      static DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
+      static FALLBACK_MODEL = "nvidia/nemotron-4-340b-instruct";
       apiKey;
       endpoint;
       static normalizeEndpoint(endpoint) {
@@ -30627,14 +30628,14 @@ var require_dist16 = __commonJS({
           return _NvidiaProvider.DEFAULT_ENDPOINT;
         }
         let ep = endpoint.trim().replace(/\/+$/, "");
+        if (ep.includes("integrate.api.nvidia.com")) {
+          return "https://integrate.api.nvidia.com/v1/chat/completions";
+        }
         if (ep.endsWith("/v1")) {
           return `${ep}/chat/completions`;
         }
-        if (ep === "https://integrate.api.nvidia.com") {
-          return "https://integrate.api.nvidia.com/v1/chat/completions";
-        }
         if (ep.endsWith("/v1/chat") || ep.endsWith("/v1/chat/c")) {
-          return ep.replace(/\/v1\/chat(\/c)?$/, "/v1/chat/completions");
+          return ep.replace(/\/v1\/chat(\/c.*)?$/, "/v1/chat/completions");
         }
         return ep;
       }
@@ -30649,7 +30650,7 @@ var require_dist16 = __commonJS({
       static detectEnvironmentCredential() {
         return !!(process.env.NVIDIA_API_KEY && process.env.NVIDIA_API_KEY.trim().length > 0);
       }
-      static async testConnection(apiKey, endpoint = _NvidiaProvider.DEFAULT_ENDPOINT, timeoutMs = 6e3) {
+      static async testConnection(apiKey, endpoint = _NvidiaProvider.DEFAULT_ENDPOINT, timeoutMs = 6e3, model = _NvidiaProvider.DEFAULT_MODEL) {
         const resolvedEndpoint = _NvidiaProvider.normalizeEndpoint(endpoint);
         if (!apiKey || !apiKey.trim()) {
           return {
@@ -30661,13 +30662,13 @@ var require_dist16 = __commonJS({
         const startTime = Date.now();
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
-        const body = {
-          model: _NvidiaProvider.DEFAULT_MODEL,
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 1
-        };
-        try {
-          const response = await fetch(resolvedEndpoint, {
+        const ping = async (modelToTest) => {
+          const body = {
+            model: modelToTest,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1
+          };
+          return await fetch(resolvedEndpoint, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -30676,13 +30677,21 @@ var require_dist16 = __commonJS({
             body: JSON.stringify(body),
             signal: controller.signal
           });
+        };
+        try {
+          let activeModel = model;
+          let response = await ping(activeModel);
+          if (response.status === 404 && activeModel !== _NvidiaProvider.FALLBACK_MODEL) {
+            activeModel = _NvidiaProvider.FALLBACK_MODEL;
+            response = await ping(activeModel);
+          }
           clearTimeout(timer);
           const latencyMs = Date.now() - startTime;
           if (response.ok) {
             return {
               provider: "nvidia",
               status: "CONNECTED",
-              model: "Nemotron 3 Ultra",
+              model: activeModel === _NvidiaProvider.FALLBACK_MODEL ? "Nemotron 4 340B" : "Nemotron 3 Ultra",
               latencyMs
             };
           }
@@ -30691,6 +30700,13 @@ var require_dist16 = __commonJS({
               provider: "nvidia",
               status: "INVALID_CREDENTIAL",
               message: "The NVIDIA API key was rejected."
+            };
+          }
+          if (response.status === 404) {
+            return {
+              provider: "nvidia",
+              status: "CONNECTION_ERROR",
+              message: `NVIDIA API returned HTTP 404. Neither Nemotron 3 Ultra nor Nemotron 4 could be accessed on this endpoint. Check model access or endpoint.`
             };
           }
           return {
@@ -30721,7 +30737,7 @@ var require_dist16 = __commonJS({
         return {
           toolCalling: true,
           streaming: true,
-          reasoning: false,
+          reasoning: true,
           vision: false,
           structuredOutput: true,
           maxContextTokens: 128e3
@@ -30780,7 +30796,8 @@ var require_dist16 = __commonJS({
           model: _NvidiaProvider.DEFAULT_MODEL,
           messages,
           temperature: request.temperature ?? 0.1,
-          max_tokens: request.maxTokens ?? 1024
+          max_tokens: request.maxTokens ?? 1024,
+          chat_template_kwargs: { enable_thinking: true }
         };
         if (tools) {
           body.tools = tools;
@@ -30818,8 +30835,12 @@ var require_dist16 = __commonJS({
               };
             });
           }
+          let responseText = message.content || "";
+          if (!responseText && message.reasoning_content) {
+            responseText = message.reasoning_content;
+          }
           return {
-            text: message.content || "",
+            text: responseText,
             toolCalls,
             usage: {
               promptTokens: data.usage?.prompt_tokens ?? 0,
@@ -31042,7 +31063,8 @@ app.post("/v1/tasks", async (req, res) => {
   setTimeout(async () => {
     try {
       const nvidiaKey = runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
-      const model = new import_provider_nvidia.NvidiaProvider(nvidiaKey);
+      const nvidiaEndpoint = runtimeConfig.providers?.["nvidia"]?.endpoint;
+      const model = new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint);
       const orchestrator = new import_agent_core.AgentOrchestrator(model, registry, executor, diffEngine, {
         planner: new import_planning_engine.TaskPlanner(),
         verificationEngine: new import_verification_engine.VerificationEngine(),
