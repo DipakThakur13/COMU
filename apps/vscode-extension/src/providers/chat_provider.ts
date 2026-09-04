@@ -29,12 +29,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     ) {
         this._view = webviewView;
 
-        webviewView.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [this._extensionUri]
-        };
+        try {
+            webviewView.webview.options = {
+                enableScripts: true,
+                localResourceRoots: [
+                    this._extensionUri,
+                    vscode.Uri.joinPath(this._extensionUri, 'src', 'webview')
+                ]
+            };
 
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+            webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        } catch (err: any) {
+            console.error('[COMU ChatViewProvider] Error initializing webview HTML:', err);
+            webviewView.webview.html = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="padding:16px; font-family:sans-serif; color:var(--vscode-editor-foreground, #ccc); background:var(--vscode-editor-background, #1e1e1e);">
+    <h3 style="color:var(--vscode-errorForeground, #f48771);">COMU AI Initialization Error</h3>
+    <p>Failed to load the webview interface.</p>
+    <pre style="background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; overflow:auto;">${err?.stack || err?.message || err}</pre>
+</body>
+</html>`;
+        }
 
         webviewView.webview.onDidReceiveMessage(async (data: WebviewMessage) => {
             switch (data.type) {
@@ -199,15 +215,40 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
-        const htmlPath = path.join(this._extensionUri.fsPath, 'src', 'webview', 'index.html');
+        const candidatePaths = [
+            path.join(this._extensionUri.fsPath, 'src', 'webview', 'index.html'),
+            path.join(this._extensionUri.fsPath, 'dist', 'webview', 'index.html'),
+            path.join(this._extensionUri.fsPath, 'webview', 'index.html')
+        ];
+
+        let htmlPath = candidatePaths.find(p => fs.existsSync(p));
+        if (!htmlPath) {
+            htmlPath = candidatePaths[0];
+        }
+
         let html = fs.readFileSync(htmlPath, 'utf8');
 
         // Replace resource paths
-        const stylePath = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'style.css'));
-        const scriptPath = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'main.js'));
+        const webviewDir = path.dirname(htmlPath);
+        const styleUri = fs.existsSync(path.join(webviewDir, 'style.css'))
+            ? vscode.Uri.file(path.join(webviewDir, 'style.css'))
+            : vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'style.css');
+        const scriptUri = fs.existsSync(path.join(webviewDir, 'main.js'))
+            ? vscode.Uri.file(path.join(webviewDir, 'main.js'))
+            : vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'main.js');
+
+        const stylePath = webview.asWebviewUri(styleUri);
+        const scriptPath = webview.asWebviewUri(scriptUri);
 
         html = html.replace('href="style.css"', `href="${stylePath}"`);
         html = html.replace('src="main.js"', `src="${scriptPath}"`);
+
+        // Inject dynamic CSP with webview.cspSource
+        const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; connect-src ${webview.cspSource} http: https: ws:;`;
+        html = html.replace(
+            /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
+            `<meta http-equiv="Content-Security-Policy" content="${csp}">`
+        );
         
         return html;
     }
