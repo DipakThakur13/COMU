@@ -52,7 +52,7 @@ export class NvidiaProvider implements ModelProvider {
   public static async testConnection(
     apiKey: string,
     endpoint = NvidiaProvider.DEFAULT_ENDPOINT,
-    timeoutMs = 6000,
+    timeoutMs = 15000,
     model = NvidiaProvider.DEFAULT_MODEL
   ): Promise<ProviderTestResult> {
     const resolvedEndpoint = NvidiaProvider.normalizeEndpoint(endpoint);
@@ -135,7 +135,7 @@ export class NvidiaProvider implements ModelProvider {
         return {
           provider: "nvidia",
           status: "TIMEOUT",
-          message: "Connection to NVIDIA API timed out."
+          message: `Connection to NVIDIA API timed out after ${Math.round(timeoutMs / 1000)}s. NVIDIA cloud endpoints may be experiencing high queue times, cold-start latency, or network delays.`
         };
       }
 

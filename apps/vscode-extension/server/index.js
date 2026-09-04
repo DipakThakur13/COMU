@@ -30721,7 +30721,7 @@ var require_dist16 = __commonJS({
       static detectEnvironmentCredential() {
         return !!(process.env.NVIDIA_API_KEY && process.env.NVIDIA_API_KEY.trim().length > 0);
       }
-      static async testConnection(apiKey, endpoint = _NvidiaProvider.DEFAULT_ENDPOINT, timeoutMs = 6e3, model = _NvidiaProvider.DEFAULT_MODEL) {
+      static async testConnection(apiKey, endpoint = _NvidiaProvider.DEFAULT_ENDPOINT, timeoutMs = 15e3, model = _NvidiaProvider.DEFAULT_MODEL) {
         const resolvedEndpoint = _NvidiaProvider.normalizeEndpoint(endpoint);
         if (!apiKey || !apiKey.trim()) {
           return {
@@ -30791,7 +30791,7 @@ var require_dist16 = __commonJS({
             return {
               provider: "nvidia",
               status: "TIMEOUT",
-              message: "Connection to NVIDIA API timed out."
+              message: `Connection to NVIDIA API timed out after ${Math.round(timeoutMs / 1e3)}s. NVIDIA cloud endpoints may be experiencing high queue times, cold-start latency, or network delays.`
             };
           }
           return {
