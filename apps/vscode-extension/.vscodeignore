@@ -20,3 +20,4 @@ src/workspace/**
 !package.json
 !README.md
 !LICENSE
+!resources/**

@@ -52,10 +52,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 </html>`;
         }
 
+        // Fast-path: immediately post state and providers to webview to eliminate loading latency
+        this.sendStateToWebview();
+        this.sendProvidersToWebview().catch(() => {});
+
         webviewView.webview.onDidReceiveMessage(async (data: WebviewMessage) => {
             switch (data.type) {
                 case 'ready':
                     this.sendStateToWebview();
+                    await this.sendProvidersToWebview();
                     break;
                 case 'submit_prompt':
                     await this.handleSubmitPrompt(data.prompt, data.modelId);
