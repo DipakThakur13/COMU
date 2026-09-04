@@ -5,18 +5,22 @@
     <meta charset="UTF-8">
     <!-- Webview Security: CSP supporting VS Code Extension Host and Live Preview -->
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' vscode-resource: vscode-webview: http: https: data:; style-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:; script-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:;">
+        content="default-src 'self' vscode-resource: vscode-webview: http: https: data:; style-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:; script-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:; font-src 'self' vscode-resource: vscode-webview: https://fonts.gstatic.com https://fonts.googleapis.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>COMU AI Software Engineer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
+    <!-- ═══════════════════════════════════════════════
+         MAIN VIEW — Command Center
+         ═══════════════════════════════════════════════ -->
     <div id="main-view">
+        <!-- Header Toolbar -->
         <div class="header">
             <div class="header-left">
                 <span class="logo">✦ COMU</span>
-                <span class="version-tag">v0.1.3</span>
+                <span class="version-tag">v0.1.5</span>
                 <span class="subtitle">AI Software Engineer</span>
             </div>
             <div class="header-right">
@@ -28,6 +32,7 @@
             </div>
         </div>
 
+        <!-- Workspace / Chat Area -->
         <div id="chat-container" class="chat-container">
             <!-- Dynamic chat goes here -->
             <div class="empty-state" id="empty-state-view">
@@ -49,7 +54,7 @@
                 </div>
 
                 <div class="action-chips">
-                    <div class="chips-label">Or get started with:</div>
+                    <div class="chips-label">Or get started with</div>
                     <button class="chip" data-prompt="Implement a feature ">✨ Implement a feature</button>
                     <button class="chip" data-prompt="Fix a bug in ">🐛 Fix a bug</button>
                     <button class="chip" data-prompt="Add tests for ">🧪 Add tests</button>
@@ -58,6 +63,7 @@
             </div>
         </div>
 
+        <!-- Composer Bar -->
         <div class="input-area">
             <div class="composer-container">
                 <textarea id="prompt-input" placeholder="Ask COMU... (Shift+Enter for newline)" rows="1"></textarea>
@@ -79,7 +85,9 @@
         </div>
     </div>
 
-    <!-- Settings View -->
+    <!-- ═══════════════════════════════════════════════
+         SETTINGS VIEW
+         ═══════════════════════════════════════════════ -->
     <div id="settings-view" style="display: none;">
         <div class="header">
             <div class="header-left">
@@ -102,7 +110,7 @@
                 <!-- Dynamic providers rendered here -->
             </div>
             <div class="settings-version-footer">
-                <span>COMU AI Coding Agent · v0.1.3</span>
+                <span>COMU AI Coding Agent · v0.1.5</span>
             </div>
         </div>
     </div>

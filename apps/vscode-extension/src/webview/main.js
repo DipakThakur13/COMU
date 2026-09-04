@@ -239,6 +239,9 @@
         }
     }
 
+    // ═══════════════════════════════════════════════
+    //  RENDER PROVIDERS — Premium Provider Cards
+    // ═══════════════════════════════════════════════
     function renderProviders() {
         providersContainer.innerHTML = '';
 
@@ -248,39 +251,40 @@
             card.id = `provider-card-${p.providerId}`;
 
             let statusClass = 'unconfigured';
-            let statusText = 'Not Configured';
+            let statusLabel = 'Not Configured';
             let statusIcon = '○';
 
             if (p.status === 'CONNECTED' || (p.hasCredential && p.status !== 'INVALID_CREDENTIAL' && p.status !== 'NETWORK_ERROR')) {
                 statusClass = 'connected';
-                statusText = 'Connected';
+                statusLabel = 'Connected';
                 statusIcon = '●';
             } else if (p.status === 'CONNECTING') {
                 statusClass = 'connecting';
-                statusText = 'Testing...';
+                statusLabel = 'Testing...';
                 statusIcon = '◌';
             } else if (p.status === 'INVALID_CREDENTIAL') {
                 statusClass = 'invalid';
-                statusText = 'Invalid Key';
+                statusLabel = 'Invalid Key';
                 statusIcon = '✕';
             } else if (p.status === 'NETWORK_ERROR') {
                 statusClass = 'error';
-                statusText = 'Network Error';
+                statusLabel = 'Network Error';
                 statusIcon = '✕';
             }
 
-            const tagText = p.isLocal ? 'Local / On-Device' : (p.providerId === 'nvidia' ? 'Cloud (Nemotron 3 Ultra)' : 'Cloud');
+            const tagText = p.isLocal ? 'Local / On-Device' : (p.providerId === 'nvidia' ? 'Cloud · Nemotron 3 Ultra' : 'Cloud');
+            const iconEmoji = p.providerId === 'nvidia' ? '✦' : (p.isLocal ? '🦙' : '⚡');
 
             let cardHtml = `
                 <div class="provider-card-header">
                     <div class="provider-card-title-group">
-                        <span class="provider-card-icon">${p.providerId === 'nvidia' ? '✦' : (p.isLocal ? '🦙' : '⚡')}</span>
+                        <span class="provider-card-icon">${iconEmoji}</span>
                         <span class="provider-card-name">${escapeHtml(p.displayName)}</span>
                         <span class="provider-type-tag">${tagText}</span>
                     </div>
                     <div class="status-pill status-${statusClass}">
                         <span class="status-dot">${statusIcon}</span>
-                        <span class="status-text">${statusText}</span>
+                        <span class="status-text">${statusLabel}</span>
                     </div>
                 </div>
                 <div class="provider-card-desc">${escapeHtml(p.description || '')}</div>
@@ -334,7 +338,7 @@
                     <div class="provider-form">
                         <div class="form-group">
                             <label>Local Endpoint</label>
-                            <input type="text" value="${escapeHtml(p.endpoint || 'http://localhost:11434')}" readonly style="opacity: 0.8;">
+                            <input type="text" value="${escapeHtml(p.endpoint || 'http://localhost:11434')}" readonly style="opacity: 0.6;">
                         </div>
                         <div class="test-result-container" id="test-result-${p.providerId}" style="display: none;"></div>
                         <div class="provider-card-actions">
@@ -437,7 +441,7 @@
         const statusPill = card.querySelector('.status-pill');
         if (statusPill) {
             statusPill.className = 'status-pill status-connecting';
-            statusPill.innerHTML = '<span class="status-dot spin">◌</span><span class="status-text">Testing...</span>';
+            statusPill.innerHTML = '<span class="status-dot"><span class="spin">◌</span></span><span class="status-text">Testing...</span>';
         }
         const testResultEl = document.getElementById(`test-result-${providerId}`);
         if (testResultEl) {
@@ -479,6 +483,9 @@
         }
     }
 
+    // ═══════════════════════════════════════════════
+    //  RENDER STATE — Premium Workspace Panels
+    // ═══════════════════════════════════════════════
     function renderState() {
         const isWaiting = state.status === 'waiting_for_user';
         const isRunning = state.status === 'running' || state.status === 'starting';
@@ -499,7 +506,7 @@
 
         chatContainer.innerHTML = '';
 
-        // Render User Bubble
+        // ── User Command Card ──
         const userMsg = document.createElement('div');
         userMsg.className = 'message user';
         userMsg.innerHTML = `
@@ -508,14 +515,14 @@
         `;
         chatContainer.appendChild(userMsg);
 
-        // Render Agent Output
+        // ── Agent Workspace Panel ──
         const agentMsg = document.createElement('div');
         agentMsg.className = 'message agent';
 
-        let agentHtml = `<div class="message-label"><span style="color: var(--comu-accent)">✦</span> COMU</div>`;
+        let agentHtml = `<div class="message-label"><span style="background: var(--comu-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">✦</span> COMU</div>`;
         agentHtml += `<div class="bubble">`;
 
-        // 1. Render Interactive Prompt if Waiting for User
+        // 1. Interactive Prompt (Approval / Input)
         if (state.pendingInteraction) {
             const pi = state.pendingInteraction;
             agentHtml += `<div class="interaction-card">`;
@@ -542,7 +549,7 @@
             agentHtml += `</div>`;
         }
 
-        // 2. Render Plan Panel
+        // 2. Plan Timeline
         if (state.plan && state.plan.steps && state.plan.steps.length > 0) {
             agentHtml += `<div class="plan-panel">`;
             agentHtml += `<div class="panel-header"><span>IMPLEMENTATION PLAN · v${state.plan.version}</span> <span class="status-badge badge-${state.plan.status.toLowerCase()}">${state.plan.status}</span></div>`;
@@ -568,7 +575,7 @@
             agentHtml += `</div></div>`;
         }
 
-        // 3. Render Verification Panel
+        // 3. Verification Matrix
         if (state.verification) {
             const v = state.verification;
             agentHtml += `<div class="verification-panel">`;
@@ -590,7 +597,7 @@
             agentHtml += `</div></div>`;
         }
 
-        // 4. Render Failure Diagnosis if present
+        // 4. Failure Diagnosis
         if (state.diagnosis) {
             const d = state.diagnosis;
             agentHtml += `<div class="diagnosis-panel">`;
@@ -602,79 +609,77 @@
             agentHtml += `</div>`;
         }
 
-        // 5. Render Repair Attempts if present
+        // 5. Repair Attempts
         if (state.repairAttempts && state.repairAttempts.length > 0) {
             agentHtml += `<div class="repair-panel">`;
             agentHtml += `<div class="panel-header"><span>REPAIR ATTEMPTS</span> <span>${state.repairAttempts.length} attempt(s)</span></div>`;
             state.repairAttempts.forEach(r => {
                 agentHtml += `<div class="repair-item">`;
                 agentHtml += `<span>Attempt ${r.attemptNumber} · ${escapeHtml(r.changeSummary)}</span>`;
-                agentHtml += `<span class="badge-${r.validationStatus.toLowerCase()}">${r.validationStatus}</span>`;
+                agentHtml += `<span class="status-badge badge-${r.validationStatus.toLowerCase()}">${r.validationStatus}</span>`;
                 agentHtml += `</div>`;
             });
             agentHtml += `</div>`;
         }
 
-        // 5b. Render Supervised Worker Agents
+        // 5b. Supervised Worker Agents
         if (state.subagents && state.subagents.length > 0) {
-            agentHtml += `<div class="subagents-panel" style="margin-top: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">`;
-            agentHtml += `<div style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 8px;">🤖 Supervised Workers · ${state.subagents.length}</div>`;
+            agentHtml += `<div class="subagents-panel">`;
+            agentHtml += `<div class="subagents-header">🤖 <span>Supervised Workers · ${state.subagents.length}</span></div>`;
             state.subagents.forEach(sub => {
-                const statusColor = sub.status === 'COMPLETED' ? 'var(--comu-success)' : sub.status === 'RUNNING' ? 'var(--comu-warning)' : 'var(--comu-error)';
-                agentHtml += `<div style="padding: 6px; border-left: 2px solid ${statusColor}; margin-bottom: 6px; background: rgba(0,0,0,0.15);">
-                    <div style="display: flex; justify-content: space-between; font-size: 11px;">
-                        <strong>${escapeHtml(sub.subagentType)} WORKER</strong>
-                        <span style="color: ${statusColor}; font-weight: 500;">${escapeHtml(sub.status)}</span>
+                const statusLower = (sub.status || '').toLowerCase();
+                agentHtml += `<div class="subagent-card ${statusLower}">
+                    <div class="subagent-card-header">
+                        <span class="subagent-type">${escapeHtml(sub.subagentType)} Worker</span>
+                        <span class="subagent-status" style="color: var(--comu-${statusLower === 'completed' ? 'success' : statusLower === 'running' ? 'warning' : 'error'})">${escapeHtml(sub.status)}</span>
                     </div>
-                    <div style="font-size: 11px; opacity: 0.8; margin-top: 2px;">Goal: ${escapeHtml(sub.goal)}</div>
-                    ${sub.findings ? `<div style="font-size: 10px; opacity: 0.7; margin-top: 4px; white-space: pre-wrap;">${escapeHtml(sub.findings.slice(0, 150))}...</div>` : ''}
+                    <div class="subagent-goal">Goal: ${escapeHtml(sub.goal)}</div>
+                    ${sub.findings ? `<div class="subagent-findings">${escapeHtml(sub.findings.slice(0, 150))}...</div>` : ''}
                 </div>`;
             });
             agentHtml += `</div>`;
         }
 
-        // 5c. Render Git Commit Proposal
+        // 5c. Git Commit Proposal
         if (state.gitCommitProposal) {
-            agentHtml += `<div class="git-proposal-card" style="margin-top: 12px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 12px;">`;
-            agentHtml += `<div style="font-size: 12px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
-                <span>📦 GIT COMMIT PROPOSAL</span>
-            </div>`;
-            agentHtml += `<div style="margin-top: 6px; font-size: 12px;"><strong>Proposed Message:</strong> <input type="text" id="git-commit-msg-input" value="${escapeHtml(state.gitCommitProposal.message)}" style="width: 100%; margin-top: 4px; padding: 4px 6px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--fg-color); border-radius: 4px;" /></div>`;
-            agentHtml += `<div style="margin-top: 6px; font-size: 11px; opacity: 0.8;">Files to stage (${state.gitCommitProposal.files.length}): ${state.gitCommitProposal.files.map(f => escapeHtml(f)).join(', ')}</div>`;
-            agentHtml += `<div style="margin-top: 10px; display: flex; gap: 8px;">
-                <button id="btn-approve-commit" class="primary" style="padding: 4px 12px; font-size: 11px;">Approve Commit</button>
-                <button id="btn-deny-commit" style="padding: 4px 12px; font-size: 11px;">Deny</button>
+            agentHtml += `<div class="git-proposal-card">`;
+            agentHtml += `<div class="git-proposal-header"><span>📦</span> <span>GIT COMMIT PROPOSAL</span></div>`;
+            agentHtml += `<div class="git-proposal-body"><strong>Proposed Message:</strong> <input type="text" id="git-commit-msg-input" value="${escapeHtml(state.gitCommitProposal.message)}" /></div>`;
+            agentHtml += `<div class="git-proposal-files">Files to stage (${state.gitCommitProposal.files.length}): ${state.gitCommitProposal.files.map(f => escapeHtml(f)).join(', ')}</div>`;
+            agentHtml += `<div class="git-proposal-actions">
+                <button id="btn-approve-commit" class="primary">Approve Commit</button>
+                <button id="btn-deny-commit">Deny</button>
             </div>`;
             agentHtml += `</div>`;
         }
 
-        // 5d. Render Git Push Proposal
+        // 5d. Git Push Proposal
         if (state.gitPushProposal) {
-            agentHtml += `<div class="git-push-card" style="margin-top: 12px; background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 6px; padding: 12px;">`;
-            agentHtml += `<div style="font-size: 12px; font-weight: 600; color: #eab308;">🚀 GIT PUSH AUTHORIZATION REQUIRED</div>`;
-            agentHtml += `<div style="margin-top: 6px; font-size: 12px;">Remote: <strong>${escapeHtml(state.gitPushProposal.remote)}</strong> · Branch: <strong>${escapeHtml(state.gitPushProposal.branch)}</strong></div>`;
-            agentHtml += `<div style="margin-top: 2px; font-size: 11px; opacity: 0.8;">Commit: <code>${escapeHtml(state.gitPushProposal.commitHash)}</code></div>`;
-            agentHtml += `<div style="margin-top: 10px; display: flex; gap: 8px;">
-                <button id="btn-approve-push" class="primary" style="padding: 4px 12px; font-size: 11px;">Approve Push</button>
-                <button id="btn-deny-push" style="padding: 4px 12px; font-size: 11px;">Deny</button>
+            agentHtml += `<div class="git-push-card">`;
+            agentHtml += `<div class="git-push-header">🚀 GIT PUSH AUTHORIZATION REQUIRED</div>`;
+            agentHtml += `<div class="git-push-details">Remote: <strong>${escapeHtml(state.gitPushProposal.remote)}</strong> · Branch: <strong>${escapeHtml(state.gitPushProposal.branch)}</strong></div>`;
+            agentHtml += `<div class="git-push-commit">Commit: <code>${escapeHtml(state.gitPushProposal.commitHash)}</code></div>`;
+            agentHtml += `<div class="git-proposal-actions">
+                <button id="btn-approve-push" class="primary">Approve Push</button>
+                <button id="btn-deny-push">Deny</button>
             </div>`;
             agentHtml += `</div>`;
         }
 
-        // 6. Render Final Response
+        // 6. Final Response
         if (state.finalResponse) {
-            agentHtml += `<div style="margin-top: 12px; font-size: 13px;">${escapeHtml(state.finalResponse)}</div>`;
+            agentHtml += `<div style="margin-top: var(--space-4); font-size: var(--text-base); line-height: 1.6;">${escapeHtml(state.finalResponse)}</div>`;
         }
 
-        // 7. Render Changes Panel
+        // 7. Changes Panel
         if (state.changes && state.changes.length > 0) {
             agentHtml += `<div class="changes-panel">`;
-            agentHtml += `<div class="changes-header">CHANGES · ${state.changes.length}</div>`;
+            agentHtml += `<div class="changes-header">Changes · ${state.changes.length}</div>`;
             state.changes.forEach(c => {
                 const op = c.operation === 'CREATE' ? 'A' : 'M';
                 agentHtml += `<div class="change-item" data-path="${escapeHtml(c.path)}">
                     <div><span class="change-op op-${c.operation}">${op}</span> ${escapeHtml(c.path)}</div>
-                    <div style="opacity: 0.5;">[Diff]</div>
+                    <div style="opacity: 0.4; font-size: var(--text-xs); font-weight: 600;">DIFF →</div>
                 </div>`;
             });
             agentHtml += `</div>`;
