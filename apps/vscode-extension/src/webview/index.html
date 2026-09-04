@@ -1,18 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <!-- Webview Security: CSP supporting VS Code Extension Host and Live Preview -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' vscode-resource: vscode-webview: http: https: data:; style-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:; script-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:;">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' vscode-resource: vscode-webview: http: https: data:; style-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:; script-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>COMU AI Software Engineer</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div id="main-view">
         <div class="header">
             <div class="header-left">
                 <span class="logo">✦ COMU</span>
+                <span class="version-tag">v0.1.0</span>
                 <span class="subtitle">AI Software Engineer</span>
             </div>
             <div class="header-right">
@@ -30,12 +34,13 @@
                 <div class="empty-logo">✦</div>
                 <h1>COMU</h1>
                 <h2>Autonomous AI Software Engineer</h2>
-                
+
                 <!-- BYOK Onboarding Banner -->
                 <div class="byok-onboarding-card" id="byok-onboarding-card">
                     <div class="byok-badge">BRING YOUR OWN KEY</div>
                     <div class="byok-title">Connect Your AI Provider</div>
-                    <p class="byok-desc">COMU is model-agnostic. Connect your own provider account (such as NVIDIA Nemotron) or use a local model. COMU does not provide or resell AI credits.</p>
+                    <p class="byok-desc">COMU is model-agnostic. Connect your own provider account (such as NVIDIA
+                        Nemotron) or use a local model. COMU does not provide or resell AI credits.</p>
                     <div class="byok-actions">
                         <button id="btn-onboarding-nvidia" class="byok-btn primary">Connect NVIDIA Nemotron</button>
                         <button id="btn-onboarding-other" class="byok-btn secondary">Configure Other Provider</button>
@@ -68,7 +73,8 @@
                         <option value="" disabled selected>Loading models...</option>
                     </select>
                 </div>
-                <button id="configure-model-btn" class="configure-link-btn" title="Configure AI Providers & Keys">⚙ Configure</button>
+                <button id="configure-model-btn" class="configure-link-btn" title="Configure AI Providers & Keys">⚙
+                    Configure</button>
             </div>
         </div>
     </div>
@@ -86,15 +92,22 @@
                 <div class="banner-icon">🛡️</div>
                 <div class="banner-content">
                     <div class="banner-title">Bring Your Own Key (BYOK) Security</div>
-                    <div class="banner-text">COMU does not provide or resell AI inference subscriptions. Your API keys are stored exclusively in VS Code <code>SecretStorage</code> on your device and sent directly to the provider endpoint. Keys are never logged, committed to Git, or transmitted anywhere else.</div>
+                    <div class="banner-text">COMU does not provide or resell AI inference subscriptions. Your API keys
+                        are stored exclusively in VS Code <code>SecretStorage</code> on your device and sent directly to
+                        the provider endpoint. Keys are never logged, committed to Git, or transmitted anywhere else.
+                    </div>
                 </div>
             </div>
             <div class="settings-content" id="providers-container">
                 <!-- Dynamic providers rendered here -->
+            </div>
+            <div class="settings-version-footer">
+                <span>COMU AI Coding Agent · v0.1.0</span>
             </div>
         </div>
     </div>
 
     <script src="main.js"></script>
 </body>
+
 </html>
