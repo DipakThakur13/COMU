@@ -2,7 +2,7 @@
   "name": "comu-ai",
   "displayName": "COMU AI Coding Agent",
   "description": "Multi-Model AI Coding Agent for VS Code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "DipakKumarBoswasGroup",
   "author": {
     "name": "Dipak Kumar (Boswas Group)",
