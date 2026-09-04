@@ -121,7 +121,10 @@ export class ProviderManager {
 
     public async setProviderEndpoint(providerId: string, endpoint: string): Promise<void> {
         if (endpoint && endpoint.trim()) {
-            this.providerEndpoints.set(providerId, endpoint.trim());
+            const normalized = providerId === 'nvidia' 
+                ? NvidiaProvider.normalizeEndpoint(endpoint) 
+                : endpoint.trim();
+            this.providerEndpoints.set(providerId, normalized);
         } else {
             this.providerEndpoints.delete(providerId);
         }

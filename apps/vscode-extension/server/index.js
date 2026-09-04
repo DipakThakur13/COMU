@@ -30622,18 +30622,35 @@ var require_dist16 = __commonJS({
       static DEFAULT_MODEL = "nvidia/nemotron-4-340b-instruct";
       apiKey;
       endpoint;
+      static normalizeEndpoint(endpoint) {
+        if (!endpoint || !endpoint.trim()) {
+          return _NvidiaProvider.DEFAULT_ENDPOINT;
+        }
+        let ep = endpoint.trim().replace(/\/+$/, "");
+        if (ep.endsWith("/v1")) {
+          return `${ep}/chat/completions`;
+        }
+        if (ep === "https://integrate.api.nvidia.com") {
+          return "https://integrate.api.nvidia.com/v1/chat/completions";
+        }
+        if (ep.endsWith("/v1/chat") || ep.endsWith("/v1/chat/c")) {
+          return ep.replace(/\/v1\/chat(\/c)?$/, "/v1/chat/completions");
+        }
+        return ep;
+      }
       constructor(apiKey, endpoint) {
         const resolvedKey = apiKey || process.env.NVIDIA_API_KEY;
         if (!resolvedKey) {
           throw new import_shared.ProviderError("NVIDIA API Key is required");
         }
         this.apiKey = resolvedKey;
-        this.endpoint = endpoint || _NvidiaProvider.DEFAULT_ENDPOINT;
+        this.endpoint = _NvidiaProvider.normalizeEndpoint(endpoint);
       }
       static detectEnvironmentCredential() {
         return !!(process.env.NVIDIA_API_KEY && process.env.NVIDIA_API_KEY.trim().length > 0);
       }
       static async testConnection(apiKey, endpoint = _NvidiaProvider.DEFAULT_ENDPOINT, timeoutMs = 6e3) {
+        const resolvedEndpoint = _NvidiaProvider.normalizeEndpoint(endpoint);
         if (!apiKey || !apiKey.trim()) {
           return {
             provider: "nvidia",
@@ -30650,7 +30667,7 @@ var require_dist16 = __commonJS({
           max_tokens: 1
         };
         try {
-          const response = await fetch(endpoint, {
+          const response = await fetch(resolvedEndpoint, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

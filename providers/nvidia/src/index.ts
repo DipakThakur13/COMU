@@ -15,13 +15,30 @@ export class NvidiaProvider implements ModelProvider {
   private apiKey: string;
   private endpoint: string;
 
+  public static normalizeEndpoint(endpoint?: string): string {
+    if (!endpoint || !endpoint.trim()) {
+      return NvidiaProvider.DEFAULT_ENDPOINT;
+    }
+    let ep = endpoint.trim().replace(/\/+$/, "");
+    if (ep.endsWith("/v1")) {
+      return `${ep}/chat/completions`;
+    }
+    if (ep === "https://integrate.api.nvidia.com") {
+      return "https://integrate.api.nvidia.com/v1/chat/completions";
+    }
+    if (ep.endsWith("/v1/chat") || ep.endsWith("/v1/chat/c")) {
+      return ep.replace(/\/v1\/chat(\/c)?$/, "/v1/chat/completions");
+    }
+    return ep;
+  }
+
   constructor(apiKey?: string, endpoint?: string) {
     const resolvedKey = apiKey || process.env.NVIDIA_API_KEY;
     if (!resolvedKey) {
       throw new ProviderError("NVIDIA API Key is required");
     }
     this.apiKey = resolvedKey;
-    this.endpoint = endpoint || NvidiaProvider.DEFAULT_ENDPOINT;
+    this.endpoint = NvidiaProvider.normalizeEndpoint(endpoint);
   }
 
   public static detectEnvironmentCredential(): boolean {
@@ -33,6 +50,7 @@ export class NvidiaProvider implements ModelProvider {
     endpoint = NvidiaProvider.DEFAULT_ENDPOINT,
     timeoutMs = 6000
   ): Promise<ProviderTestResult> {
+    const resolvedEndpoint = NvidiaProvider.normalizeEndpoint(endpoint);
     if (!apiKey || !apiKey.trim()) {
       return {
         provider: "nvidia",
@@ -52,7 +70,7 @@ export class NvidiaProvider implements ModelProvider {
     };
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(resolvedEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
