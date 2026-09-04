@@ -11,7 +11,6 @@
 <p align="center">
 
 [![Version](https://img.shields.io/badge/Version-v0.1.0-blue.svg)](package.json)
-[![Milestone](https://img.shields.io/badge/Milestone-M7%20Complete-success.svg)](docs/ARCHITECTURE.md)
 [![Open Source](https://img.shields.io/badge/Open%20Source-Community%20Driven-brightgreen)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue)](https://www.typescriptlang.org/)
 [![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.1.0-007ACC)](https://code.visualstudio.com/)
