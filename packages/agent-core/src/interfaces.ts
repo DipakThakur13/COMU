@@ -1,11 +1,25 @@
-import { AgentEvent, AgentLimits } from "@comu/protocol";
+import {
+  AgentEvent,
+  AgentLimits,
+  TaskPlan,
+  VerificationResult,
+  FailureDiagnosis,
+  RepairAttempt,
+  WorkspaceIntegrityResult
+} from "@comu/protocol";
 
-export type AgentState = 
+export type AgentState =
   | "IDLE"
   | "STARTING"
+  | "ANALYZING"
+  | "PLANNING"
   | "THINKING"
   | "TOOL_CALLING"
   | "OBSERVING"
+  | "VERIFYING"
+  | "DIAGNOSING"
+  | "REPAIRING"
+  | "WAITING_FOR_USER"
   | "COMPLETED"
   | "FAILED"
   | "CANCELLED"
@@ -14,17 +28,32 @@ export type AgentState =
 export interface OrchestratorContext {
   taskId: string;
   workspaceRoot: string;
+  workspaceId?: string;
   systemPrompt: string;
   userPrompt: string;
   limits: AgentLimits;
   onEvent: (event: AgentEvent) => void;
   abortSignal?: AbortSignal;
+  gitConfig?: {
+    autoCommitVerifiedTasks?: boolean;
+    autoBranchOnTask?: boolean;
+    remote?: string;
+    branch?: string;
+  };
 }
 
 export interface AgentResult {
-  status: "completed" | "failed" | "cancelled" | "limit_reached";
+  status: "completed" | "failed" | "cancelled" | "limit_reached" | "waiting_for_user";
   finalText?: string;
   error?: string;
   steps: number;
   changeSet?: any;
+  plan?: TaskPlan;
+  verificationResult?: VerificationResult;
+  diagnosis?: FailureDiagnosis;
+  repairAttempts?: RepairAttempt[];
+  workspaceIntegrity?: WorkspaceIntegrityResult;
+  gitCommitResult?: any;
+  gitPushResult?: any;
 }
+

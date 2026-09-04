@@ -456,3 +456,204 @@ textarea {
 .provider-actions button.primary:hover {
     background-color: var(--btn-hover);
 }
+
+/* ==========================================
+   Milestone 6: Orchestration UI Styles
+   ========================================== */
+
+.dot.waiting {
+    background-color: var(--comu-warning);
+    box-shadow: 0 0 6px var(--comu-warning);
+    animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+
+/* Interaction Card */
+.interaction-card {
+    margin-top: 10px;
+    margin-bottom: 12px;
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--comu-accent);
+    border-radius: 6px;
+    padding: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.interaction-header {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--comu-accent);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.interaction-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.interaction-message {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-bottom: 10px;
+}
+.interaction-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.interaction-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+.interaction-actions {
+    display: flex;
+    gap: 8px;
+}
+.interaction-actions button {
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: none;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 500;
+}
+.interaction-actions button.primary {
+    background-color: var(--btn-bg);
+    color: var(--btn-fg);
+}
+.interaction-actions button.primary:hover {
+    background-color: var(--btn-hover);
+}
+.interaction-actions button.danger {
+    background-color: var(--comu-error);
+    color: white;
+}
+.interaction-actions button.danger:hover {
+    opacity: 0.9;
+}
+
+/* Plan Panel */
+.plan-panel {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.panel-header {
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    background-color: var(--vscode-sideBarSectionHeader-background);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+.status-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.badge-ready { background-color: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+.badge-executing { background-color: rgba(234, 179, 8, 0.2); color: #eab308; }
+.badge-verifying { background-color: rgba(168, 85, 247, 0.2); color: #a855f7; }
+.badge-completed, .badge-passed { background-color: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.badge-failed { background-color: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+.plan-steps {
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.plan-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+}
+.step-icon {
+    font-family: monospace;
+    font-weight: bold;
+}
+.step-pending { opacity: 0.6; }
+.step-running { color: var(--comu-warning); font-weight: 500; }
+.step-completed { color: var(--comu-success); }
+.step-failed { color: var(--comu-error); font-weight: 500; }
+.step-blocked { opacity: 0.4; text-decoration: line-through; }
+.step-info { display: flex; flex-direction: column; }
+.step-summary { font-size: 11px; opacity: 0.7; }
+
+/* Verification Panel */
+.verification-panel {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.verification-checks {
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.check-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    padding: 3px 0;
+}
+.check-passed { color: var(--comu-success); }
+.check-failed { color: var(--comu-error); }
+.check-unavailable { opacity: 0.5; }
+.check-skipped { opacity: 0.6; }
+.badge-req { font-size: 9px; padding: 1px 4px; border-radius: 2px; background: rgba(239, 68, 68, 0.15); color: #ef4444; margin-left: 4px; }
+.badge-opt { font-size: 9px; padding: 1px 4px; border-radius: 2px; background: rgba(128, 128, 128, 0.15); opacity: 0.7; margin-left: 4px; }
+.check-details { font-size: 10px; opacity: 0.7; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Diagnosis Panel */
+.diagnosis-panel {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    background-color: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 4px;
+    padding: 8px 10px;
+}
+.badge-fail { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #ef4444; color: white; }
+.diag-summary { font-size: 12px; margin-top: 6px; font-weight: 500; }
+.diag-files { font-size: 11px; margin-top: 4px; opacity: 0.8; }
+.diag-files code { background: rgba(128, 128, 128, 0.2); padding: 1px 4px; border-radius: 2px; }
+
+/* Repair Panel */
+.repair-panel {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.repair-item {
+    padding: 6px 10px;
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border-color);
+}

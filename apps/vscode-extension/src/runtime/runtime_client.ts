@@ -94,4 +94,17 @@ export class RuntimeClient {
         
         return await res.json() as any;
     }
+
+    public async respondInteraction(taskId: string, interactionId: string, response: any): Promise<void> {
+        const res = await fetch(`${this.baseUrl}/v1/tasks/${taskId}/interactions/${interactionId}/respond`, {
+            method: 'POST',
+            headers: await this.getHeaders(),
+            body: JSON.stringify({ response })
+        });
+
+        if (!res.ok) {
+            const err = await res.text().catch(() => 'Unknown error');
+            throw new Error(`Failed to respond to interaction: ${res.status} ${err}`);
+        }
+    }
 }

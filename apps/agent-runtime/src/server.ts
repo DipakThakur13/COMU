@@ -5,10 +5,15 @@ import { ToolRegistry, ToolExecutor } from '@comu/tool-core';
 import { ReadFileTool, ListDirectoryTool, GetWorkspaceTreeTool, CreateFileTool, WriteFileTool, EditFileTool } from '@comu/tool-filesystem';
 import { SearchTextTool, NodeRecursiveSearchBackend } from '@comu/tool-search';
 import { TerminalTool } from '@comu/terminal';
-import { GitStatusTool, GitDiffTool } from '@comu/git';
+import { GitStatusTool, GitDiffTool, GitCreateBranchTool, GitStageFilesTool, GitCommitTool, GitPushTool } from '@comu/git';
 import { RunTestsTool, RunBuildTool, RunLinterTool, RunTypecheckTool } from '@comu/validation';
-import { AgentOrchestrator, OrchestratorContext } from '@comu/agent-core';
+import { WebDocsTool } from '@comu/tool-web-docs';
+import { AgentOrchestrator, OrchestratorContext, InteractionManager, SubagentManager } from '@comu/agent-core';
+import { TaskPlanner } from '@comu/planning-engine';
+import { VerificationEngine } from '@comu/verification-engine';
+import { RepairEngine } from '@comu/repair-engine';
 import { ComuDiffEngine } from '@comu/diff-engine';
+import { MemoryEngine, MemoryStorage, MemorySanitizer } from '@comu/memory-engine';
 import { NvidiaProvider } from '@comu/provider-nvidia';
 import { AgentEvent } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
@@ -30,10 +35,15 @@ registry.register(EditFileTool);
 registry.register(new TerminalTool());
 registry.register(new GitStatusTool());
 registry.register(new GitDiffTool());
+registry.register(new GitCreateBranchTool());
+registry.register(new GitStageFilesTool());
+registry.register(new GitCommitTool());
+registry.register(new GitPushTool());
 registry.register(new RunTestsTool());
 registry.register(new RunBuildTool());
 registry.register(new RunLinterTool());
 registry.register(new RunTypecheckTool());
+registry.register(new WebDocsTool());
 
 // Register search tool with backend
 const searchBackend = new NodeRecursiveSearchBackend();
@@ -44,10 +54,13 @@ registry.register({
 
 const executor = new ToolExecutor(registry);
 const diffEngine = new ComuDiffEngine();
+const interactionManager = new InteractionManager();
+const memoryEngine = new MemoryEngine();
+const subagentManager = new SubagentManager();
 
 // Global config state
 let runtimeConfig = {
-    providers: {} as Record<string, any>
+  providers: {} as Record<string, any>
 };
 
 // Global SSE connection tracking and event store
@@ -57,13 +70,13 @@ const taskChangeSets = new Map<string, any>();
 const taskControllers = new Map<string, AbortController>();
 
 app.post('/v1/config/providers', (req, res) => {
-    const { providers } = req.body;
-    if (providers) {
-        runtimeConfig.providers = providers;
-        res.status(200).json({ status: "ok" });
-    } else {
-        res.status(400).json({ error: "Missing providers config" });
-    }
+  const { providers } = req.body;
+  if (providers) {
+    runtimeConfig.providers = providers;
+    res.status(200).json({ status: "ok" });
+  } else {
+    res.status(400).json({ error: "Missing providers config" });
+  }
 });
 
 // Basic health check
@@ -72,9 +85,9 @@ app.get("/v1/health", (req, res) => {
 });
 
 app.post('/v1/tasks', async (req, res) => {
-  const taskReq = req.body; 
+  const taskReq = req.body;
   const taskId = `task-${Date.now()}`;
-  const workspaceRoot = resolve(process.cwd()); 
+  const workspaceRoot = resolve(process.cwd());
 
   res.status(201).json({ taskId });
 
@@ -84,27 +97,39 @@ app.post('/v1/tasks', async (req, res) => {
       // Setup provider dynamically
       const nvidiaKey = runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
       const model = new NvidiaProvider(nvidiaKey);
-      const orchestrator = new AgentOrchestrator(model, registry, executor, diffEngine);
       
+      const orchestrator = new AgentOrchestrator(model, registry, executor, diffEngine, {
+        planner: new TaskPlanner(),
+        verificationEngine: new VerificationEngine(),
+        repairEngine: new RepairEngine(),
+        interactionManager,
+        memoryEngine,
+        subagentManager
+      });
+
       const controller = new AbortController();
       taskControllers.set(taskId, controller);
 
       const ctx: OrchestratorContext = {
         taskId,
         workspaceRoot,
-        systemPrompt: "You are an AI coding assistant. Follow instructions precisely.",
+        systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
         userPrompt: taskReq.description || taskReq.prompt || "",
         limits: {
           maxSteps: 30,
           maxToolCalls: 100,
-          maxExecutionTimeMs: 5 * 60 * 1000 // 5 mins
+          maxExecutionTimeMs: 5 * 60 * 1000, // 5 mins
+          maxRepairAttempts: 3,
+          maxValidationRuns: 6,
+          maxRepairFiles: 5,
+          maxRepairTimeMs: 180000
         },
         onEvent: (event: AgentEvent) => {
           console.log(`[Event ${event.type}]`, event);
-          
+
           // Store event in bounded history
           eventStore.append(event);
-          
+
           const streams = eventStreams.get(taskId) || [];
           streams.forEach(stream => {
             stream.write(`id: ${event.eventId}\n`);
@@ -117,21 +142,21 @@ app.post('/v1/tasks', async (req, res) => {
 
       const result = await orchestrator.run(ctx);
       console.log(`[Task ${taskId}] finished with status: ${result.status}`);
-      
+
       // Store changeset for diff retrieval
       if (result.changeSet) {
-          taskChangeSets.set(taskId, result.changeSet);
+        taskChangeSets.set(taskId, result.changeSet);
       }
-      
+
       // Close streams
       const streams = eventStreams.get(taskId) || [];
       streams.forEach(stream => stream.end());
       eventStreams.delete(taskId);
-      
+
       setTimeout(() => {
-          eventStore.clear(taskId);
-          taskChangeSets.delete(taskId);
-          taskControllers.delete(taskId);
+        eventStore.clear(taskId);
+        taskChangeSets.delete(taskId);
+        taskControllers.delete(taskId);
       }, 5 * 60 * 1000);
     } catch (e: any) {
       console.error(`Error executing task ${taskId}:`, e);
@@ -139,31 +164,32 @@ app.post('/v1/tasks', async (req, res) => {
       const streams = eventStreams.get(taskId) || [];
       streams.forEach(stream => stream.end());
       eventStreams.delete(taskId);
-      
+
       // Retain failed task events temporarily
       setTimeout(() => {
-          eventStore.clear(taskId);
-          taskChangeSets.delete(taskId);
-          taskControllers.delete(taskId);
+        eventStore.clear(taskId);
+        taskChangeSets.delete(taskId);
+        taskControllers.delete(taskId);
       }, 5 * 60 * 1000);
     }
   }, 0);
 });
 
 app.post('/v1/tasks/:id/cancel', (req, res) => {
-    const taskId = req.params.id;
-    const controller = taskControllers.get(taskId);
-    if (controller) {
-        controller.abort();
-        res.status(200).json({ status: "cancelled" });
-    } else {
-        res.status(404).json({ error: "Task not found or already completed" });
-    }
+  const taskId = req.params.id;
+  const controller = taskControllers.get(taskId);
+  if (controller) {
+    controller.abort();
+    interactionManager.cancelTaskInteractions(taskId);
+    res.status(200).json({ status: "cancelled" });
+  } else {
+    res.status(404).json({ error: "Task not found or already completed" });
+  }
 });
 
 app.get('/v1/tasks/:id/events', (req, res) => {
   const taskId = req.params.id;
-  
+
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -193,7 +219,7 @@ app.get('/v1/tasks/:id/events', (req, res) => {
 app.get('/v1/tasks/:id/diff', (req, res) => {
   const taskId = req.params.id;
   const path = req.query.path as string;
-  
+
   const changeSet = taskChangeSets.get(taskId);
   if (!changeSet) {
     return res.status(404).json({ error: 'ChangeSet not found for task' });
@@ -207,6 +233,144 @@ app.get('/v1/tasks/:id/diff', (req, res) => {
   res.json({
     originalContent: change.originalContent,
     newContent: change.newContent
+  });
+});
+
+// Human Interaction Endpoints
+app.get('/v1/tasks/:id/interactions', (req, res) => {
+  const taskId = req.params.id;
+  const pending = interactionManager.getPendingInteraction(taskId);
+  if (pending) {
+    res.json({ interaction: pending });
+  } else {
+    res.json({ interaction: null });
+  }
+});
+
+app.post('/v1/tasks/:taskId/interactions/:interactionId/respond', (req, res) => {
+  const { taskId, interactionId } = req.params;
+  const { response } = req.body;
+
+  if (!response || !response.type) {
+    return res.status(400).json({ error: "Missing response or response.type" });
+  }
+
+  const pending = interactionManager.getPendingInteraction(taskId);
+  if (!pending || pending.interactionId !== interactionId) {
+    return res.status(404).json({ error: "Interaction not found, expired, or already resolved" });
+  }
+
+  if (pending.type === "INPUT" && response.type !== "INPUT") {
+    return res.status(400).json({ error: "Invalid response type for INPUT interaction" });
+  }
+
+  if (pending.type === "APPROVAL" && response.type !== "APPROVE" && response.type !== "DENY") {
+    return res.status(400).json({ error: "Invalid response type for APPROVAL interaction" });
+  }
+
+  const success = interactionManager.resolveInteraction(taskId, interactionId, response, (event) => {
+    eventStore.append(event);
+    const streams = eventStreams.get(taskId) || [];
+    streams.forEach(stream => {
+      stream.write(`id: ${event.eventId}\n`);
+      stream.write(`event: ${event.type}\n`);
+      stream.write(`data: ${JSON.stringify(event)}\n\n`);
+    });
+  });
+
+  if (success) {
+    res.status(200).json({ status: "resolved" });
+  } else {
+    res.status(400).json({ error: "Failed to resolve interaction" });
+  }
+});
+
+// ==========================================
+// Milestone 7: Memory API Endpoints
+// ==========================================
+
+app.get('/v1/workspace/memory', async (req, res) => {
+  try {
+    const workspaceId = (req.query.workspaceId as string) || resolve(process.cwd());
+    const text = (req.query.query as string) || (req.query.text as string);
+    const type = req.query.type as any;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    const result = await memoryEngine.query({
+      workspaceId,
+      text,
+      types: type ? [type] : undefined,
+      limit: Math.min(limit, 50)
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/v1/workspace/memory', async (req, res) => {
+  try {
+    const { workspaceId, type, content, source, trustLevel, confidence, scope, evidence } = req.body;
+
+    if (!workspaceId || !type || !content) {
+      return res.status(400).json({ error: "Missing required fields: workspaceId, type, and content are required." });
+    }
+
+    if (!["CONVENTION", "LESSON", "EPISODE"].includes(type)) {
+      return res.status(400).json({ error: `Invalid memory type: ${type}. Must be CONVENTION, LESSON, or EPISODE.` });
+    }
+
+    const assignedSource = source === "USER" || !source ? "USER" : source;
+    const assignedTrust = assignedSource === "USER" ? "USER_VERIFIED" : (trustLevel || "AGENT_DERIVED");
+
+    const entry = await memoryEngine.record({
+      workspaceId,
+      type,
+      content,
+      source: assignedSource,
+      trustLevel: assignedTrust,
+      confidence: confidence || 1.0,
+      status: "ACTIVE",
+      scope: scope || { workspaceId },
+      evidence
+    });
+
+    res.status(201).json({ entry });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/v1/workspace/memory/:id', async (req, res) => {
+  try {
+    const memoryId = req.params.id;
+    const workspaceId = (req.query.workspaceId as string) || (req.body?.workspaceId as string);
+    const reason = (req.query.reason as string) || (req.body?.reason as string) || "Manual deletion / invalidation";
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId is required to invalidate memory." });
+    }
+
+    await memoryEngine.invalidate(workspaceId, memoryId, reason);
+    res.json({ status: "invalidated", memoryId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// Milestone 7: Subagent Inspection Endpoint
+// ==========================================
+
+app.get('/v1/tasks/:taskId/subagents', (req, res) => {
+  const { taskId } = req.params;
+  const events = eventStore.getEvents(taskId);
+  const subagentEvents = events.filter(e => e.type.startsWith("subagent."));
+
+  res.json({
+    taskId,
+    subagents: subagentEvents
   });
 });
 

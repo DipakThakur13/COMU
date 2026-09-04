@@ -1,3 +1,4 @@
+import { describe, it, beforeEach } from 'vitest';
 import { expect } from 'chai';
 import { CommandPolicy } from '../src/policy';
 import { CommandPlan } from '../src/command_plan';

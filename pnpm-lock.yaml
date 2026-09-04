@@ -41,21 +41,33 @@ importers:
       '@comu/context-engine':
         specifier: workspace:*
         version: link:../../packages/context-engine
+      '@comu/diagnostics-engine':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics-engine
       '@comu/diff-engine':
         specifier: workspace:*
         version: link:../../packages/diff-engine
       '@comu/git':
         specifier: workspace:*
         version: link:../../tools/git
+      '@comu/memory-engine':
+        specifier: workspace:*
+        version: link:../../packages/memory-engine
       '@comu/model-core':
         specifier: workspace:*
         version: link:../../packages/model-core
+      '@comu/planning-engine':
+        specifier: workspace:*
+        version: link:../../packages/planning-engine
       '@comu/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
       '@comu/provider-nvidia':
         specifier: workspace:*
         version: link:../../providers/nvidia
+      '@comu/repair-engine':
+        specifier: workspace:*
+        version: link:../../packages/repair-engine
       '@comu/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -71,9 +83,15 @@ importers:
       '@comu/tool-search':
         specifier: workspace:*
         version: link:../../tools/search
+      '@comu/tool-web-docs':
+        specifier: workspace:*
+        version: link:../../tools/web-docs
       '@comu/validation':
         specifier: workspace:*
         version: link:../../tools/validation
+      '@comu/verification-engine':
+        specifier: workspace:*
+        version: link:../../packages/verification-engine
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -121,21 +139,36 @@ importers:
 
   packages/agent-core:
     dependencies:
+      '@comu/diagnostics-engine':
+        specifier: workspace:*
+        version: link:../diagnostics-engine
       '@comu/diff-engine':
         specifier: workspace:*
         version: link:../diff-engine
+      '@comu/memory-engine':
+        specifier: workspace:*
+        version: link:../memory-engine
       '@comu/model-core':
         specifier: workspace:*
         version: link:../model-core
+      '@comu/planning-engine':
+        specifier: workspace:*
+        version: link:../planning-engine
       '@comu/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@comu/repair-engine':
+        specifier: workspace:*
+        version: link:../repair-engine
       '@comu/shared':
         specifier: workspace:*
         version: link:../shared
       '@comu/tool-core':
         specifier: workspace:*
         version: link:../tool-core
+      '@comu/verification-engine':
+        specifier: workspace:*
+        version: link:../verification-engine
 
   packages/context-engine:
     dependencies:
@@ -152,6 +185,22 @@ importers:
         specifier: workspace:*
         version: link:../../tools/filesystem
 
+  packages/diagnostics-engine:
+    dependencies:
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(postcss@8.5.26)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.1.3
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/diff-engine:
     dependencies:
       '@comu/shared':
@@ -165,17 +214,71 @@ importers:
         specifier: ^8.0.0
         version: 8.0.0
 
+  packages/memory-engine:
+    dependencies:
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(postcss@8.5.26)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.1.3
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/model-core:
     dependencies:
       '@comu/shared':
         specifier: workspace:*
         version: link:../shared
 
+  packages/planning-engine:
+    dependencies:
+      '@comu/model-core':
+        specifier: workspace:*
+        version: link:../model-core
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(postcss@8.5.26)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.1.3
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/protocol:
     dependencies:
       '@comu/shared':
         specifier: workspace:*
         version: link:../shared
+
+  packages/repair-engine:
+    dependencies:
+      '@comu/diagnostics-engine':
+        specifier: workspace:*
+        version: link:../diagnostics-engine
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(postcss@8.5.26)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.1.3
+        version: 1.6.1(@types/node@20.19.43)
 
   packages/shared: {}
 
@@ -184,6 +287,28 @@ importers:
       '@comu/shared':
         specifier: workspace:*
         version: link:../shared
+
+  packages/verification-engine:
+    dependencies:
+      '@comu/diff-engine':
+        specifier: workspace:*
+        version: link:../diff-engine
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@comu/tool-core':
+        specifier: workspace:*
+        version: link:../tool-core
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(postcss@8.5.26)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.1.3
+        version: 1.6.1(@types/node@20.19.43)
 
   providers/nvidia:
     dependencies:
@@ -304,6 +429,25 @@ importers:
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
+
+  tools/web-docs:
+    dependencies:
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@comu/tool-core':
+        specifier: workspace:*
+        version: link:../../packages/tool-core
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(postcss@8.5.26)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.1.3
+        version: 1.6.1(@types/node@20.19.43)
 
 packages:
 

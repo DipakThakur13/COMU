@@ -14,6 +14,11 @@
     "@comu/tool-core": "workspace:*",
     "@comu/model-core": "workspace:*",
     "@comu/diff-engine": "workspace:*",
-    "@comu/shared": "workspace:*"
+    "@comu/shared": "workspace:*",
+    "@comu/planning-engine": "workspace:*",
+    "@comu/verification-engine": "workspace:*",
+    "@comu/diagnostics-engine": "workspace:*",
+    "@comu/repair-engine": "workspace:*",
+    "@comu/memory-engine": "workspace:*"
   }
 }

@@ -67,6 +67,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     // Just a mock test for now
                     vscode.window.showInformationMessage(`Connection to ${data.providerId} successful!`);
                     break;
+                case 'respond_interaction':
+                    try {
+                        await this.runtimeClient.respondInteraction(data.taskId, data.interactionId, data.response);
+                    } catch (e: any) {
+                        vscode.window.showErrorMessage(`Failed to respond to interaction: ${e.message}`);
+                    }
+                    break;
             }
         });
     }
