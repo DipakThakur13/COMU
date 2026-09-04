@@ -238,13 +238,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         let html = fs.readFileSync(htmlPath, 'utf8');
 
         // Replace resource paths
-        const webviewDir = path.dirname(htmlPath);
-        const styleUri = fs.existsSync(path.join(webviewDir, 'style.css'))
-            ? vscode.Uri.file(path.join(webviewDir, 'style.css'))
-            : vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'style.css');
-        const scriptUri = fs.existsSync(path.join(webviewDir, 'main.js'))
-            ? vscode.Uri.file(path.join(webviewDir, 'main.js'))
-            : vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'main.js');
+        const styleUri = vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'style.css');
+        const scriptUri = vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'main.js');
 
         const stylePath = webview.asWebviewUri(styleUri);
         const scriptPath = webview.asWebviewUri(scriptUri);
@@ -252,8 +247,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         html = html.replace('href="style.css"', `href="${stylePath}"`);
         html = html.replace('src="main.js"', `src="${scriptPath}"`);
 
-        // Inject dynamic CSP with webview.cspSource
-        const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; connect-src ${webview.cspSource} http: https: ws:;`;
+        // Inject dynamic CSP supporting local webview resources, VS Code CDN, and Google Fonts
+        const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline' https://fonts.googleapis.com; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https://fonts.gstatic.com https://fonts.googleapis.com; connect-src ${webview.cspSource} http: https: ws:;`;
         html = html.replace(
             /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
             `<meta http-equiv="Content-Security-Policy" content="${csp}">`
