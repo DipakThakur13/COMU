@@ -66,6 +66,15 @@ export class GitCreateBranchTool implements AgentTool<any, GitBranchResult> {
     const currentRes = await this.processManager.start(currentBranchPlan, { timeoutMs: 5000 });
     const previousBranch = currentRes.stdout.trim() || undefined;
 
+    if (!previousBranch || previousBranch === "HEAD") {
+      return {
+        success: false,
+        branchName,
+        created: false,
+        error: "AMBIGUOUS_GIT_STATE: Repository is in detached HEAD state. Cannot safely branch."
+      };
+    }
+
     // Check if branch already exists
     const checkExistsPlan: CommandPlan = {
       executable: "git",

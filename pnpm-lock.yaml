@@ -114,6 +114,9 @@ importers:
       '@comu/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@comu/provider-nvidia':
+        specifier: workspace:*
+        version: link:../../providers/nvidia
       eventsource-parser:
         specifier: ^4.1.0
         version: 4.1.0
@@ -315,6 +318,9 @@ importers:
       '@comu/model-core':
         specifier: workspace:*
         version: link:../../packages/model-core
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@comu/shared':
         specifier: workspace:*
         version: link:../../packages/shared

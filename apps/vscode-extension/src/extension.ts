@@ -57,6 +57,31 @@ export function activate(context: vscode.ExtensionContext) {
       })
   );
 
+  context.subscriptions.push(
+      vscode.commands.registerCommand('comu.openProviderSettings', async () => {
+          await vscode.commands.executeCommand('workbench.view.extension.comu-sidebar');
+          chatProvider.openSettings();
+      })
+  );
+
+  context.subscriptions.push(
+      vscode.commands.registerCommand('comu.configureNvidia', async () => {
+          await vscode.commands.executeCommand('workbench.view.extension.comu-sidebar');
+          chatProvider.openSettings('nvidia');
+      })
+  );
+
+  context.subscriptions.push(
+      vscode.commands.registerCommand('comu.testProviderConnection', async () => {
+          const result = await providerManager.testConnection('nvidia');
+          if (result.status === 'CONNECTED') {
+              vscode.window.showInformationMessage(`NVIDIA Connection Successful! (${result.latencyMs ?? 0}ms)`);
+          } else {
+              vscode.window.showErrorMessage(`NVIDIA Connection Failed: ${result.message || 'Unknown error'}`);
+          }
+      })
+  );
+
 
 
   context.subscriptions.push(

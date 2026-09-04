@@ -899,6 +899,34 @@ Good architecture should make it easy to replace components rather than forcing 
 
 ---
 
+# 🔑 Bring Your Own AI Provider (BYOK)
+
+COMU is **model-agnostic** and operates on a strict **Bring Your Own Key (BYOK)** model.
+
+> **Important Product Principle:**  
+> COMU does **not** provide or resell AI inference subscriptions or credits.  
+> You connect your own supported cloud provider account (such as NVIDIA Nemotron) or use a local open-weights model runner like Ollama.
+
+### Supported Providers
+
+| Provider | Model | Type | Configuration |
+| :--- | :--- | :--- | :--- |
+| **NVIDIA** | `Nemotron 3 Ultra` | Cloud API | API Key (`nvapi-...`) via UI or `NVIDIA_API_KEY` env |
+| **Ollama** | `Llama 3 (Local)` | Local Inference | `http://localhost:11434` (zero external network) |
+| **OpenAI-Compatible** | Configurable | Cloud / Local | Custom API Key & Base URL |
+| **Anthropic-Compatible** | Configurable | Cloud / Local | Custom API Key & Base URL |
+
+### Security & Secret Isolation Guarantees
+
+1. **Secure Secret Storage**: API keys entered in the COMU UI are stored strictly in VS Code `SecretStorage` on your local device.
+2. **Zero Plaintext Leakage**: Raw API keys are **never** rendered into Webview DOM, emitted into Server-Sent Events (SSE), saved into workspace memory, included in Git commits/diffs, or exposed in error logs.
+3. **Task-Start Guard**: If you launch a task with a provider that lacks a configured key, COMU blocks execution with a clear alert and automatically opens the settings page—preventing unexpected 401 failures downstream.
+4. **Live Connection Testing**: Test your provider setup directly in the UI before launching tasks with instant latency reporting and actionable error diagnostics.
+
+For full setup instructions and troubleshooting, see [docs/PROVIDER_SETUP.md](docs/PROVIDER_SETUP.md).
+
+---
+
 # 🔐 Security Reporting
 
 Security issues should be handled responsibly.

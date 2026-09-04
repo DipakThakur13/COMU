@@ -15,7 +15,7 @@ import { RepairEngine } from '@comu/repair-engine';
 import { ComuDiffEngine } from '@comu/diff-engine';
 import { MemoryEngine, MemoryStorage, MemorySanitizer } from '@comu/memory-engine';
 import { NvidiaProvider } from '@comu/provider-nvidia';
-import { AgentEvent } from '@comu/protocol';
+import { AgentEvent, ProviderConfig, ProviderTestResult } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
 
 const app: Express = express();
@@ -69,14 +69,94 @@ const eventStore = new InMemoryTaskEventStore({ maxEventsPerTask: 5000 });
 const taskChangeSets = new Map<string, any>();
 const taskControllers = new Map<string, AbortController>();
 
-app.post('/v1/config/providers', (req, res) => {
-  const { providers } = req.body;
+app.post(['/v1/config/providers', '/v1/config'], (req, res) => {
+  const providers = req.body.providers || req.body.config;
   if (providers) {
     runtimeConfig.providers = providers;
     res.status(200).json({ status: "ok" });
   } else {
     res.status(400).json({ error: "Missing providers config" });
   }
+});
+
+// Safe Provider Configuration List (No API Keys returned)
+app.get('/v1/config/providers', (req, res) => {
+  const envNvidia = NvidiaProvider.detectEnvironmentCredential();
+  const hasNvidiaKey = !!(runtimeConfig.providers?.['nvidia']?.apiKey || envNvidia);
+  const providers: ProviderConfig[] = [
+    {
+      providerId: 'nvidia',
+      displayName: 'NVIDIA',
+      enabled: true,
+      endpoint: runtimeConfig.providers?.['nvidia']?.endpoint || NvidiaProvider.DEFAULT_ENDPOINT,
+      selectedModel: 'Nemotron 3 Ultra',
+      hasCredential: hasNvidiaKey,
+      isLocal: false,
+      status: hasNvidiaKey ? 'CONNECTED' : 'NOT_CONFIGURED',
+      environmentDetected: envNvidia,
+      models: [
+        { id: 'nvidia-nemotron-3-ultra', name: 'Nemotron 3 Ultra', description: 'NVIDIA Nemotron high-performance engineering model' }
+      ],
+      description: 'High performance cloud inference powered by NVIDIA Nemotron'
+    },
+    {
+      providerId: 'ollama',
+      displayName: 'Ollama (Local)',
+      enabled: true,
+      selectedModel: 'Llama 3 (Local)',
+      hasCredential: true,
+      isLocal: true,
+      status: 'CONNECTED',
+      models: [
+        { id: 'ollama-llama-3', name: 'Llama 3 (Local)', description: 'Local offline execution' }
+      ],
+      description: 'Local on-device inference with zero external network calls'
+    }
+  ];
+  res.status(200).json({ providers });
+});
+
+// Safe Single Provider Status (No API Key returned)
+app.get('/v1/config/providers/:providerId/status', (req, res) => {
+  const { providerId } = req.params;
+  if (providerId === 'nvidia') {
+    const envNvidia = NvidiaProvider.detectEnvironmentCredential();
+    const hasKey = !!(runtimeConfig.providers?.['nvidia']?.apiKey || envNvidia);
+    return res.status(200).json({
+      providerId: 'nvidia',
+      hasCredential: hasKey,
+      environmentDetected: envNvidia,
+      status: hasKey ? 'CONNECTED' : 'NOT_CONFIGURED',
+      selectedModel: 'Nemotron 3 Ultra'
+    });
+  } else if (providerId === 'ollama') {
+    return res.status(200).json({
+      providerId: 'ollama',
+      hasCredential: true,
+      status: 'CONNECTED',
+      selectedModel: 'Llama 3 (Local)'
+    });
+  }
+  res.status(404).json({ error: `Provider '${providerId}' not found` });
+});
+
+// Test Connection Endpoint
+app.post('/v1/config/providers/:providerId/test', async (req, res) => {
+  const { providerId } = req.params;
+  if (providerId === 'nvidia') {
+    const key = req.body?.apiKey || runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY;
+    const endpoint = req.body?.endpoint || runtimeConfig.providers?.['nvidia']?.endpoint || NvidiaProvider.DEFAULT_ENDPOINT;
+    if (!key) {
+      return res.status(200).json({
+        provider: 'nvidia',
+        status: 'NOT_CONFIGURED',
+        message: 'No NVIDIA API key configured.'
+      });
+    }
+    const testResult = await NvidiaProvider.testConnection(key, endpoint);
+    return res.status(200).json(testResult);
+  }
+  res.status(404).json({ error: `Provider '${providerId}' not testable` });
 });
 
 // Basic health check
@@ -86,6 +166,31 @@ app.get("/v1/health", (req, res) => {
 
 app.post('/v1/tasks', async (req, res) => {
   const taskReq = req.body;
+  const modelId = taskReq.modelId || 'nvidia-nemotron-3-ultra';
+
+  // Task-Start Guard: verify provider credential exists before task launch
+  const isNvidia = modelId.toLowerCase().includes('nvidia') || modelId.toLowerCase().includes('nemotron');
+  const isLocal = modelId.toLowerCase().includes('ollama') || modelId.toLowerCase().includes('local');
+
+  if (isNvidia) {
+    const hasNvidia = !!(runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY);
+    if (!hasNvidia) {
+      return res.status(400).json({
+        error: 'PROVIDER_NOT_CONFIGURED',
+        code: 'PROVIDER_NOT_CONFIGURED',
+        providerId: 'nvidia',
+        message: 'Connect your NVIDIA API key before starting this task.'
+      });
+    }
+  } else if (!isLocal && !runtimeConfig.providers?.[modelId]?.apiKey) {
+    return res.status(400).json({
+      error: 'PROVIDER_NOT_CONFIGURED',
+      code: 'PROVIDER_NOT_CONFIGURED',
+      providerId: modelId,
+      message: `Provider '${modelId}' requires an API key before starting this task.`
+    });
+  }
+
   const taskId = `task-${Date.now()}`;
   const workspaceRoot = resolve(process.cwd());
 

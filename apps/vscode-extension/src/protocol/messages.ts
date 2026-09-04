@@ -6,7 +6,9 @@ import {
   RepairAttempt,
   InteractionRequest,
   InteractionResponse,
-  WorkspaceMemoryEntry
+  WorkspaceMemoryEntry,
+  ProviderConfig,
+  ProviderTestResult
 } from "@comu/protocol";
 
 export interface ChangeSummary {
@@ -29,10 +31,11 @@ export type WebviewMessage =
   | { type: "cancel_task" }
   | { type: "request_diff"; path: string }
   | { type: "select_model"; modelId: string }
-  | { type: "save_provider_key"; providerId: string; key: string }
+  | { type: "save_provider_key"; providerId: string; key: string; endpoint?: string }
   | { type: "remove_provider_key"; providerId: string }
   | { type: "test_provider"; providerId: string }
   | { type: "request_providers" }
+  | { type: "open_settings"; targetProviderId?: string }
   | { type: "respond_interaction"; taskId: string; interactionId: string; response: InteractionResponse }
   | { type: "approve_commit"; taskId: string; message?: string }
   | { type: "deny_commit"; taskId: string }
@@ -45,7 +48,9 @@ export type WebviewMessage =
 export type ExtensionMessage =
   | { type: "state_update"; state: ChatSessionStateUI }
   | { type: "error"; message: string }
-  | { type: "providers_update"; providers: any[] }
+  | { type: "providers_update"; providers: ProviderConfig[] }
+  | { type: "provider_test_result"; providerId: string; result: ProviderTestResult }
+  | { type: "open_settings"; targetProviderId?: string }
   | { type: "memory_update"; entries: WorkspaceMemoryEntry[] }
   | { type: "agent_event"; event: AgentEvent };
 

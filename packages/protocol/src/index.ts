@@ -848,3 +848,45 @@ export interface WebDocsBlockedEvent extends AgentEventBase {
   reason: string;
 }
 
+// ============================================================================
+// PROVIDER & API KEY CONFIGURATION (BYOK)
+// ============================================================================
+
+export type ProviderStatus =
+  | "NOT_CONFIGURED"
+  | "CONNECTING"
+  | "CONNECTED"
+  | "INVALID_CREDENTIAL"
+  | "CONNECTION_ERROR"
+  | "TIMEOUT"
+  | "DISABLED";
+
+export interface ProviderModel {
+  id: string;
+  name: string;
+  description?: string;
+  contextTokens?: number;
+}
+
+export interface ProviderConfig {
+  providerId: string;
+  displayName: string;
+  enabled: boolean;
+  endpoint?: string;
+  selectedModel?: string;
+  hasCredential: boolean;
+  isLocal?: boolean;
+  status: ProviderStatus;
+  models: ProviderModel[];
+  environmentDetected?: boolean;
+  description?: string;
+}
+
+export interface ProviderTestResult {
+  provider: string;
+  status: ProviderStatus;
+  model?: string;
+  latencyMs?: number;
+  message?: string;
+}
+

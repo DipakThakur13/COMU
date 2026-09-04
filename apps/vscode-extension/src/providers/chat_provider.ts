@@ -55,17 +55,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'save_provider_key':
                     await this.providerManager.setProviderKey(data.providerId, data.key);
+                    if (data.endpoint !== undefined) {
+                        await this.providerManager.setProviderEndpoint(data.providerId, data.endpoint);
+                    }
                     await this.sendProvidersToWebview();
                     await this.pushConfigToRuntime();
+                    vscode.window.showInformationMessage(`API key for ${data.providerId} saved securely.`);
                     break;
                 case 'remove_provider_key':
                     await this.providerManager.setProviderKey(data.providerId, '');
                     await this.sendProvidersToWebview();
                     await this.pushConfigToRuntime();
+                    vscode.window.showInformationMessage(`API key for ${data.providerId} removed.`);
                     break;
-                case 'test_provider':
-                    // Just a mock test for now
-                    vscode.window.showInformationMessage(`Connection to ${data.providerId} successful!`);
+                case 'test_provider': {
+                    const result = await this.providerManager.testConnection(data.providerId);
+                    if (this._view) {
+                        const msg: ExtensionMessage = {
+                            type: 'provider_test_result',
+                            providerId: data.providerId,
+                            result
+                        };
+                        this._view.webview.postMessage(msg);
+                    }
+                    if (result.status === 'CONNECTED') {
+                        vscode.window.showInformationMessage(`Connection to ${data.providerId} successful!${result.latencyMs ? ` (${result.latencyMs}ms)` : ''}`);
+                    } else {
+                        vscode.window.showErrorMessage(`Connection test failed for ${data.providerId}: ${result.message || 'Unknown error'}`);
+                    }
+                    break;
+                }
+                case 'open_settings':
+                    this.openSettings(data.targetProviderId);
                     break;
                 case 'respond_interaction':
                     try {
@@ -76,6 +97,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     break;
             }
         });
+    }
+
+    public openSettings(targetProviderId?: string) {
+        if (this._view) {
+            const msg: ExtensionMessage = { type: 'open_settings', targetProviderId };
+            this._view.webview.postMessage(msg);
+        }
     }
 
     public async sendProvidersToWebview() {
@@ -93,6 +121,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private async handleSubmitPrompt(prompt: string, modelId: string) {
         if (!prompt) return;
+
+        // Task-Start Guard: Verify provider configuration before proceeding
+        const check = await this.providerManager.isProviderConfigured(modelId);
+        if (!check.configured) {
+            const errMsg = check.message || `Provider for model "${modelId}" is not configured. Please add your API key in Settings.`;
+            this.sendErrorToWebview(errMsg);
+            this.openSettings(check.providerId);
+            vscode.window.showWarningMessage(`${errMsg} Please configure it in Provider Settings.`, 'Open Settings').then(selection => {
+                if (selection === 'Open Settings') {
+                    this.openSettings(check.providerId);
+                }
+            });
+            return;
+        }
 
         const workspaceCtx = await getWorkspaceContext();
         if (!workspaceCtx) {

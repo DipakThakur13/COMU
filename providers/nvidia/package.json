@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@comu/model-core": "workspace:*",
+    "@comu/protocol": "workspace:*",
     "@comu/shared": "workspace:*"
   }
 }

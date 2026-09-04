@@ -1,8 +1,12 @@
 // @ts-check
 (function() {
-    // Acquire the vscode API
+    // Acquire the vscode API safely (supports VS Code Webview and Live Preview)
     // @ts-ignore
-    const vscode = acquireVsCodeApi();
+    const vscode = (typeof acquireVsCodeApi === 'function')
+        ? acquireVsCodeApi()
+        : { postMessage: (msg) => console.log('[Live Preview postMessage]:', msg) };
+
+    const isLivePreview = typeof acquireVsCodeApi !== 'function';
 
     const state = {
         taskId: null,
@@ -17,7 +21,12 @@
         verification: null,
         diagnosis: null,
         repairAttempts: [],
-        pendingInteraction: null
+        pendingInteraction: null,
+        gitCommitProposal: null,
+        gitCommitResult: null,
+        gitPushProposal: null,
+        gitPushResult: null,
+        subagents: []
     };
 
     // DOM Elements - Main View
@@ -30,31 +39,40 @@
     const statusDot = document.getElementById('runtime-status-dot');
     const statusText = document.getElementById('runtime-status-text');
     const settingsBtn = document.getElementById('settings-btn');
+    const configureModelBtn = document.getElementById('configure-model-btn');
     const emptyStateChips = document.querySelectorAll('.chip');
 
-    // DOM Elements - Settings View
+    // DOM Elements - Onboarding & Settings View
+    const btnOnboardingNvidia = document.getElementById('btn-onboarding-nvidia');
+    const btnOnboardingOther = document.getElementById('btn-onboarding-other');
+    const btnOnboardingLocal = document.getElementById('btn-onboarding-local');
     const settingsView = document.getElementById('settings-view');
     const backBtn = document.getElementById('back-btn');
     const providersContainer = document.getElementById('providers-container');
 
-    // Event Listeners
+    // Event Listeners - Chat & Main View
     submitBtn.addEventListener('click', submitPrompt);
     cancelBtn.addEventListener('click', cancelTask);
 
-    settingsBtn.addEventListener('click', () => {
-        mainView.style.display = 'none';
-        settingsView.style.display = 'flex';
-        vscode.postMessage({ type: 'request_providers' });
-    });
+    settingsBtn.addEventListener('click', () => openSettingsView());
+    if (configureModelBtn) {
+        configureModelBtn.addEventListener('click', () => openSettingsView());
+    }
+    backBtn.addEventListener('click', () => closeSettingsView());
 
-    backBtn.addEventListener('click', () => {
-        settingsView.style.display = 'none';
-        mainView.style.display = 'flex';
-    });
+    if (btnOnboardingNvidia) {
+        btnOnboardingNvidia.addEventListener('click', () => openSettingsView('nvidia'));
+    }
+    if (btnOnboardingOther) {
+        btnOnboardingOther.addEventListener('click', () => openSettingsView());
+    }
+    if (btnOnboardingLocal) {
+        btnOnboardingLocal.addEventListener('click', () => openSettingsView('ollama'));
+    }
 
     emptyStateChips.forEach(chip => {
         chip.addEventListener('click', () => {
-            promptInput.value = chip.getAttribute('data-prompt');
+            promptInput.value = chip.getAttribute('data-prompt') || '';
             promptInput.focus();
         });
     });
@@ -83,12 +101,41 @@
                 appendError(message.message);
                 break;
             case 'providers_update':
-                state.providers = message.providers;
+                state.providers = message.providers || [];
                 renderProviders();
                 renderModels();
+                updateOnboardingState();
+                break;
+            case 'provider_test_result':
+                handleProviderTestResult(message.providerId, message.result);
+                break;
+            case 'open_settings':
+                openSettingsView(message.targetProviderId);
                 break;
         }
     });
+
+    function openSettingsView(targetProviderId) {
+        mainView.style.display = 'none';
+        settingsView.style.display = 'flex';
+        vscode.postMessage({ type: 'request_providers' });
+
+        if (targetProviderId) {
+            setTimeout(() => {
+                const targetCard = document.getElementById(`provider-card-${targetProviderId}`);
+                if (targetCard) {
+                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    targetCard.classList.add('highlight-pulse');
+                    setTimeout(() => targetCard.classList.remove('highlight-pulse'), 2000);
+                }
+            }, 100);
+        }
+    }
+
+    function closeSettingsView() {
+        settingsView.style.display = 'none';
+        mainView.style.display = 'flex';
+    }
 
     function submitPrompt() {
         const text = promptInput.value.trim();
@@ -96,6 +143,7 @@
 
         if (!state.modelId) {
             appendError("No model selected. Please configure a provider in Settings.");
+            openSettingsView();
             return;
         }
 
@@ -127,18 +175,43 @@
         });
     }
 
+    function updateOnboardingState() {
+        const onboardingCard = document.getElementById('byok-onboarding-card');
+        if (!onboardingCard) return;
+
+        const hasConfiguredCloud = state.providers.some(p => !p.isLocal && p.hasCredential);
+
+        if (hasConfiguredCloud) {
+            onboardingCard.innerHTML = `
+                <div class="byok-badge active">● PROVIDER CONNECTED</div>
+                <div class="byok-title">Ready for Autonomous Engineering</div>
+                <p class="byok-desc">COMU is connected to your AI provider account. Select your model below or manage API keys in Settings.</p>
+                <div class="byok-actions">
+                    <button id="btn-onboarding-manage" class="byok-btn secondary">Manage Providers & Keys</button>
+                </div>
+            `;
+            const manageBtn = document.getElementById('btn-onboarding-manage');
+            if (manageBtn) {
+                manageBtn.addEventListener('click', () => openSettingsView());
+            }
+        }
+    }
+
     function renderModels() {
         modelSelect.innerHTML = '';
         let hasModels = false;
 
         state.providers.forEach(p => {
-            if (p.configured && p.models && p.models.length > 0) {
+            const isReady = p.hasCredential || p.isLocal;
+            if (p.models && p.models.length > 0) {
                 const group = document.createElement('optgroup');
-                group.label = p.displayName;
+                group.label = p.displayName + (isReady ? '' : ' (Not Configured)');
                 p.models.forEach(m => {
                     const opt = document.createElement('option');
                     opt.value = m.id;
-                    opt.textContent = m.name;
+                    opt.textContent = m.name + (isReady ? '' : ' ⚠️ (Needs Key)');
+                    opt.dataset.providerId = p.providerId;
+                    opt.dataset.configured = isReady ? 'true' : 'false';
                     group.appendChild(opt);
                     hasModels = true;
                 });
@@ -151,14 +224,17 @@
             opt.value = "";
             opt.disabled = true;
             opt.selected = true;
-            opt.textContent = "No models configured";
+            opt.textContent = "No models available - Click ⚙ to configure";
             modelSelect.appendChild(opt);
         } else {
             if (state.modelId && modelSelect.querySelector(`option[value="${state.modelId}"]`)) {
                 modelSelect.value = state.modelId;
             } else {
-                state.modelId = modelSelect.options[0].value;
-                vscode.postMessage({ type: 'select_model', modelId: state.modelId });
+                const preferred = modelSelect.querySelector('option[data-configured="true"]') || modelSelect.options[0];
+                if (preferred) {
+                    modelSelect.value = preferred.value;
+                    state.modelId = preferred.value;
+                }
             }
         }
     }
@@ -167,88 +243,236 @@
         providersContainer.innerHTML = '';
 
         state.providers.forEach(p => {
-            const section = document.createElement('div');
-            section.className = 'provider-section';
+            const card = document.createElement('div');
+            card.className = 'provider-card';
+            card.id = `provider-card-${p.providerId}`;
 
-            const statusHtml = p.configured ?
-                `<span style="color: var(--comu-success)">●</span> Configured` :
-                `<span style="color: var(--comu-warning)">○</span> Not configured`;
+            let statusClass = 'unconfigured';
+            let statusText = 'Not Configured';
+            let statusIcon = '○';
 
-            const header = document.createElement('div');
-            header.className = 'provider-header';
-            header.innerHTML = `
-                <span>${escapeHtml(p.displayName)}</span>
-                <span class="provider-status">${statusHtml}</span>
-            `;
-            section.appendChild(header);
-
-            if (!p.isLocal) {
-                const body = document.createElement('div');
-                body.className = 'provider-body';
-
-                const inputContainer = document.createElement('div');
-                const label = document.createElement('div');
-                label.style.marginBottom = '4px';
-                label.style.fontSize = '11px';
-                label.textContent = 'API Key';
-
-                const input = document.createElement('input');
-                input.type = 'password';
-                input.placeholder = p.configured ? '••••••••••••••••' : 'Enter API Key';
-                input.id = `api-key-${p.id}`;
-
-                inputContainer.appendChild(label);
-                inputContainer.appendChild(input);
-                body.appendChild(inputContainer);
-
-                const actions = document.createElement('div');
-                actions.className = 'provider-actions';
-
-                const saveBtn = document.createElement('button');
-                saveBtn.className = 'primary';
-                saveBtn.textContent = 'Save';
-                saveBtn.onclick = () => {
-                    const val = input.value.trim();
-                    if (val) {
-                        vscode.postMessage({ type: 'save_provider_key', providerId: p.id, key: val });
-                        input.value = '';
-                    }
-                };
-
-                const testBtn = document.createElement('button');
-                testBtn.textContent = 'Test Connection';
-                testBtn.disabled = !p.configured;
-                testBtn.onclick = () => {
-                    vscode.postMessage({ type: 'test_provider', providerId: p.id });
-                };
-
-                const removeBtn = document.createElement('button');
-                removeBtn.textContent = 'Remove';
-                removeBtn.style.color = 'var(--comu-error)';
-                removeBtn.style.display = p.configured ? 'block' : 'none';
-                removeBtn.onclick = () => {
-                    vscode.postMessage({ type: 'remove_provider_key', providerId: p.id });
-                };
-
-                actions.appendChild(saveBtn);
-                actions.appendChild(testBtn);
-                actions.appendChild(removeBtn);
-
-                body.appendChild(actions);
-                section.appendChild(body);
-            } else {
-                const body = document.createElement('div');
-                body.className = 'provider-body';
-                body.innerHTML = `<span style="opacity: 0.7; font-size: 11px;">Local provider. No API key required.</span>`;
-                section.appendChild(body);
+            if (p.status === 'CONNECTED' || (p.hasCredential && p.status !== 'INVALID_CREDENTIAL' && p.status !== 'NETWORK_ERROR')) {
+                statusClass = 'connected';
+                statusText = 'Connected';
+                statusIcon = '●';
+            } else if (p.status === 'CONNECTING') {
+                statusClass = 'connecting';
+                statusText = 'Testing...';
+                statusIcon = '◌';
+            } else if (p.status === 'INVALID_CREDENTIAL') {
+                statusClass = 'invalid';
+                statusText = 'Invalid Key';
+                statusIcon = '✕';
+            } else if (p.status === 'NETWORK_ERROR') {
+                statusClass = 'error';
+                statusText = 'Network Error';
+                statusIcon = '✕';
             }
 
-            providersContainer.appendChild(section);
+            const tagText = p.isLocal ? 'Local / On-Device' : (p.providerId === 'nvidia' ? 'Cloud (Nemotron 3 Ultra)' : 'Cloud');
+
+            let cardHtml = `
+                <div class="provider-card-header">
+                    <div class="provider-card-title-group">
+                        <span class="provider-card-icon">${p.providerId === 'nvidia' ? '✦' : (p.isLocal ? '🦙' : '⚡')}</span>
+                        <span class="provider-card-name">${escapeHtml(p.displayName)}</span>
+                        <span class="provider-type-tag">${tagText}</span>
+                    </div>
+                    <div class="status-pill status-${statusClass}">
+                        <span class="status-dot">${statusIcon}</span>
+                        <span class="status-text">${statusText}</span>
+                    </div>
+                </div>
+                <div class="provider-card-desc">${escapeHtml(p.description || '')}</div>
+            `;
+
+            if (p.environmentDetected) {
+                cardHtml += `
+                    <div class="env-detected-badge">
+                        <span>ℹ</span>
+                        <span>Detected in environment variable (<code>NVIDIA_API_KEY</code>). You can override it by entering a key below.</span>
+                    </div>
+                `;
+            }
+
+            if (!p.isLocal) {
+                cardHtml += `
+                    <div class="provider-form">
+                        <div class="form-group">
+                            <div class="form-label-row">
+                                <label for="input-key-${p.providerId}">API Key</label>
+                                ${p.providerId === 'nvidia' ? '<a href="https://build.nvidia.com/" target="_blank" class="get-key-link">Get an NVIDIA API key ↗</a>' : ''}
+                            </div>
+                            <div class="input-with-toggle">
+                                <input type="password" id="input-key-${p.providerId}" 
+                                    placeholder="${p.hasCredential ? '••••••••••••••••••••' : 'Enter API Key (e.g. nvapi-...)'}" 
+                                    autocomplete="off" spellcheck="false">
+                                <button type="button" class="btn-toggle-eye" id="toggle-eye-${p.providerId}" title="Show / Hide Key">👁</button>
+                            </div>
+                            <div class="input-helper">Stored securely in VS Code <code>SecretStorage</code>. Never logged or exposed.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="input-endpoint-${p.providerId}">Endpoint URL</label>
+                            <input type="text" id="input-endpoint-${p.providerId}" 
+                                value="${escapeHtml(p.endpoint || '')}" 
+                                placeholder="Default: ${p.defaultEndpoint || 'https://...'}" 
+                                autocomplete="off" spellcheck="false">
+                        </div>
+
+                        <div class="test-result-container" id="test-result-${p.providerId}" style="display: none;"></div>
+
+                        <div class="provider-card-actions">
+                            <button id="btn-save-${p.providerId}" class="byok-action-btn primary">Save</button>
+                            <button id="btn-test-${p.providerId}" class="byok-action-btn secondary">Test Connection</button>
+                            ${p.hasCredential ? `<button id="btn-remove-${p.providerId}" class="byok-action-btn danger">Remove</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                cardHtml += `
+                    <div class="provider-form">
+                        <div class="form-group">
+                            <label>Local Endpoint</label>
+                            <input type="text" value="${escapeHtml(p.endpoint || 'http://localhost:11434')}" readonly style="opacity: 0.8;">
+                        </div>
+                        <div class="test-result-container" id="test-result-${p.providerId}" style="display: none;"></div>
+                        <div class="provider-card-actions">
+                            <button id="btn-test-${p.providerId}" class="byok-action-btn secondary">Test Connection</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            card.innerHTML = cardHtml;
+            providersContainer.appendChild(card);
+
+            // Attach event listeners for this card
+            if (!p.isLocal) {
+                const keyInput = card.querySelector(`#input-key-${p.providerId}`);
+                const endpointInput = card.querySelector(`#input-endpoint-${p.providerId}`);
+                const toggleEyeBtn = card.querySelector(`#toggle-eye-${p.providerId}`);
+                const saveBtn = card.querySelector(`#btn-save-${p.providerId}`);
+                const testBtn = card.querySelector(`#btn-test-${p.providerId}`);
+                const removeBtn = card.querySelector(`#btn-remove-${p.providerId}`);
+
+                if (toggleEyeBtn && keyInput) {
+                    toggleEyeBtn.addEventListener('click', () => {
+                        if (keyInput.type === 'password') {
+                            keyInput.type = 'text';
+                            toggleEyeBtn.textContent = '🔒';
+                        } else {
+                            keyInput.type = 'password';
+                            toggleEyeBtn.textContent = '👁';
+                        }
+                    });
+                }
+
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', () => {
+                        const keyVal = keyInput ? keyInput.value.trim() : '';
+                        const endpointVal = endpointInput ? endpointInput.value.trim() : undefined;
+                        if (!keyVal && !p.hasCredential) {
+                            const resEl = document.getElementById(`test-result-${p.providerId}`);
+                            if (resEl) {
+                                resEl.style.display = 'block';
+                                resEl.className = 'test-result-container error';
+                                resEl.textContent = 'Please enter an API key to save.';
+                            }
+                            return;
+                        }
+                        if (keyVal) {
+                            vscode.postMessage({
+                                type: 'save_provider_key',
+                                providerId: p.providerId,
+                                key: keyVal,
+                                endpoint: endpointVal
+                            });
+                            keyInput.value = '';
+                        } else if (endpointVal !== undefined) {
+                            vscode.postMessage({
+                                type: 'save_provider_key',
+                                providerId: p.providerId,
+                                key: '',
+                                endpoint: endpointVal
+                            });
+                        }
+                    });
+                }
+
+                if (testBtn) {
+                    testBtn.addEventListener('click', () => {
+                        setTestingState(p.providerId);
+                        vscode.postMessage({ type: 'test_provider', providerId: p.providerId });
+                    });
+                }
+
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', () => {
+                        vscode.postMessage({ type: 'remove_provider_key', providerId: p.providerId });
+                    });
+                }
+            } else {
+                const testBtn = card.querySelector(`#btn-test-${p.providerId}`);
+                if (testBtn) {
+                    testBtn.addEventListener('click', () => {
+                        setTestingState(p.providerId);
+                        vscode.postMessage({ type: 'test_provider', providerId: p.providerId });
+                    });
+                }
+            }
         });
     }
 
+    function setTestingState(providerId) {
+        const card = document.getElementById(`provider-card-${providerId}`);
+        if (!card) return;
+        const statusPill = card.querySelector('.status-pill');
+        if (statusPill) {
+            statusPill.className = 'status-pill status-connecting';
+            statusPill.innerHTML = '<span class="status-dot spin">◌</span><span class="status-text">Testing...</span>';
+        }
+        const testResultEl = document.getElementById(`test-result-${providerId}`);
+        if (testResultEl) {
+            testResultEl.style.display = 'block';
+            testResultEl.className = 'test-result-container testing';
+            testResultEl.innerHTML = '<span class="spin">◌</span> Testing connection...';
+        }
+    }
+
+    function handleProviderTestResult(providerId, result) {
+        const card = document.getElementById(`provider-card-${providerId}`);
+        if (!card) return;
+
+        const isConnected = result.status === 'CONNECTED';
+        const statusPill = card.querySelector('.status-pill');
+        if (statusPill) {
+            if (isConnected) {
+                statusPill.className = 'status-pill status-connected';
+                statusPill.innerHTML = '<span class="status-dot">●</span><span class="status-text">Connected</span>';
+            } else {
+                const isInvalid = result.status === 'INVALID_CREDENTIAL';
+                statusPill.className = `status-pill status-${isInvalid ? 'invalid' : 'error'}`;
+                statusPill.innerHTML = `<span class="status-dot">✕</span><span class="status-text">${isInvalid ? 'Invalid Key' : 'Connection Failed'}</span>`;
+            }
+        }
+
+        const testResultEl = document.getElementById(`test-result-${providerId}`);
+        if (testResultEl) {
+            testResultEl.style.display = 'block';
+            if (isConnected) {
+                testResultEl.className = 'test-result-container success';
+                const latencyStr = result.latencyMs ? ` (${result.latencyMs}ms)` : '';
+                const modelStr = result.model ? ` · Model: ${escapeHtml(result.model)}` : '';
+                testResultEl.innerHTML = `✓ <strong>Connected successfully</strong>${latencyStr}${modelStr}`;
+            } else {
+                testResultEl.className = 'test-result-container error';
+                testResultEl.innerHTML = `✕ <strong>Connection failed:</strong> ${escapeHtml(result.message || 'Check your API key and network connection.')}`;
+            }
+        }
+    }
+
     function renderState() {
-        // Update header status
         const isWaiting = state.status === 'waiting_for_user';
         const isRunning = state.status === 'running' || state.status === 'starting';
         const isOffline = state.status === 'offline';
@@ -256,7 +480,6 @@
         statusDot.className = 'dot ' + (isOffline ? 'offline' : (isWaiting ? 'waiting' : (isRunning ? 'starting' : 'online')));
         statusText.innerText = isOffline ? 'Offline' : (isWaiting ? 'Waiting for User' : (isRunning ? 'Active' : 'Connected'));
 
-        // Update inputs
         submitBtn.style.display = (isRunning || isWaiting) ? 'none' : 'flex';
         cancelBtn.style.display = (isRunning || isWaiting) ? 'block' : 'none';
 
@@ -387,10 +610,10 @@
 
         // 5b. Render Supervised Worker Agents
         if (state.subagents && state.subagents.length > 0) {
-            agentHtml += `<div class="subagents-panel" style="margin-top: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--comu-border); border-radius: 6px; padding: 10px;">`;
+            agentHtml += `<div class="subagents-panel" style="margin-top: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">`;
             agentHtml += `<div style="font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 8px;">🤖 Supervised Workers · ${state.subagents.length}</div>`;
             state.subagents.forEach(sub => {
-                const statusColor = sub.status === 'COMPLETED' ? 'var(--comu-accent)' : sub.status === 'RUNNING' ? '#e5c07b' : 'var(--comu-error)';
+                const statusColor = sub.status === 'COMPLETED' ? 'var(--comu-success)' : sub.status === 'RUNNING' ? 'var(--comu-warning)' : 'var(--comu-error)';
                 agentHtml += `<div style="padding: 6px; border-left: 2px solid ${statusColor}; margin-bottom: 6px; background: rgba(0,0,0,0.15);">
                     <div style="display: flex; justify-content: space-between; font-size: 11px;">
                         <strong>${escapeHtml(sub.subagentType)} WORKER</strong>
@@ -409,7 +632,7 @@
             agentHtml += `<div style="font-size: 12px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
                 <span>📦 GIT COMMIT PROPOSAL</span>
             </div>`;
-            agentHtml += `<div style="margin-top: 6px; font-size: 12px;"><strong>Proposed Message:</strong> <input type="text" id="git-commit-msg-input" value="${escapeHtml(state.gitCommitProposal.message)}" style="width: 100%; margin-top: 4px; padding: 4px 6px; background: var(--comu-input-bg); border: 1px solid var(--comu-border); color: var(--comu-fg); border-radius: 4px;" /></div>`;
+            agentHtml += `<div style="margin-top: 6px; font-size: 12px;"><strong>Proposed Message:</strong> <input type="text" id="git-commit-msg-input" value="${escapeHtml(state.gitCommitProposal.message)}" style="width: 100%; margin-top: 4px; padding: 4px 6px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--fg-color); border-radius: 4px;" /></div>`;
             agentHtml += `<div style="margin-top: 6px; font-size: 11px; opacity: 0.8;">Files to stage (${state.gitCommitProposal.files.length}): ${state.gitCommitProposal.files.map(f => escapeHtml(f)).join(', ')}</div>`;
             agentHtml += `<div style="margin-top: 10px; display: flex; gap: 8px;">
                 <button id="btn-approve-commit" class="primary" style="padding: 4px 12px; font-size: 11px;">Approve Commit</button>
@@ -526,10 +749,8 @@
 
     function appendError(msg) {
         const errorDiv = document.createElement('div');
-        errorDiv.style.color = 'var(--comu-error)';
-        errorDiv.style.padding = '10px';
-        errorDiv.style.fontSize = '12px';
-        errorDiv.innerText = msg;
+        errorDiv.className = 'comu-error-banner';
+        errorDiv.innerHTML = `⚠️ <span>${escapeHtml(msg)}</span>`;
         chatContainer.appendChild(errorDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
@@ -543,8 +764,39 @@
              .replace(/'/g, "&#039;");
     }
 
-    // Request providers and signal ready
+    // Initial requests
     vscode.postMessage({ type: 'request_providers' });
     vscode.postMessage({ type: 'ready' });
+
+    // In Live Preview (outside VS Code Extension Host), populate preview data
+    if (isLivePreview) {
+        state.providers = [
+            {
+                providerId: 'nvidia',
+                displayName: 'NVIDIA',
+                description: 'NVIDIA Nemotron high-performance engineering models. Bring your own NVIDIA API key.',
+                defaultEndpoint: 'https://integrate.api.nvidia.com/v1',
+                selectedModel: 'Nemotron 3 Ultra',
+                hasCredential: false,
+                isLocal: false,
+                status: 'NOT_CONFIGURED',
+                models: [{ id: 'nvidia-nemotron-3-ultra', name: 'Nemotron 3 Ultra' }]
+            },
+            {
+                providerId: 'ollama',
+                displayName: 'Ollama (Local)',
+                description: 'Run open-weights models locally on your machine with zero external network access.',
+                defaultEndpoint: 'http://localhost:11434',
+                selectedModel: 'Llama 3 (Local)',
+                hasCredential: true,
+                isLocal: true,
+                status: 'CONNECTED',
+                models: [{ id: 'ollama-llama-3', name: 'Llama 3 (Local)' }]
+            }
+        ];
+        renderProviders();
+        renderModels();
+        updateOnboardingState();
+    }
 
 })();

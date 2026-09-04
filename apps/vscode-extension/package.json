@@ -17,6 +17,18 @@
       {
         "command": "comu.openChat",
         "title": "COMU: Open Chat"
+      },
+      {
+        "command": "comu.openProviderSettings",
+        "title": "COMU: Open Provider Settings"
+      },
+      {
+        "command": "comu.configureNvidia",
+        "title": "COMU: Configure NVIDIA Provider"
+      },
+      {
+        "command": "comu.testProviderConnection",
+        "title": "COMU: Test NVIDIA Connection"
       }
     ],
     "viewsContainers": {
@@ -65,6 +77,7 @@
   },
   "dependencies": {
     "@comu/protocol": "workspace:*",
+    "@comu/provider-nvidia": "workspace:*",
     "eventsource-parser": "^4.1.0"
   },
   "devDependencies": {

@@ -397,6 +397,20 @@ export class AgentOrchestrator {
             });
 
             if (repairDecision.eligible) {
+              const attemptNumber = this.repairEngine.getAttempts(ctx.taskId).length + 1;
+              this.repairEngine.recordAttempt({
+                attemptId: `rep-${Date.now()}-${attemptNumber}`,
+                taskId: ctx.taskId,
+                attemptNumber,
+                failureFingerprint: lastDiagnosis.failureFingerprint,
+                repairStrategyFingerprint: repairDecision.repairStrategyFingerprint || "unknown-strategy",
+                repairAttemptFingerprint: `attempt-${attemptNumber}`,
+                targetFiles: repairDecision.targetFiles,
+                changeSummary: `Repair attempt ${attemptNumber} for ${lastDiagnosis.failureType}`,
+                validationStatus: "FAILED",
+                createdAt: new Date().toISOString()
+              });
+
               this.changeState(ctx, "REPAIRING", `Repairing failure in ${repairDecision.targetFiles.join(", ")}`);
               
               // Dynamically mutate plan

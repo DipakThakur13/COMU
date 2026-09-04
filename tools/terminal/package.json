@@ -5,7 +5,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "mocha -r ts-node/register \"tests/**/*.test.ts\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@comu/protocol": "workspace:*",
