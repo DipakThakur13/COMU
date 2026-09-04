@@ -1,0 +1,23 @@
+{
+  "name": "@comu/git",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@comu/protocol": "workspace:*",
+    "@comu/tool-core": "workspace:*",
+    "@comu/terminal": "workspace:*",
+    "@comu/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/mocha": "^10.0.0",
+    "mocha": "^10.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
