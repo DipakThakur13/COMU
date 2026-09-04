@@ -25710,10 +25710,20 @@ var require_dist9 = __commonJS({
       }
       analyzeTask(prompt) {
         const lower = prompt.toLowerCase();
+        const isExplicitProjectModification = lower.includes("in file") || lower.includes("modify") || lower.includes("refactor") || lower.includes("fix bug") || lower.includes("add to") || lower.includes("create file") || lower.includes("update file") || lower.includes("in this project") || lower.includes("in repo") || lower.includes("in codebase") || lower.startsWith("rename") || lower.startsWith("replace") || lower.startsWith("delete");
+        const isQuestionOrChat = lower.startsWith("give") || lower.startsWith("show") || lower.startsWith("what") || lower.startsWith("how") || lower.startsWith("why") || lower.startsWith("explain") || lower.startsWith("tell") || lower.startsWith("describe") || lower.startsWith("can you") || lower.startsWith("could you") || lower.startsWith("write a sample") || lower.startsWith("write a code") || lower.startsWith("write sample") || lower.includes("sample code") || lower.includes("example code") || lower.includes("sample of") || lower.includes("example of");
+        if (isQuestionOrChat && !isExplicitProjectModification) {
+          return {
+            complexity: "SIMPLE",
+            intent: "EXPLORE",
+            summary: "Informational query and code demonstration",
+            recommendedSteps: ["INVESTIGATE"]
+          };
+        }
         const isComplexFeature = lower.includes("add") || lower.includes("implement") || lower.includes("refactor") || lower.includes("create");
         const isTestFix = lower.includes("fail") || lower.includes("test") || lower.includes("fix") || lower.includes("error") || lower.includes("bug");
         const isDoc = lower.includes("readme") || lower.includes("doc") || lower.includes("comment");
-        const isSimpleEdit = !isComplexFeature && !isTestFix && (lower.startsWith("rename") || lower.startsWith("replace") || lower.startsWith("delete") || prompt.length < 30);
+        const isSimpleEdit = !isComplexFeature && !isTestFix && (lower.startsWith("rename") || lower.startsWith("replace") || lower.startsWith("delete") || prompt.length < 30 && !isQuestionOrChat);
         if (isSimpleEdit) {
           return {
             complexity: "SIMPLE",
@@ -25753,7 +25763,19 @@ var require_dist9 = __commonJS({
         const now = (/* @__PURE__ */ new Date()).toISOString();
         const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         let steps = [];
-        if (analysis.complexity === "SIMPLE") {
+        if (analysis.intent === "EXPLORE") {
+          steps = [
+            {
+              id: "step-1-respond",
+              type: "INVESTIGATE",
+              title: "Generate response and code example",
+              description: "Analyze the prompt and provide the requested explanation, guidance, or sample code.",
+              dependencies: [],
+              status: "PENDING",
+              attempts: 0
+            }
+          ];
+        } else if (analysis.complexity === "SIMPLE") {
           steps = [
             {
               id: "step-1-locate",
@@ -25977,6 +25999,37 @@ var require_dist10 = __commonJS({
           return {
             rules,
             reason: "Documentation-only modification detected."
+          };
+        }
+        const isInformational = changedFiles.length === 0 && (promptLower.startsWith("give") || promptLower.startsWith("show") || promptLower.startsWith("what") || promptLower.startsWith("how") || promptLower.startsWith("why") || promptLower.startsWith("explain") || promptLower.startsWith("tell") || promptLower.startsWith("can you") || promptLower.startsWith("write a sample") || promptLower.startsWith("write sample") || promptLower.includes("sample code") || promptLower.includes("example code"));
+        if (isInformational) {
+          rules.push({
+            name: "Typecheck",
+            validatorId: "run_typecheck",
+            required: false,
+            skipReason: "Informational query; workspace typecheck not required."
+          });
+          rules.push({
+            name: "Test Suite",
+            validatorId: "run_tests",
+            required: false,
+            skipReason: "Informational query; workspace test suite not required."
+          });
+          rules.push({
+            name: "Build",
+            validatorId: "run_build",
+            required: false,
+            skipReason: "Informational query; build not required."
+          });
+          rules.push({
+            name: "Linter",
+            validatorId: "run_linter",
+            required: false,
+            skipReason: "Optional code quality check."
+          });
+          return {
+            rules,
+            reason: "Informational query detected."
           };
         }
         const hasTypeScript = changedFiles.some((f) => (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.includes(".test.") && !f.includes(".spec."));
@@ -26664,7 +26717,8 @@ var require_dist13 = __commonJS({
     __export2(index_exports, {
       AgentOrchestrator: () => AgentOrchestrator2,
       InteractionManager: () => InteractionManager2,
-      SubagentManager: () => SubagentManager2
+      SubagentManager: () => SubagentManager2,
+      formatStepSummary: () => formatStepSummary
     });
     module2.exports = __toCommonJS2(index_exports);
     var import_planning_engine2 = require_dist9();
@@ -26930,6 +26984,20 @@ var require_dist13 = __commonJS({
         return list;
       }
     };
+    function formatStepSummary(text, maxLen = 140) {
+      if (!text) return void 0;
+      let cleaned = text.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
+      cleaned = cleaned.replace(/\s+/g, " ");
+      if (cleaned.length <= maxLen) {
+        return cleaned;
+      }
+      const truncated = cleaned.slice(0, maxLen);
+      const lastSpace = truncated.lastIndexOf(" ");
+      if (lastSpace > maxLen * 0.7) {
+        return `${truncated.slice(0, lastSpace)}...`;
+      }
+      return `${truncated}...`;
+    }
     var AgentOrchestrator2 = class {
       constructor(model, registry2, executor2, diffEngine2, options) {
         this.model = model;
@@ -27382,7 +27450,8 @@ Please implement targeted fixes to resolve this failure.`
           });
           if (!response.toolCalls || response.toolCalls.length === 0) {
             if (currentStep) {
-              planManager.completeStep(currentStep.id, response.text?.slice(0, 100));
+              const summary = formatStepSummary(response.text);
+              planManager.completeStep(currentStep.id, summary);
               ctx.onEvent({
                 type: "plan.step.completed",
                 eventId: `evt-${Date.now()}`,
@@ -27391,7 +27460,7 @@ Please implement targeted fixes to resolve this failure.`
                 planId: planManager.getPlan().planId,
                 planVersion: planManager.getPlan().version,
                 stepId: currentStep.id,
-                resultSummary: response.text?.slice(0, 100)
+                resultSummary: summary
               });
             }
             const remainingSteps = planManager.getPlan().steps.filter(
@@ -27744,16 +27813,18 @@ Please implement targeted fixes to resolve this failure.`
             } catch {
             }
           }
+          const cleanFinalText = finalText ? finalText.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim() : void 0;
           this.changeState(ctx, "COMPLETED", "Task verified and completed successfully");
           ctx.onEvent({
             type: "task.completed",
             eventId: `evt-${Date.now()}`,
             taskId: ctx.taskId,
-            timestamp: (/* @__PURE__ */ new Date()).toISOString()
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            finalText: cleanFinalText
           });
           return {
             status: "completed",
-            finalText,
+            finalText: cleanFinalText,
             steps,
             changeSet,
             plan: planManager.getPlan(),
@@ -30835,12 +30906,10 @@ var require_dist16 = __commonJS({
               };
             });
           }
-          let responseText = message.content || "";
-          if (!responseText && message.reasoning_content) {
-            responseText = message.reasoning_content;
-          }
+          const extracted = _NvidiaProvider.extractThinking(message.content || "", message.reasoning_content);
           return {
-            text: responseText,
+            text: extracted.text,
+            thinking: extracted.thinking,
             toolCalls,
             usage: {
               promptTokens: data.usage?.prompt_tokens ?? 0,
@@ -30852,6 +30921,34 @@ var require_dist16 = __commonJS({
           if (error instanceof import_shared.ProviderError) throw error;
           throw new import_shared.ProviderError(`Failed to call NVIDIA API: ${error.message}`);
         }
+      }
+      static extractThinking(content, reasoningContent) {
+        let rawContent = content || "";
+        let thinking = reasoningContent ? String(reasoningContent).trim() : void 0;
+        const thinkTagRegex = /<(think|thought)>([\s\S]*?)<\/\1>/gi;
+        const unclosedThinkRegex = /<(think|thought)>([\s\S]*)$/i;
+        const extractedThoughts = [];
+        let match;
+        while ((match = thinkTagRegex.exec(rawContent)) !== null) {
+          if (match[2] && match[2].trim()) {
+            extractedThoughts.push(match[2].trim());
+          }
+        }
+        let cleanedContent = rawContent.replace(thinkTagRegex, "").trim();
+        const unclosedMatch = unclosedThinkRegex.exec(cleanedContent);
+        if (unclosedMatch) {
+          if (unclosedMatch[2] && unclosedMatch[2].trim()) {
+            extractedThoughts.push(unclosedMatch[2].trim());
+          }
+          cleanedContent = cleanedContent.replace(unclosedThinkRegex, "").trim();
+        }
+        if (extractedThoughts.length > 0) {
+          const joinedThoughts = extractedThoughts.join("\n\n");
+          thinking = thinking ? `${thinking}
+
+${joinedThoughts}` : joinedThoughts;
+        }
+        return { text: cleanedContent, thinking };
       }
     };
   }

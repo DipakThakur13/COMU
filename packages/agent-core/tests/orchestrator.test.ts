@@ -177,4 +177,34 @@ describe("Agent Orchestrator M6", () => {
     expect(choice).toBe("JWT");
     expect(events.find(e => e.type === "interaction.responded")).toBeDefined();
   });
+
+  it("should complete an informational query with clean finalText and 1-step plan", async () => {
+    const model = new MockModel();
+    model.responses = [{ text: "<think>Thinking about C++</think>Here is C++ sample code:\n```cpp\nint main() { return 0; }\n```" }];
+
+    const registry = new ToolRegistry();
+    const executor = new ToolExecutor(registry);
+    const diffEngine = new ComuDiffEngine();
+
+    const orchestrator = new AgentOrchestrator(model, registry, executor, diffEngine);
+
+    const events: any[] = [];
+    const ctx: OrchestratorContext = {
+      taskId: "t-cpp",
+      workspaceRoot: "/fake",
+      systemPrompt: "sys",
+      userPrompt: "give a sample code of C++",
+      limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
+      onEvent: e => events.push(e)
+    };
+
+    const res = await orchestrator.run(ctx);
+    expect(res.status).toBe("completed");
+    expect(res.plan?.steps).toHaveLength(1);
+    expect(res.finalText).toBe("Here is C++ sample code:\n```cpp\nint main() { return 0; }\n```");
+
+    const completedEvt = events.find(e => e.type === "task.completed");
+    expect(completedEvt).toBeDefined();
+    expect(completedEvt.finalText).toBe("Here is C++ sample code:\n```cpp\nint main() { return 0; }\n```");
+  });
 });

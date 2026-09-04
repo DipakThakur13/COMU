@@ -68,6 +68,10 @@ export class TaskSessionStore {
       }
     } else if (event.type === 'task.completed') {
       this.state.status = 'completed';
+      const te = event as any;
+      if (te.finalText) {
+        this.state.finalResponse = te.finalText;
+      }
     } else if (event.type === 'task.failed') {
       this.state.status = 'failed';
     } else if (event.type === 'task.cancelled') {

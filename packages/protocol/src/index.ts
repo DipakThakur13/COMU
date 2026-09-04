@@ -57,6 +57,7 @@ export interface ChangeCreatedEvent extends AgentEventBase {
 
 export interface TaskCompletedEvent extends AgentEventBase {
   type: "task.completed";
+  finalText?: string;
 }
 
 export interface TaskFailedEvent extends AgentEventBase {

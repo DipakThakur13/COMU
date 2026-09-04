@@ -29,6 +29,11 @@
         subagents: []
     };
 
+    const panelCollapseState = {
+        plan: false,
+        verification: false
+    };
+
     // DOM Elements - Main View
     const mainView = document.getElementById('main-view');
     const chatContainer = document.getElementById('chat-container');
@@ -551,9 +556,16 @@
 
         // 2. Plan Timeline
         if (state.plan && state.plan.steps && state.plan.steps.length > 0) {
-            agentHtml += `<div class="plan-panel">`;
-            agentHtml += `<div class="panel-header"><span>IMPLEMENTATION PLAN · v${state.plan.version}</span> <span class="status-badge badge-${state.plan.status.toLowerCase()}">${state.plan.status}</span></div>`;
-            agentHtml += `<div class="plan-steps">`;
+            const isPlanCollapsed = !!panelCollapseState.plan;
+            agentHtml += `<div class="plan-panel ${isPlanCollapsed ? 'panel-collapsed' : ''}" id="plan-panel">`;
+            agentHtml += `<div class="panel-header clickable-header" data-panel="plan">
+                <div class="panel-header-title">
+                    <span class="panel-toggle-chevron">${isPlanCollapsed ? '▸' : '▾'}</span>
+                    <span>IMPLEMENTATION PLAN · v${state.plan.version}</span>
+                </div>
+                <span class="status-badge badge-${state.plan.status.toLowerCase()}">${state.plan.status}</span>
+            </div>`;
+            agentHtml += `<div class="plan-steps" style="${isPlanCollapsed ? 'display: none;' : ''}">`;
             state.plan.steps.forEach((s, idx) => {
                 let icon = '○';
                 let iconClass = 'step-pending';
@@ -568,7 +580,16 @@
                 agentHtml += `<div class="step-info">`;
                 agentHtml += `<div class="step-title">${idx + 1}. ${escapeHtml(s.title)}</div>`;
                 if (s.resultSummary) {
-                    agentHtml += `<div class="step-summary">${escapeHtml(s.resultSummary)}</div>`;
+                    const parsedSummary = extractThinking(s.resultSummary);
+                    const cleanSummary = parsedSummary.content || parsedSummary.thinking || s.resultSummary;
+                    const isLongSummary = cleanSummary.length > 90;
+                    const sumId = `step-sum-${idx}`;
+                    agentHtml += `<div class="step-summary-container">`;
+                    agentHtml += `<div class="step-summary ${isLongSummary ? 'step-summary-clamped' : ''}" id="${sumId}">${renderRichText(cleanSummary)}</div>`;
+                    if (isLongSummary) {
+                        agentHtml += `<button class="step-expand-btn" data-target="${sumId}">Show more ▾</button>`;
+                    }
+                    agentHtml += `</div>`;
                 }
                 agentHtml += `</div></div>`;
             });
@@ -578,9 +599,16 @@
         // 3. Verification Matrix
         if (state.verification) {
             const v = state.verification;
-            agentHtml += `<div class="verification-panel">`;
-            agentHtml += `<div class="panel-header"><span>VERIFICATION · ${v.status}</span> <span class="status-badge badge-${v.status.toLowerCase()}">${v.status}</span></div>`;
-            agentHtml += `<div class="verification-checks">`;
+            const isVerifCollapsed = !!panelCollapseState.verification;
+            agentHtml += `<div class="verification-panel ${isVerifCollapsed ? 'panel-collapsed' : ''}" id="verification-panel">`;
+            agentHtml += `<div class="panel-header clickable-header" data-panel="verification">
+                <div class="panel-header-title">
+                    <span class="panel-toggle-chevron">${isVerifCollapsed ? '▸' : '▾'}</span>
+                    <span>VERIFICATION · ${v.status}</span>
+                </div>
+                <span class="status-badge badge-${v.status.toLowerCase()}">${v.status}</span>
+            </div>`;
+            agentHtml += `<div class="verification-checks" style="${isVerifCollapsed ? 'display: none;' : ''}">`;
             v.checks.forEach(c => {
                 let cIcon = '✓';
                 let cClass = 'check-passed';
@@ -666,9 +694,33 @@
             agentHtml += `</div>`;
         }
 
-        // 6. Final Response
+        // 6. Final Response & Thinking Block
         if (state.finalResponse) {
-            agentHtml += `<div style="margin-top: var(--space-4); font-size: var(--text-base); line-height: 1.6;">${escapeHtml(state.finalResponse)}</div>`;
+            const parsed = extractThinking(state.finalResponse);
+            if (parsed.thinking) {
+                agentHtml += `
+                <div class="thinking-block">
+                    <div class="thinking-header" data-target="final-thinking-content">
+                        <div class="thinking-title">
+                            <span class="thinking-icon">💭</span>
+                            <span>Thinking Process</span>
+                        </div>
+                        <span class="thinking-toggle-icon">▸</span>
+                    </div>
+                    <div class="thinking-content collapsed" id="final-thinking-content">
+                        <pre class="thinking-pre">${escapeHtml(parsed.thinking)}</pre>
+                    </div>
+                </div>`;
+            }
+            if (parsed.content) {
+                const isLong = parsed.content.length > 380;
+                agentHtml += `<div class="final-response-container">`;
+                agentHtml += `<div class="final-response-body ${isLong ? 'response-clamped' : ''}" id="final-response-body">${renderRichText(parsed.content)}</div>`;
+                if (isLong) {
+                    agentHtml += `<button class="response-expand-btn" data-target="final-response-body">Show full response ▾</button>`;
+                }
+                agentHtml += `</div>`;
+            }
         }
 
         // 7. Changes Panel
@@ -689,6 +741,94 @@
         agentMsg.innerHTML = agentHtml;
 
         chatContainer.appendChild(agentMsg);
+
+        // Panel collapse/expand toggles
+        chatContainer.querySelectorAll('.clickable-header').forEach(hdr => {
+            hdr.addEventListener('click', () => {
+                const panel = hdr.getAttribute('data-panel');
+                if (panel && panelCollapseState.hasOwnProperty(panel)) {
+                    panelCollapseState[panel] = !panelCollapseState[panel];
+                    renderState();
+                }
+            });
+        });
+
+        // Step summary expand/collapse toggles
+        chatContainer.querySelectorAll('.step-expand-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const targetId = btn.getAttribute('data-target');
+                const targetEl = targetId ? document.getElementById(targetId) : null;
+                if (targetEl) {
+                    targetEl.classList.toggle('step-summary-clamped');
+                    const isClamped = targetEl.classList.contains('step-summary-clamped');
+                    btn.textContent = isClamped ? 'Show more ▾' : 'Show less ▴';
+                }
+            });
+        });
+
+        // Final response expand/collapse toggle
+        chatContainer.querySelectorAll('.response-expand-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const targetId = btn.getAttribute('data-target');
+                const targetEl = targetId ? document.getElementById(targetId) : null;
+                if (targetEl) {
+                    targetEl.classList.toggle('response-clamped');
+                    const isClamped = targetEl.classList.contains('response-clamped');
+                    btn.textContent = isClamped ? 'Show full response ▾' : 'Show less ▴';
+                }
+            });
+        });
+
+        // Thinking process expand/collapse toggles
+        chatContainer.querySelectorAll('.thinking-header').forEach(hdr => {
+            hdr.addEventListener('click', () => {
+                const targetId = hdr.getAttribute('data-target');
+                const targetEl = targetId ? document.getElementById(targetId) : null;
+                const iconEl = hdr.querySelector('.thinking-toggle-icon');
+                if (targetEl) {
+                    targetEl.classList.toggle('collapsed');
+                    const isCollapsed = targetEl.classList.contains('collapsed');
+                    if (iconEl) iconEl.textContent = isCollapsed ? '▸' : '▾';
+                }
+            });
+        });
+
+        // Code block copy buttons
+        chatContainer.querySelectorAll('.rich-code-copy').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const code = btn.getAttribute('data-clipboard') || '';
+                try {
+                    const unescaped = code
+                        .replace(/&amp;/g, '&')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&#039;/g, "'");
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(unescaped);
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = unescaped;
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta);
+                    }
+                    const origText = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.textContent = origText;
+                        btn.classList.remove('copied');
+                    }, 2000);
+                } catch (err) {
+                    console.error('Copy failed', err);
+                }
+            });
+        });
 
         // Attach listeners to diff buttons
         const changeItems = chatContainer.querySelectorAll('.change-item');
@@ -774,6 +914,72 @@
              .replace(/>/g, "&gt;")
              .replace(/"/g, "&quot;")
              .replace(/'/g, "&#039;");
+    }
+
+    function extractThinking(text) {
+        if (!text) return { thinking: null, content: '' };
+        const thinkRegex = /<(think|thought)>([\s\S]*?)<\/\1>/gi;
+        const unclosedRegex = /<(think|thought)>([\s\S]*)$/i;
+        const thoughts = [];
+        let m;
+        while ((m = thinkRegex.exec(text)) !== null) {
+            if (m[2] && m[2].trim()) thoughts.push(m[2].trim());
+        }
+        let cleaned = text.replace(thinkRegex, '').trim();
+        const unclosed = unclosedRegex.exec(cleaned);
+        if (unclosed) {
+            if (unclosed[2] && unclosed[2].trim()) thoughts.push(unclosed[2].trim());
+            cleaned = cleaned.replace(unclosedRegex, '').trim();
+        }
+        return {
+            thinking: thoughts.length > 0 ? thoughts.join('\n\n') : null,
+            content: cleaned
+        };
+    }
+
+    function renderRichText(text) {
+        if (!text) return '';
+        // 1. First escape all raw HTML to prevent injection
+        let safe = escapeHtml(text);
+
+        // 2. Fenced code blocks ```lang\ncode\n```
+        safe = safe.replace(/```([a-zA-Z0-9_\-\+]*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+            const langLabel = lang ? lang.toUpperCase() : 'CODE';
+            const encodedCode = code.replace(/"/g, '&quot;');
+            return `<div class="rich-code-block">
+                <div class="rich-code-header">
+                    <span class="rich-code-lang">${langLabel}</span>
+                    <button class="rich-code-copy" data-clipboard="${encodedCode}">Copy</button>
+                </div>
+                <pre><code>${code.trim()}</code></pre>
+            </div>`;
+        });
+
+        // 3. Inline code `code`
+        safe = safe.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
+
+        // 4. Bold **text**
+        safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+        // 5. Italic *text*
+        safe = safe.replace(/(^|[^*])\*([^*]+)\*([^*]|$)/g, '$1<em>$2</em>$3');
+
+        // 6. Headers
+        safe = safe.replace(/^### (.*$)/gim, '<h4 class="rich-h4">$1</h4>');
+        safe = safe.replace(/^## (.*$)/gim, '<h3 class="rich-h3">$1</h3>');
+        safe = safe.replace(/^# (.*$)/gim, '<h2 class="rich-h2">$1</h2>');
+
+        // 7. Bullet lists
+        safe = safe.replace(/^\s*[-*]\s+(.*)$/gim, '<div class="rich-bullet"><span class="bullet-dot">•</span> <span>$1</span></div>');
+
+        // 8. Line breaks outside of pre blocks
+        const parts = safe.split(/(<pre>[\s\S]*?<\/pre>)/gi);
+        safe = parts.map((part, i) => {
+            if (i % 2 === 1) return part;
+            return part.replace(/\n/g, '<br/>');
+        }).join('');
+
+        return safe;
     }
 
     // Initial requests

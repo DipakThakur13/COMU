@@ -37,6 +37,7 @@ export interface ModelRequest {
 
 export interface ModelResponse {
   text: string;
+  thinking?: string;
   toolCalls?: ToolCall[];
   usage?: {
     promptTokens: number;

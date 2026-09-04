@@ -75,4 +75,15 @@ describe("Verification Engine", () => {
     const result = ResultAggregator.aggregate("task-4", checks, 80);
     expect(result.status).toBe("PARTIAL");
   });
+
+  it("should skip typecheck and tests when no workspace files were modified for informational queries", () => {
+    const plan = policy.determinePlan([], "give a sample code of C++");
+    const typecheckRule = plan.rules.find(r => r.validatorId === "run_typecheck");
+    const testRule = plan.rules.find(r => r.validatorId === "run_tests");
+
+    expect(typecheckRule?.required).toBe(false);
+    expect(typecheckRule?.skipReason).toContain("Informational query");
+    expect(testRule?.required).toBe(false);
+    expect(testRule?.skipReason).toContain("Informational query");
+  });
 });

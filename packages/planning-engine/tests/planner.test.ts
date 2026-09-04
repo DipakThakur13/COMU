@@ -135,4 +135,14 @@ describe("Planning Engine", () => {
     expect(mutatedPlan.steps.some(s => s.id.includes("step-repair-v"))).toBe(true);
     expect(validator.validate(mutatedPlan).valid).toBe(true);
   });
+
+  it("should generate a single exploration step for informational or code sample queries", async () => {
+    const plan = await planner.createPlan("task-5", "give a sample code of C++");
+    expect(plan.steps).toHaveLength(1);
+    expect(plan.steps[0].type).toBe("INVESTIGATE");
+    expect(plan.steps[0].title).toBe("Generate response and code example");
+
+    const valResult = validator.validate(plan);
+    expect(valResult.valid).toBe(true);
+  });
 });

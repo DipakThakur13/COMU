@@ -15,12 +15,56 @@ export class TaskPlanner {
   public analyzeTask(prompt: string): TaskAnalysis {
     const lower = prompt.toLowerCase();
 
+    // Check for informational / Q&A / code sample / explanation queries
+    const isExplicitProjectModification =
+      lower.includes("in file") ||
+      lower.includes("modify") ||
+      lower.includes("refactor") ||
+      lower.includes("fix bug") ||
+      lower.includes("add to") ||
+      lower.includes("create file") ||
+      lower.includes("update file") ||
+      lower.includes("in this project") ||
+      lower.includes("in repo") ||
+      lower.includes("in codebase") ||
+      lower.startsWith("rename") ||
+      lower.startsWith("replace") ||
+      lower.startsWith("delete");
+
+    const isQuestionOrChat =
+      lower.startsWith("give") ||
+      lower.startsWith("show") ||
+      lower.startsWith("what") ||
+      lower.startsWith("how") ||
+      lower.startsWith("why") ||
+      lower.startsWith("explain") ||
+      lower.startsWith("tell") ||
+      lower.startsWith("describe") ||
+      lower.startsWith("can you") ||
+      lower.startsWith("could you") ||
+      lower.startsWith("write a sample") ||
+      lower.startsWith("write a code") ||
+      lower.startsWith("write sample") ||
+      lower.includes("sample code") ||
+      lower.includes("example code") ||
+      lower.includes("sample of") ||
+      lower.includes("example of");
+
+    if (isQuestionOrChat && !isExplicitProjectModification) {
+      return {
+        complexity: "SIMPLE",
+        intent: "EXPLORE",
+        summary: "Informational query and code demonstration",
+        recommendedSteps: ["INVESTIGATE"]
+      };
+    }
+
     // Check for feature / complex engineering
     const isComplexFeature = lower.includes("add") || lower.includes("implement") || lower.includes("refactor") || lower.includes("create");
     // Check for bug fixing / test fixing
     const isTestFix = lower.includes("fail") || lower.includes("test") || lower.includes("fix") || lower.includes("error") || lower.includes("bug");
     const isDoc = lower.includes("readme") || lower.includes("doc") || lower.includes("comment");
-    const isSimpleEdit = !isComplexFeature && !isTestFix && (lower.startsWith("rename") || lower.startsWith("replace") || lower.startsWith("delete") || prompt.length < 30);
+    const isSimpleEdit = !isComplexFeature && !isTestFix && (lower.startsWith("rename") || lower.startsWith("replace") || lower.startsWith("delete") || (prompt.length < 30 && !isQuestionOrChat));
 
     if (isSimpleEdit) {
       return {
@@ -67,7 +111,19 @@ export class TaskPlanner {
     const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     let steps: PlanStep[] = [];
 
-    if (analysis.complexity === "SIMPLE") {
+    if (analysis.intent === "EXPLORE") {
+      steps = [
+        {
+          id: "step-1-respond",
+          type: "INVESTIGATE",
+          title: "Generate response and code example",
+          description: "Analyze the prompt and provide the requested explanation, guidance, or sample code.",
+          dependencies: [],
+          status: "PENDING",
+          attempts: 0
+        }
+      ];
+    } else if (analysis.complexity === "SIMPLE") {
       steps = [
         {
           id: "step-1-locate",

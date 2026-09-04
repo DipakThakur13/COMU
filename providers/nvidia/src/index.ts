@@ -267,13 +267,11 @@ export class NvidiaProvider implements ModelProvider {
         });
       }
 
-      let responseText = message.content || "";
-      if (!responseText && message.reasoning_content) {
-        responseText = message.reasoning_content;
-      }
+      const extracted = NvidiaProvider.extractThinking(message.content || "", message.reasoning_content);
 
       return {
-        text: responseText,
+        text: extracted.text,
+        thinking: extracted.thinking,
         toolCalls,
         usage: {
           promptTokens: data.usage?.prompt_tokens ?? 0,
@@ -285,5 +283,37 @@ export class NvidiaProvider implements ModelProvider {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError(`Failed to call NVIDIA API: ${error.message}`);
     }
+  }
+
+  public static extractThinking(content: string, reasoningContent?: string): { text: string; thinking?: string } {
+    let rawContent = content || "";
+    let thinking: string | undefined = reasoningContent ? String(reasoningContent).trim() : undefined;
+
+    const thinkTagRegex = /<(think|thought)>([\s\S]*?)<\/\1>/gi;
+    const unclosedThinkRegex = /<(think|thought)>([\s\S]*)$/i;
+
+    const extractedThoughts: string[] = [];
+    let match;
+    while ((match = thinkTagRegex.exec(rawContent)) !== null) {
+      if (match[2] && match[2].trim()) {
+        extractedThoughts.push(match[2].trim());
+      }
+    }
+
+    let cleanedContent = rawContent.replace(thinkTagRegex, "").trim();
+    const unclosedMatch = unclosedThinkRegex.exec(cleanedContent);
+    if (unclosedMatch) {
+      if (unclosedMatch[2] && unclosedMatch[2].trim()) {
+        extractedThoughts.push(unclosedMatch[2].trim());
+      }
+      cleanedContent = cleanedContent.replace(unclosedThinkRegex, "").trim();
+    }
+
+    if (extractedThoughts.length > 0) {
+      const joinedThoughts = extractedThoughts.join("\n\n");
+      thinking = thinking ? `${thinking}\n\n${joinedThoughts}` : joinedThoughts;
+    }
+
+    return { text: cleanedContent, thinking };
   }
 }

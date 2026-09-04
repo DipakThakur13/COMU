@@ -36,6 +36,53 @@ export class VerificationPolicy {
       };
     }
 
+    // 1b. Check if purely informational / Q&A query with no workspace modifications
+    const isInformational =
+      changedFiles.length === 0 &&
+      (promptLower.startsWith("give") ||
+        promptLower.startsWith("show") ||
+        promptLower.startsWith("what") ||
+        promptLower.startsWith("how") ||
+        promptLower.startsWith("why") ||
+        promptLower.startsWith("explain") ||
+        promptLower.startsWith("tell") ||
+        promptLower.startsWith("can you") ||
+        promptLower.startsWith("write a sample") ||
+        promptLower.startsWith("write sample") ||
+        promptLower.includes("sample code") ||
+        promptLower.includes("example code"));
+
+    if (isInformational) {
+      rules.push({
+        name: "Typecheck",
+        validatorId: "run_typecheck",
+        required: false,
+        skipReason: "Informational query; workspace typecheck not required."
+      });
+      rules.push({
+        name: "Test Suite",
+        validatorId: "run_tests",
+        required: false,
+        skipReason: "Informational query; workspace test suite not required."
+      });
+      rules.push({
+        name: "Build",
+        validatorId: "run_build",
+        required: false,
+        skipReason: "Informational query; build not required."
+      });
+      rules.push({
+        name: "Linter",
+        validatorId: "run_linter",
+        required: false,
+        skipReason: "Optional code quality check."
+      });
+      return {
+        rules,
+        reason: "Informational query detected."
+      };
+    }
+
     // 2. Check for TypeScript code files
     const hasTypeScript =
       changedFiles.some(f => (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.includes(".test.") && !f.includes(".spec."));

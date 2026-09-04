@@ -19,6 +19,24 @@ import {
   VerificationCheck
 } from "@comu/protocol";
 
+export function formatStepSummary(text?: string, maxLen = 140): string | undefined {
+  if (!text) return undefined;
+  // Strip any inline <think>...</think> or <thought>...</thought>
+  let cleaned = text.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
+  // Collapse whitespace/newlines to single spaces
+  cleaned = cleaned.replace(/\s+/g, " ");
+  if (cleaned.length <= maxLen) {
+    return cleaned;
+  }
+  // Truncate cleanly at word boundary
+  const truncated = cleaned.slice(0, maxLen);
+  const lastSpace = truncated.lastIndexOf(" ");
+  if (lastSpace > maxLen * 0.7) {
+    return `${truncated.slice(0, lastSpace)}...`;
+  }
+  return `${truncated}...`;
+}
+
 export class AgentOrchestrator {
   private state: AgentState = "IDLE";
   private planner: TaskPlanner;
@@ -546,7 +564,8 @@ export class AgentOrchestrator {
       // If no tool calls, check completion gate
       if (!response.toolCalls || response.toolCalls.length === 0) {
         if (currentStep) {
-          planManager.completeStep(currentStep.id, response.text?.slice(0, 100));
+          const summary = formatStepSummary(response.text);
+          planManager.completeStep(currentStep.id, summary);
           ctx.onEvent({
             type: "plan.step.completed",
             eventId: `evt-${Date.now()}`,
@@ -555,7 +574,7 @@ export class AgentOrchestrator {
             planId: planManager.getPlan().planId,
             planVersion: planManager.getPlan().version,
             stepId: currentStep.id,
-            resultSummary: response.text?.slice(0, 100)
+            resultSummary: summary
           });
         }
 
@@ -968,16 +987,19 @@ export class AgentOrchestrator {
         }
       }
 
+      const cleanFinalText = finalText ? finalText.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim() : undefined;
+
       this.changeState(ctx, "COMPLETED", "Task verified and completed successfully");
       ctx.onEvent({
         type: "task.completed",
         eventId: `evt-${Date.now()}`,
         taskId: ctx.taskId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        finalText: cleanFinalText
       });
       return {
         status: "completed",
-        finalText,
+        finalText: cleanFinalText,
         steps,
         changeSet,
         plan: planManager.getPlan(),

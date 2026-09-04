@@ -119,5 +119,20 @@ describe("NvidiaProvider BYOK & Connection Testing", () => {
     expect(res.model).toBe("Nemotron 4 340B");
     expect(fakeFetch).toHaveBeenCalledTimes(2);
   });
+
+  it("extracts inline <think> tags cleanly into thinking trace and sanitizes text", () => {
+    const raw = "<think>Analyzing user request for C++ code...</think>Here is the C++ sample code:\n```cpp\n#include <iostream>\n```";
+    const result = NvidiaProvider.extractThinking(raw);
+    expect(result.thinking).toBe("Analyzing user request for C++ code...");
+    expect(result.text).toBe("Here is the C++ sample code:\n```cpp\n#include <iostream>\n```");
+  });
+
+  it("extracts reasoning_content and combines with inline tags when present", () => {
+    const raw = "<thought>Refining code snippet.</thought>Final output";
+    const result = NvidiaProvider.extractThinking(raw, "Initial reasoning chain.");
+    expect(result.thinking).toContain("Initial reasoning chain.");
+    expect(result.thinking).toContain("Refining code snippet.");
+    expect(result.text).toBe("Final output");
+  });
 });
 
