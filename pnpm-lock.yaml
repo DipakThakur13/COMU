@@ -235,6 +235,9 @@ importers:
 
   packages/model-core:
     dependencies:
+      '@comu/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@comu/shared':
         specifier: workspace:*
         version: link:../shared

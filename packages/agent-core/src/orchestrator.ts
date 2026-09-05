@@ -1,6 +1,7 @@
 import { AgentState, OrchestratorContext, AgentResult } from "./interfaces.js";
 import { TaskContract } from "./interaction/task_contract.js";
-import { ModelProvider, ModelMessage, ToolDefinition } from "@comu/model-core";
+import { ModelProvider, ModelMessage, ToolDefinition, ModelRequestManager, RequestManagerConfig } from "@comu/model-core";
+import { ProviderCancelledError } from "@comu/shared";
 import { ToolExecutor, ToolRegistry, ToolContext } from "@comu/tool-core";
 import { DiffEngine, ChangeSet } from "@comu/diff-engine";
 import { TaskPlanner, PlanStateManager } from "@comu/planning-engine";
@@ -46,6 +47,7 @@ export class AgentOrchestrator {
   private interactionManager?: InteractionManager;
   private memoryEngine?: MemoryEngine;
   private subagentManager: SubagentManager;
+  private requestManager?: ModelRequestManager;
 
   constructor(
     private model: ModelProvider,
@@ -59,6 +61,7 @@ export class AgentOrchestrator {
       interactionManager?: InteractionManager;
       memoryEngine?: MemoryEngine;
       subagentManager?: SubagentManager;
+      requestManagerConfig?: RequestManagerConfig;
     }
   ) {
     this.planner = options?.planner || new TaskPlanner();
@@ -67,6 +70,7 @@ export class AgentOrchestrator {
     this.interactionManager = options?.interactionManager;
     this.memoryEngine = options?.memoryEngine;
     this.subagentManager = options?.subagentManager || new SubagentManager();
+    // requestManager is lazily initialized per-task in runWithContract
   }
 
   public getState(): AgentState {
@@ -80,16 +84,16 @@ export class AgentOrchestrator {
     // Transition map
     const validTransitions: Record<AgentState, AgentState[]> = {
       IDLE: ["STARTING"],
-      STARTING: ["CLASSIFYING", "CANCELLED", "FAILED"],
+      STARTING: ["CLASSIFYING", "ANALYZING", "CANCELLED", "FAILED"],
       CLASSIFYING: ["ANALYZING", "PLANNING", "THINKING", "WAITING_FOR_USER", "COMPLETED", "CANCELLED", "FAILED"],
       ANALYZING: ["PLANNING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       PLANNING: ["THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
-      THINKING: ["TOOL_CALLING", "OBSERVING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      THINKING: ["TOOL_CALLING", "OBSERVING", "VERIFYING", "THINKING", "WAITING_FOR_USER", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       TOOL_CALLING: ["OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       OBSERVING: ["VERIFYING", "THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
-      VERIFYING: ["DIAGNOSING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      VERIFYING: ["DIAGNOSING", "THINKING", "VERIFYING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       DIAGNOSING: ["REPAIRING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
-      REPAIRING: ["VERIFYING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
+      REPAIRING: ["VERIFYING", "THINKING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
       WAITING_FOR_USER: ["CLASSIFYING", "ANALYZING", "THINKING", "CANCELLED", "FAILED"],
       COMPLETED: [],
       FAILED: [],
@@ -579,19 +583,41 @@ export class AgentOrchestrator {
         }
       }
 
-      // Step execution via Model
+      // Step execution via Model (through ModelRequestManager reliability boundary)
       this.transition(ctx, "THINKING", "Thinking...");
       steps++;
 
+      // Initialize requestManager lazily per-task to bind onEvent
+      if (!this.requestManager) {
+        this.requestManager = new ModelRequestManager(this.model, ctx.onEvent);
+      }
+
       let response;
       try {
-        response = await this.model.generate({
-          prompt: ctx.userPrompt,
-          systemPrompt: ctx.systemPrompt,
-          messages,
-          tools
-        });
+        response = await this.requestManager.execute(
+          ctx.taskId,
+          ctx.taskId, // runId
+          {
+            prompt: ctx.userPrompt,
+            systemPrompt: ctx.systemPrompt,
+            messages,
+            tools
+          },
+          ctx.abortSignal
+        );
       } catch (err: any) {
+        // Provider cancellation -> task cancellation, not failure
+        if (err instanceof ProviderCancelledError || ctx.abortSignal?.aborted) {
+          this.transition(ctx, "CANCELLED", "Task was cancelled");
+          ctx.onEvent({
+            type: "task.cancelled",
+            eventId: `evt-${Date.now()}`,
+            taskId: ctx.taskId,
+            timestamp: new Date().toISOString()
+          });
+          return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
+        }
+        // Provider failure -> clean task failure (never DIAGNOSING/REPAIRING)
         this.transition(ctx, "FAILED", `Provider Error: ${err.message}`);
         ctx.onEvent({
           type: "task.failed",

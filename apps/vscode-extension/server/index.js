@@ -22995,7 +22995,17 @@ var require_dist = __commonJS({
       ModelError: () => ModelError,
       PermissionError: () => PermissionError,
       ProtocolError: () => ProtocolError,
+      ProviderAuthenticationError: () => ProviderAuthenticationError,
+      ProviderAuthorizationError: () => ProviderAuthorizationError,
+      ProviderCancelledError: () => ProviderCancelledError,
+      ProviderConnectionError: () => ProviderConnectionError,
       ProviderError: () => ProviderError,
+      ProviderInvalidRequestError: () => ProviderInvalidRequestError,
+      ProviderProtocolError: () => ProviderProtocolError,
+      ProviderRateLimitError: () => ProviderRateLimitError,
+      ProviderTimeoutError: () => ProviderTimeoutError,
+      ProviderUnavailableError: () => ProviderUnavailableError,
+      ProviderUnknownError: () => ProviderUnknownError,
       TaskCancelledError: () => TaskCancelledError,
       TimeoutError: () => TimeoutError,
       ToolError: () => ToolError,
@@ -23012,6 +23022,26 @@ var require_dist = __commonJS({
     var ModelError = class extends BaseError {
     };
     var ProviderError = class extends BaseError {
+    };
+    var ProviderConnectionError = class extends ProviderError {
+    };
+    var ProviderTimeoutError = class extends ProviderError {
+    };
+    var ProviderRateLimitError = class extends ProviderError {
+    };
+    var ProviderAuthenticationError = class extends ProviderError {
+    };
+    var ProviderAuthorizationError = class extends ProviderError {
+    };
+    var ProviderInvalidRequestError = class extends ProviderError {
+    };
+    var ProviderUnavailableError = class extends ProviderError {
+    };
+    var ProviderProtocolError = class extends ProviderError {
+    };
+    var ProviderCancelledError = class extends ProviderError {
+    };
+    var ProviderUnknownError = class extends ProviderError {
     };
     var ToolError = class extends BaseError {
     };
@@ -23051,6 +23081,7 @@ var require_dist2 = __commonJS({
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
     var index_exports = {};
     __export2(index_exports, {
+      CanonicalToolCallParser: () => CanonicalToolCallParser,
       ToolExecutor: () => ToolExecutor2,
       ToolRegistry: () => ToolRegistry2
     });
@@ -23076,13 +23107,108 @@ var require_dist2 = __commonJS({
       }
     };
     var import_shared2 = require_dist();
+    var CanonicalToolCallParser = class {
+      /**
+       * Parses and validates a potential tool call.
+       * If the input is just text or natural language describing a tool, it returns type "text".
+       * If the input is a structurally valid CanonicalToolCall, it returns type "tool_call".
+       * If the input is meant to be a tool call but is structurally deficient, it returns type "malformed_tool_call".
+       */
+      parse(input) {
+        if (typeof input === "string") {
+          return { type: "text", content: input };
+        }
+        if (!input || typeof input !== "object") {
+          return { type: "text", content: String(input) };
+        }
+        const hasName = "name" in input && typeof input.name === "string" && input.name.trim() !== "";
+        const hasId = "id" in input && typeof input.id === "string" && input.id.trim() !== "";
+        const hasArgs = "arguments" in input;
+        if (!hasName && !hasId && !hasArgs) {
+          return { type: "text", content: JSON.stringify(input) };
+        }
+        if (!hasName) {
+          return { type: "malformed_tool_call", error: "MISSING_NAME", raw: input };
+        }
+        if (!hasId) {
+          return { type: "malformed_tool_call", error: "MISSING_ID", raw: input };
+        }
+        if (!hasArgs) {
+          return { type: "malformed_tool_call", error: "MISSING_ARGUMENTS", raw: input };
+        }
+        if (typeof input.arguments !== "object" || input.arguments === null || Array.isArray(input.arguments)) {
+          return { type: "malformed_tool_call", error: "INVALID_ARGUMENTS_TYPE", raw: input };
+        }
+        return {
+          type: "tool_call",
+          call: {
+            id: input.id,
+            name: input.name,
+            arguments: input.arguments
+          }
+        };
+      }
+    };
     var ToolExecutor2 = class {
       constructor(registry2) {
         this.registry = registry2;
       }
       registry;
+      parser = new CanonicalToolCallParser();
+      /**
+       * Safe entrypoint for raw model tool calls.
+       * Parses, validates against contract & capabilities, and executes.
+       */
+      async processModelToolCall(rawInput, validateContract, context) {
+        const parseResult = this.parser.parse(rawInput);
+        if (parseResult.type === "text") {
+          return { type: "text", content: parseResult.content };
+        }
+        if (parseResult.type === "malformed_tool_call") {
+          return {
+            type: "error",
+            error: `MALFORMED_TOOL_CALL: ${parseResult.error}`,
+            raw: parseResult.raw
+          };
+        }
+        const toolCall = parseResult.call;
+        context.onTrace?.("TOOL_REQUEST", toolCall.id);
+        context.onTrace?.("VALIDATION_STARTED", toolCall.id);
+        let tool;
+        try {
+          tool = this.registry.get(toolCall.name);
+        } catch (e) {
+          return { type: "error", error: `UNKNOWN_TOOL: ${toolCall.name}` };
+        }
+        const contractValidation = validateContract(tool.name, tool.capabilities);
+        if (!contractValidation.valid) {
+          return { type: "error", error: `CONTRACT_REJECTED: ${contractValidation.reason}` };
+        }
+        if (context.permissions) {
+          for (const capability of tool.capabilities) {
+            const decision = context.permissions.capabilities[capability] || "DENY";
+            if (decision !== "ALLOW") {
+              return { type: "error", error: `PERMISSION_DENIED: requires '${capability}', but permission is ${decision}` };
+            }
+          }
+        }
+        context.onTrace?.("VALIDATION_COMPLETED", toolCall.id);
+        try {
+          context.onTrace?.("TOOL_STARTED", toolCall.id);
+          const result = await this.execute(toolCall.name, toolCall.arguments, context);
+          context.onTrace?.("TOOL_COMPLETED", toolCall.id);
+          return { type: "success", result };
+        } catch (e) {
+          context.onTrace?.("TOOL_FAILED", toolCall.id);
+          return { type: "error", error: `EXECUTION_FAILED: ${e.message}` };
+        }
+      }
+      /**
+       * Internal execution logic (bypasses model-specific parsing, assumes safe internal caller).
+       */
       async execute(toolName, args, context) {
         const tool = this.registry.get(toolName);
+        if (!tool) throw new Error(`Unknown tool: ${toolName}`);
         let timeoutId;
         let isTimedOut = false;
         const executePromise = new Promise(async (resolve2, reject) => {
@@ -25408,8 +25534,233 @@ ${decoded.trim()}
   }
 });
 
-// ../../packages/planning-engine/dist/index.js
+// ../../packages/model-core/dist/index.js
 var require_dist9 = __commonJS({
+  "../../packages/model-core/dist/index.js"(exports2, module2) {
+    "use strict";
+    var __defProp2 = Object.defineProperty;
+    var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+    var __getOwnPropNames2 = Object.getOwnPropertyNames;
+    var __hasOwnProp2 = Object.prototype.hasOwnProperty;
+    var __export2 = (target, all) => {
+      for (var name in all)
+        __defProp2(target, name, { get: all[name], enumerable: true });
+    };
+    var __copyProps2 = (to, from, except, desc) => {
+      if (from && typeof from === "object" || typeof from === "function") {
+        for (let key of __getOwnPropNames2(from))
+          if (!__hasOwnProp2.call(to, key) && key !== except)
+            __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+      }
+      return to;
+    };
+    var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    var index_exports = {};
+    __export2(index_exports, {
+      ModelRequestManager: () => ModelRequestManager
+    });
+    module2.exports = __toCommonJS2(index_exports);
+    var import_shared = require_dist();
+    var ModelRequestManager = class {
+      constructor(provider, onEvent, config) {
+        this.provider = provider;
+        this.onEvent = onEvent;
+        this.config = {
+          modelRequestTimeoutMs: config?.modelRequestTimeoutMs ?? 12e4,
+          maxAttempts: config?.maxAttempts ?? 3,
+          maxRetryTimeMs: config?.maxRetryTimeMs ?? 6e4,
+          retryBaseDelayMs: config?.retryBaseDelayMs ?? 500,
+          retryMaxDelayMs: config?.retryMaxDelayMs ?? 8e3
+        };
+      }
+      provider;
+      onEvent;
+      config;
+      isRetryable(error) {
+        if (error instanceof import_shared.ProviderAuthenticationError) return false;
+        if (error instanceof import_shared.ProviderAuthorizationError) return false;
+        if (error instanceof import_shared.ProviderInvalidRequestError) return false;
+        if (error instanceof import_shared.ProviderCancelledError) return false;
+        if (error?.name === "AbortError") return false;
+        return true;
+      }
+      async sleep(ms, signal) {
+        return new Promise((resolve2, reject) => {
+          if (signal?.aborted) {
+            return reject(new import_shared.ProviderCancelledError("Request cancelled during backoff"));
+          }
+          const timer = setTimeout(resolve2, ms);
+          if (signal) {
+            signal.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(new import_shared.ProviderCancelledError("Request cancelled during backoff"));
+            }, { once: true });
+          }
+        });
+      }
+      sanitizeError(error) {
+        const message = error?.message || String(error);
+        return message.replace(/Bearer\s+[A-Za-z0-9\-\._~+\/]+=*/g, "Bearer [REDACTED]").replace(/key=[A-Za-z0-9\-\._~+\/]+=*/gi, "key=[REDACTED]").replace(/token=[A-Za-z0-9\-\._~+\/]+=*/gi, "token=[REDACTED]");
+      }
+      async execute(taskId, runId, request, parentSignal) {
+        const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const startTime = Date.now();
+        let attempt = 1;
+        this.onEvent({
+          type: "model_request.created",
+          eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          taskId,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          requestId,
+          runId,
+          attempt
+        });
+        while (attempt <= this.config.maxAttempts) {
+          if (parentSignal?.aborted) {
+            const err = new import_shared.ProviderCancelledError("Request cancelled before start");
+            this.emitCancelled(taskId, runId, requestId, attempt);
+            throw err;
+          }
+          this.onEvent({
+            type: "model_request.started",
+            eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            taskId,
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            requestId,
+            runId,
+            attempt
+          });
+          const attemptStartTime = Date.now();
+          const controller = new AbortController();
+          let timer;
+          const onParentAbort = () => controller.abort();
+          if (parentSignal) {
+            parentSignal.addEventListener("abort", onParentAbort);
+          }
+          const context = {
+            requestId,
+            taskId,
+            runId,
+            timeoutMs: this.config.modelRequestTimeoutMs,
+            signal: controller.signal,
+            attempt,
+            maxAttempts: this.config.maxAttempts,
+            startedAt: attemptStartTime
+          };
+          try {
+            const timeoutPromise = new Promise((_, reject) => {
+              timer = setTimeout(() => {
+                controller.abort();
+                reject(new import_shared.ProviderTimeoutError(`Provider request timed out after ${this.config.modelRequestTimeoutMs}ms`));
+              }, this.config.modelRequestTimeoutMs);
+            });
+            const generatePromise = this.provider.generate(request, context);
+            const response = await Promise.race([generatePromise, timeoutPromise]);
+            const latencyMs = Date.now() - attemptStartTime;
+            this.onEvent({
+              type: "model_request.succeeded",
+              eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              requestId,
+              runId,
+              attempt,
+              latencyMs
+            });
+            return response;
+          } catch (error) {
+            const isTimeout = error instanceof import_shared.ProviderTimeoutError;
+            const isAbort = error.name === "AbortError" || parentSignal?.aborted;
+            const elapsedTotal = Date.now() - startTime;
+            let sanitizedMessage = this.sanitizeError(error);
+            if (isAbort) {
+              this.emitCancelled(taskId, runId, requestId, attempt);
+              throw new import_shared.ProviderCancelledError(sanitizedMessage);
+            }
+            if (isTimeout) {
+              this.onEvent({
+                type: "model_request.timed_out",
+                eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                requestId,
+                runId,
+                attempt,
+                timeoutMs: this.config.modelRequestTimeoutMs
+              });
+            } else {
+              this.onEvent({
+                type: "model_request.failed",
+                eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                requestId,
+                runId,
+                attempt,
+                error: sanitizedMessage
+              });
+            }
+            const retryable = this.isRetryable(error);
+            if (!retryable || attempt >= this.config.maxAttempts) {
+              if (!retryable && !isTimeout && !(error instanceof import_shared.ProviderError)) {
+                throw new import_shared.ProviderUnknownError(sanitizedMessage);
+              }
+              throw error;
+            }
+            const delay = Math.min(
+              this.config.retryMaxDelayMs,
+              this.config.retryBaseDelayMs * Math.pow(2, attempt - 1)
+            );
+            const jitter = delay * 0.1 * (Math.random() * 2 - 1);
+            const finalDelay = Math.round(delay + jitter);
+            if (elapsedTotal + finalDelay > this.config.maxRetryTimeMs) {
+              throw error;
+            }
+            this.onEvent({
+              type: "model_request.retrying",
+              eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              requestId,
+              runId,
+              attempt,
+              delayMs: finalDelay,
+              nextAttempt: attempt + 1
+            });
+            try {
+              await this.sleep(finalDelay, parentSignal);
+            } catch (sleepErr) {
+              if (sleepErr instanceof import_shared.ProviderCancelledError) {
+                this.emitCancelled(taskId, runId, requestId, attempt);
+                throw sleepErr;
+              }
+              throw sleepErr;
+            }
+            attempt++;
+          } finally {
+            if (timer) clearTimeout(timer);
+            if (parentSignal) parentSignal.removeEventListener("abort", onParentAbort);
+          }
+        }
+        throw new import_shared.ProviderUnknownError("Max attempts reached unexpectedly");
+      }
+      emitCancelled(taskId, runId, requestId, attempt) {
+        this.onEvent({
+          type: "model_request.cancelled",
+          eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          taskId,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          requestId,
+          runId,
+          attempt
+        });
+      }
+    };
+  }
+});
+
+// ../../packages/planning-engine/dist/index.js
+var require_dist10 = __commonJS({
   "../../packages/planning-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -25944,7 +26295,7 @@ var require_dist9 = __commonJS({
 });
 
 // ../../packages/verification-engine/dist/index.js
-var require_dist10 = __commonJS({
+var require_dist11 = __commonJS({
   "../../packages/verification-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -26264,7 +26615,7 @@ var require_dist10 = __commonJS({
 });
 
 // ../../packages/diagnostics-engine/dist/index.js
-var require_dist11 = __commonJS({
+var require_dist12 = __commonJS({
   "../../packages/diagnostics-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -26485,7 +26836,7 @@ ${stderr}`;
 });
 
 // ../../packages/repair-engine/dist/index.js
-var require_dist12 = __commonJS({
+var require_dist13 = __commonJS({
   "../../packages/repair-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -26597,7 +26948,7 @@ var require_dist12 = __commonJS({
         this.attempts.delete(taskId);
       }
     };
-    var import_diagnostics_engine = require_dist11();
+    var import_diagnostics_engine = require_dist12();
     var RepairEngine2 = class {
       tracker;
       defaultLimits = DEFAULT_REPAIR_LIMITS;
@@ -26693,13 +27044,16 @@ var require_dist12 = __commonJS({
 });
 
 // ../../packages/agent-core/dist/index.js
-var require_dist13 = __commonJS({
+var require_dist14 = __commonJS({
   "../../packages/agent-core/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
     var __getOwnPropNames2 = Object.getOwnPropertyNames;
     var __hasOwnProp2 = Object.prototype.hasOwnProperty;
+    var __esm = (fn, res) => function __init() {
+      return fn && (res = (0, fn[__getOwnPropNames2(fn)[0]])(fn = 0)), res;
+    };
     var __export2 = (target, all) => {
       for (var name in all)
         __defProp2(target, name, { get: all[name], enumerable: true });
@@ -26713,18 +27067,249 @@ var require_dist13 = __commonJS({
       return to;
     };
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    var IntentRouter;
+    var init_intent_router = __esm({
+      "src/interaction/intent_router.ts"() {
+        "use strict";
+        IntentRouter = class {
+          /**
+           * Deterministic fast classification based on regex and keywords.
+           */
+          checkDeterministic(message) {
+            const text = message.trim().toLowerCase();
+            const chatRegex = /^(hi|hello|hey|how are you|good morning|thanks|thank you)\b/i;
+            if (chatRegex.test(text)) {
+              return {
+                mode: "CHAT",
+                confidence: 1,
+                source: "deterministic",
+                reasons: ["greeting or casual phrase detected"],
+                requiresClarification: false
+              };
+            }
+            const askRegex = /^(explain|how does|what does|why is|search for)\b/i;
+            if (askRegex.test(text)) {
+              return {
+                mode: "ASK",
+                confidence: 0.9,
+                source: "deterministic",
+                reasons: ["explicit investigation/read-only verb detected"],
+                requiresClarification: false
+              };
+            }
+            const planRegex = /^(plan|give me a plan|how would you)\b/i;
+            if (planRegex.test(text)) {
+              return {
+                mode: "PLAN",
+                confidence: 0.9,
+                source: "deterministic",
+                reasons: ["explicit planning request detected"],
+                requiresClarification: false
+              };
+            }
+            const agentRegex = /^(fix|implement|refactor|add|update)\b/i;
+            if (agentRegex.test(text)) {
+              return {
+                mode: "AGENT",
+                confidence: 0.8,
+                source: "deterministic",
+                reasons: ["explicit implementation/action verb detected"],
+                requiresClarification: false
+              };
+            }
+            return null;
+          }
+          /**
+           * Context-aware classification when deterministic fails or needs reinforcement.
+           */
+          checkContext(message, context) {
+            if (!context) return null;
+            const text = message.trim().toLowerCase();
+            if (context.previousMode === "AGENT") {
+              if (text.startsWith("why") || text.includes("explain")) {
+                return {
+                  mode: "ASK",
+                  confidence: 0.8,
+                  source: "context",
+                  reasons: ["question follow-up in AGENT context"],
+                  requiresClarification: false
+                };
+              }
+              if (text.startsWith("also")) {
+                return {
+                  mode: "AGENT",
+                  confidence: 0.8,
+                  source: "context",
+                  reasons: ["additive follow-up in AGENT context"],
+                  requiresClarification: false
+                };
+              }
+            }
+            if (context.activeFile && text.includes("review")) {
+              return {
+                mode: "ASK",
+                confidence: 0.7,
+                source: "context",
+                reasons: ["review request with active file context"],
+                requiresClarification: false
+              };
+            }
+            return null;
+          }
+          /**
+           * Main entrypoint for routing an intent.
+           */
+          route(message, context) {
+            const det = this.checkDeterministic(message);
+            if (det) return det;
+            const ctx = this.checkContext(message, context);
+            if (ctx) return ctx;
+            return {
+              mode: "AMBIGUOUS",
+              confidence: 0,
+              source: "fallback",
+              reasons: ["insufficient execution intent"],
+              requiresClarification: true
+            };
+          }
+        };
+      }
+    });
+    var ClarificationHandler;
+    var init_clarification_handler = __esm({
+      "src/interaction/clarification_handler.ts"() {
+        "use strict";
+        ClarificationHandler = class {
+          /**
+           * Generates a user-facing clarification message for an ambiguous request.
+           */
+          generateClarificationRequest(message) {
+            return "What would you like me to do with it \u2014 explain it, review it, plan changes, or make changes?";
+          }
+          /**
+           * Validates if the current state safely allows entering clarification.
+           */
+          canAskClarification(contract) {
+            if (contract && contract.mode !== "AMBIGUOUS") {
+              return false;
+            }
+            return true;
+          }
+        };
+      }
+    });
+    var agent_kernel_exports = {};
+    __export2(agent_kernel_exports, {
+      AgentKernel: () => AgentKernel
+    });
+    var AgentKernel;
+    var init_agent_kernel = __esm({
+      "src/agent_kernel.ts"() {
+        "use strict";
+        init_intent_router();
+        init_clarification_handler();
+        AgentKernel = class {
+          constructor(orchestrator) {
+            this.orchestrator = orchestrator;
+            this.router = new IntentRouter();
+            this.clarificationHandler = new ClarificationHandler();
+          }
+          orchestrator;
+          router;
+          clarificationHandler;
+          /**
+           * The authoritative entry point for user-originated execution.
+           */
+          async handle(input) {
+            input.onEvent({
+              type: "agent.status",
+              eventId: `evt-${Date.now()}`,
+              taskId: input.taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              status: "CLASSIFYING"
+            });
+            const classification = this.router.route(input.userPrompt, {
+              activeTaskId: input.taskId
+            });
+            if (classification.mode === "AMBIGUOUS") {
+              input.onEvent({
+                type: "agent.status",
+                eventId: `evt-${Date.now()}`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                status: "WAITING_FOR_USER"
+              });
+              return {
+                status: "waiting_for_user",
+                steps: 0,
+                finalText: this.clarificationHandler.generateClarificationRequest(input.userPrompt)
+              };
+            }
+            if (classification.mode === "CHAT") {
+              input.onEvent({
+                type: "agent.status",
+                eventId: `evt-${Date.now()}`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                status: "COMPLETED"
+              });
+              return {
+                status: "completed",
+                steps: 0,
+                // Since we are not doing a secondary LLM call right now, provide a deterministic chat fallback
+                finalText: "Hi! I'm COMU, your AI software engineer. What are we working on?"
+              };
+            }
+            const taskContract = this.createContract(input, classification);
+            return this.orchestrator.runWithContract(input, taskContract);
+          }
+          createContract(input, classification) {
+            let allowedCapabilities = [];
+            let expectedMutation = false;
+            let verificationRequired = false;
+            if (classification.mode === "ASK" || classification.mode === "PLAN") {
+              allowedCapabilities = ["read"];
+            } else if (classification.mode === "AGENT") {
+              allowedCapabilities = ["read", "write", "execute"];
+              expectedMutation = true;
+              verificationRequired = true;
+            }
+            return {
+              taskId: input.taskId,
+              runId: input.runId,
+              mode: classification.mode,
+              goal: input.userPrompt,
+              expectedMutation,
+              allowedCapabilities,
+              workspaceScope: { rootPath: input.workspaceRoot, workspaceId: input.workspaceId },
+              allowedTools: [],
+              verificationRequired,
+              limits: input.limits,
+              createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+              source: "user"
+            };
+          }
+        };
+      }
+    });
     var index_exports = {};
     __export2(index_exports, {
+      AgentKernel: () => AgentKernel,
       AgentOrchestrator: () => AgentOrchestrator2,
+      ClarificationHandler: () => ClarificationHandler,
+      IntentRouter: () => IntentRouter,
       InteractionManager: () => InteractionManager2,
       SubagentManager: () => SubagentManager2,
-      formatStepSummary: () => formatStepSummary
+      formatStepSummary: () => formatStepSummary,
+      validateTaskContract: () => validateTaskContract
     });
     module2.exports = __toCommonJS2(index_exports);
-    var import_planning_engine2 = require_dist9();
-    var import_verification_engine2 = require_dist10();
-    var import_diagnostics_engine = require_dist11();
-    var import_repair_engine2 = require_dist12();
+    var import_model_core = require_dist9();
+    var import_shared = require_dist();
+    var import_planning_engine2 = require_dist10();
+    var import_verification_engine2 = require_dist11();
+    var import_diagnostics_engine = require_dist12();
+    var import_repair_engine2 = require_dist13();
     var SubagentManager2 = class _SubagentManager {
       activeSubagents = /* @__PURE__ */ new Map();
       subagentsPerTask = /* @__PURE__ */ new Map();
@@ -27022,20 +27607,68 @@ var require_dist13 = __commonJS({
       interactionManager;
       memoryEngine;
       subagentManager;
+      requestManager;
       getState() {
         return this.state;
       }
-      changeState(ctx, newState, message) {
-        this.state = newState;
+      transition(ctx, newState, message, contract) {
+        const from = this.state;
+        const to = newState;
+        const validTransitions = {
+          IDLE: ["STARTING"],
+          STARTING: ["CLASSIFYING", "ANALYZING", "CANCELLED", "FAILED"],
+          CLASSIFYING: ["ANALYZING", "PLANNING", "THINKING", "WAITING_FOR_USER", "COMPLETED", "CANCELLED", "FAILED"],
+          ANALYZING: ["PLANNING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+          PLANNING: ["THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+          THINKING: ["TOOL_CALLING", "OBSERVING", "VERIFYING", "THINKING", "WAITING_FOR_USER", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+          TOOL_CALLING: ["OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+          OBSERVING: ["VERIFYING", "THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+          VERIFYING: ["DIAGNOSING", "THINKING", "VERIFYING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+          DIAGNOSING: ["REPAIRING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
+          REPAIRING: ["VERIFYING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
+          WAITING_FOR_USER: ["CLASSIFYING", "ANALYZING", "THINKING", "CANCELLED", "FAILED"],
+          COMPLETED: [],
+          FAILED: [],
+          CANCELLED: [],
+          LIMIT_REACHED: []
+        };
+        if (!validTransitions[from]?.includes(to)) {
+          throw new Error(`Invalid state transition from ${from} to ${to}`);
+        }
+        if (contract) {
+          if (to === "TOOL_CALLING" && (contract.mode === "CHAT" || contract.mode === "PLAN")) {
+            throw new Error(`Invalid state transition: ${contract.mode} mode cannot enter TOOL_CALLING`);
+          }
+          if (to === "REPAIRING" && contract.mode !== "AGENT") {
+            throw new Error(`Invalid state transition: ${contract.mode} mode cannot enter REPAIRING`);
+          }
+        }
+        this.state = to;
         ctx.onEvent({
           type: "agent.status",
           eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2)}`,
           taskId: ctx.taskId,
           timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-          status: message || newState
+          status: message || to
         });
       }
       async run(ctx) {
+        const { AgentKernel: AgentKernel2 } = await Promise.resolve().then(() => (init_agent_kernel(), agent_kernel_exports));
+        const kernel = new AgentKernel2(this);
+        return kernel.handle({
+          taskId: ctx.taskId,
+          runId: ctx.taskId,
+          systemPrompt: ctx.systemPrompt,
+          userPrompt: ctx.userPrompt,
+          workspaceRoot: ctx.workspaceRoot,
+          workspaceId: ctx.workspaceId,
+          limits: ctx.limits,
+          abortSignal: ctx.abortSignal,
+          onEvent: ctx.onEvent,
+          gitConfig: ctx.gitConfig
+        });
+      }
+      async runWithContract(ctx, contract) {
         const startTime = Date.now();
         let steps = 0;
         let toolCallsCount = 0;
@@ -27046,7 +27679,7 @@ var require_dist13 = __commonJS({
           taskId: ctx.taskId,
           timestamp: (/* @__PURE__ */ new Date()).toISOString()
         });
-        this.changeState(ctx, "STARTING", "Initializing task");
+        this.transition(ctx, "STARTING", "Initializing task", contract);
         const changeSet = this.diffEngine.createChangeSet(ctx.taskId);
         const toolCtx = {
           taskId: ctx.taskId,
@@ -27055,7 +27688,7 @@ var require_dist13 = __commonJS({
           permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } }
         };
         if (ctx.abortSignal?.aborted) {
-          this.changeState(ctx, "CANCELLED", "Task was cancelled");
+          this.transition(ctx, "CANCELLED", "Task was cancelled");
           ctx.onEvent({
             type: "task.cancelled",
             eventId: `evt-${Date.now()}`,
@@ -27064,7 +27697,7 @@ var require_dist13 = __commonJS({
           });
           return { status: "cancelled", steps: 0, changeSet };
         }
-        this.changeState(ctx, "ANALYZING", "Analyzing task and workspace requirements");
+        this.transition(ctx, "ANALYZING", "Analyzing task and workspace requirements");
         let memoryContext = "";
         if (this.memoryEngine) {
           try {
@@ -27094,11 +27727,11 @@ var require_dist13 = __commonJS({
         }
         let currentPlan;
         try {
-          this.changeState(ctx, "PLANNING", "Generating structured engineering plan");
+          this.transition(ctx, "PLANNING", "Generating structured engineering plan");
           currentPlan = await this.planner.createPlan(ctx.taskId, ctx.userPrompt, ctx.abortSignal);
         } catch (planError) {
           if (ctx.abortSignal?.aborted) {
-            this.changeState(ctx, "CANCELLED", "Task was cancelled");
+            this.transition(ctx, "CANCELLED", "Task was cancelled");
             ctx.onEvent({
               type: "task.cancelled",
               eventId: `evt-${Date.now()}`,
@@ -27107,7 +27740,7 @@ var require_dist13 = __commonJS({
             });
             return { status: "cancelled", steps: 0, changeSet };
           }
-          this.changeState(ctx, "FAILED", `Planning error: ${planError.message}`);
+          this.transition(ctx, "FAILED", `Planning error: ${planError.message}`);
           ctx.onEvent({
             type: "task.failed",
             error: planError.message,
@@ -27154,7 +27787,7 @@ ${memoryContext}` : ctx.userPrompt;
         let lastAssistantText;
         while (true) {
           if (ctx.abortSignal?.aborted) {
-            this.changeState(ctx, "CANCELLED", "Task was cancelled");
+            this.transition(ctx, "CANCELLED", "Task was cancelled");
             ctx.onEvent({
               type: "task.cancelled",
               eventId: `evt-${Date.now()}`,
@@ -27164,7 +27797,7 @@ ${memoryContext}` : ctx.userPrompt;
             return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
           }
           if (steps >= ctx.limits.maxSteps) {
-            this.changeState(ctx, "LIMIT_REACHED", `Max steps (${ctx.limits.maxSteps}) reached`);
+            this.transition(ctx, "LIMIT_REACHED", `Max steps (${ctx.limits.maxSteps}) reached`);
             ctx.onEvent({
               type: "agent.limit_reached",
               limit: "maxSteps",
@@ -27175,7 +27808,7 @@ ${memoryContext}` : ctx.userPrompt;
             return { status: "limit_reached", steps, changeSet, plan: planManager.getPlan() };
           }
           if (Date.now() - startTime > ctx.limits.maxExecutionTimeMs) {
-            this.changeState(ctx, "LIMIT_REACHED", "Max execution time reached");
+            this.transition(ctx, "LIMIT_REACHED", "Max execution time reached");
             ctx.onEvent({
               type: "agent.limit_reached",
               limit: "maxExecutionTimeMs",
@@ -27220,7 +27853,7 @@ ${memoryContext}` : ctx.userPrompt;
             }
           }
           if (currentStep && currentStep.type === "VALIDATE") {
-            this.changeState(ctx, "VERIFYING", "Executing verification checks");
+            this.transition(ctx, "VERIFYING", "Executing verification checks");
             totalValidationRuns++;
             const changedFiles = Array.from(changeSet.changes.keys());
             ctx.onEvent({
@@ -27290,7 +27923,7 @@ ${memoryContext}` : ctx.userPrompt;
               });
               const failedCheck = lastVerification.checks.find((c) => c.status === "FAILED" || c.status === "UNAVAILABLE") || lastVerification.checks[0];
               if (failedCheck && failedCheck.status === "FAILED") {
-                this.changeState(ctx, "DIAGNOSING", `Diagnosing failure in ${failedCheck.name}`);
+                this.transition(ctx, "DIAGNOSING", `Diagnosing failure in ${failedCheck.name}`);
                 lastDiagnosis = import_diagnostics_engine.Diagnostician.diagnose(ctx.taskId, failedCheck);
                 ctx.onEvent({
                   type: "diagnosis.created",
@@ -27328,7 +27961,7 @@ ${memoryContext}` : ctx.userPrompt;
                     validationStatus: "FAILED",
                     createdAt: (/* @__PURE__ */ new Date()).toISOString()
                   });
-                  this.changeState(ctx, "REPAIRING", `Repairing failure in ${repairDecision.targetFiles.join(", ")}`);
+                  this.transition(ctx, "REPAIRING", `Repairing failure in ${repairDecision.targetFiles.join(", ")}`);
                   const mutatedPlan = this.planner.createRepairPlan(
                     planManager.getPlan(),
                     currentStep.id,
@@ -27357,7 +27990,7 @@ Please implement targeted fixes to resolve this failure.`
                 } else {
                   const reason = repairDecision.reason;
                   if (reason.includes("DUPLICATE_REPAIR_STRATEGY")) {
-                    this.changeState(ctx, "LIMIT_REACHED", reason);
+                    this.transition(ctx, "LIMIT_REACHED", reason);
                     ctx.onEvent({
                       type: "agent.limit_reached",
                       limit: "duplicateRepairStrategy",
@@ -27376,7 +28009,7 @@ Please implement targeted fixes to resolve this failure.`
                       repairAttempts: this.repairEngine.getAttempts(ctx.taskId)
                     };
                   } else {
-                    this.changeState(ctx, "FAILED", reason);
+                    this.transition(ctx, "FAILED", reason);
                     ctx.onEvent({
                       type: "task.failed",
                       error: reason,
@@ -27398,7 +28031,7 @@ Please implement targeted fixes to resolve this failure.`
                 }
               } else {
                 const errSummary = lastVerification.summary;
-                this.changeState(ctx, "FAILED", errSummary);
+                this.transition(ctx, "FAILED", errSummary);
                 ctx.onEvent({
                   type: "task.failed",
                   error: errSummary,
@@ -27417,18 +28050,37 @@ Please implement targeted fixes to resolve this failure.`
               }
             }
           }
-          this.changeState(ctx, "THINKING", "Thinking...");
+          this.transition(ctx, "THINKING", "Thinking...");
           steps++;
+          if (!this.requestManager) {
+            this.requestManager = new import_model_core.ModelRequestManager(this.model, ctx.onEvent);
+          }
           let response;
           try {
-            response = await this.model.generate({
-              prompt: ctx.userPrompt,
-              systemPrompt: ctx.systemPrompt,
-              messages,
-              tools
-            });
+            response = await this.requestManager.execute(
+              ctx.taskId,
+              ctx.taskId,
+              // runId
+              {
+                prompt: ctx.userPrompt,
+                systemPrompt: ctx.systemPrompt,
+                messages,
+                tools
+              },
+              ctx.abortSignal
+            );
           } catch (err) {
-            this.changeState(ctx, "FAILED", `Provider Error: ${err.message}`);
+            if (err instanceof import_shared.ProviderCancelledError || ctx.abortSignal?.aborted) {
+              this.transition(ctx, "CANCELLED", "Task was cancelled");
+              ctx.onEvent({
+                type: "task.cancelled",
+                eventId: `evt-${Date.now()}`,
+                taskId: ctx.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString()
+              });
+              return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
+            }
+            this.transition(ctx, "FAILED", `Provider Error: ${err.message}`);
             ctx.onEvent({
               type: "task.failed",
               error: err.message,
@@ -27480,11 +28132,11 @@ Please implement targeted fixes to resolve this failure.`
               lastAssistantText
             );
           }
-          this.changeState(ctx, "TOOL_CALLING", "Executing tools...");
+          this.transition(ctx, "TOOL_CALLING", "Executing tools...");
           for (const tc of response.toolCalls) {
             toolCallsCount++;
             if (toolCallsCount > ctx.limits.maxToolCalls) {
-              this.changeState(ctx, "LIMIT_REACHED", `Max tool calls (${ctx.limits.maxToolCalls}) reached`);
+              this.transition(ctx, "LIMIT_REACHED", `Max tool calls (${ctx.limits.maxToolCalls}) reached`);
               ctx.onEvent({
                 type: "agent.limit_reached",
                 limit: "maxToolCalls",
@@ -27599,7 +28251,7 @@ Please implement targeted fixes to resolve this failure.`
                     const changed = baselineExists !== finalExists || baselineHash !== finalHash;
                     if (changed) {
                       if (readError && !baselineExists) {
-                        this.changeState(ctx, "FAILED", "Mutation failed and workspace state cannot be verified.");
+                        this.transition(ctx, "FAILED", "Mutation failed and workspace state cannot be verified.");
                         ctx.onEvent({
                           type: "task.failed",
                           error: "Workspace state unknown",
@@ -27610,7 +28262,7 @@ Please implement targeted fixes to resolve this failure.`
                         });
                         return { status: "failed", error: "WORKSPACE_STATE_UNKNOWN", steps, changeSet, plan: planManager.getPlan() };
                       } else {
-                        this.changeState(ctx, "FAILED", "Integrity Error: Workspace mutated despite tool failure");
+                        this.transition(ctx, "FAILED", "Integrity Error: Workspace mutated despite tool failure");
                         ctx.onEvent({
                           type: "task.failed",
                           error: "Workspace state changed after failure",
@@ -27673,11 +28325,11 @@ Please implement targeted fixes to resolve this failure.`
               toolCallId: tc.id
             });
           }
-          this.changeState(ctx, "OBSERVING", "Observing results");
+          this.transition(ctx, "OBSERVING", "Observing results");
         }
       }
       async evaluateCompletionGate(ctx, planManager, changeSet, lastVerification, startTime, steps, toolCtx, finalText) {
-        this.changeState(ctx, "VERIFYING", "Evaluating completion gate and workspace integrity");
+        this.transition(ctx, "VERIFYING", "Evaluating completion gate and workspace integrity");
         if (!lastVerification || lastVerification.status !== "PASSED") {
           const changedFiles = Array.from(changeSet.changes.keys());
           lastVerification = await this.verificationEngine.runVerification({
@@ -27814,7 +28466,7 @@ Please implement targeted fixes to resolve this failure.`
             }
           }
           const cleanFinalText = finalText ? finalText.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim() : void 0;
-          this.changeState(ctx, "COMPLETED", "Task verified and completed successfully");
+          this.transition(ctx, "COMPLETED", "Task verified and completed successfully");
           ctx.onEvent({
             type: "task.completed",
             eventId: `evt-${Date.now()}`,
@@ -27859,7 +28511,7 @@ Please implement targeted fixes to resolve this failure.`
             } catch {
             }
           }
-          this.changeState(ctx, "FAILED", gateFailureReason);
+          this.transition(ctx, "FAILED", gateFailureReason);
           ctx.onEvent({
             type: "task.failed",
             error: gateFailureReason,
@@ -28100,6 +28752,42 @@ Please implement targeted fixes to resolve this failure.`
         }
       }
     };
+    function validateTaskContract(contract, toolName, requiredCapabilities) {
+      for (const cap of requiredCapabilities) {
+        if (!contract.allowedCapabilities.includes(cap)) {
+          return {
+            valid: false,
+            reason: `Capability '${cap}' is forbidden in ${contract.mode} mode.`
+          };
+        }
+      }
+      if (contract.allowedTools.length > 0) {
+        if (!contract.allowedTools.includes(toolName)) {
+          return {
+            valid: false,
+            reason: `Tool '${toolName}' is not allowed by the current task contract.`
+          };
+        }
+      }
+      if (contract.mode === "CHAT") {
+        return {
+          valid: false,
+          reason: "No tools can be executed in CHAT mode."
+        };
+      }
+      if (contract.mode === "ASK" || contract.mode === "PLAN") {
+        if (requiredCapabilities.includes("write") || requiredCapabilities.includes("execute")) {
+          return {
+            valid: false,
+            reason: `Write/Execute tools are forbidden in ${contract.mode} mode.`
+          };
+        }
+      }
+      return { valid: true };
+    }
+    init_intent_router();
+    init_clarification_handler();
+    init_agent_kernel();
   }
 });
 
@@ -30038,7 +30726,7 @@ var require_libcjs = __commonJS({
 });
 
 // ../../packages/diff-engine/dist/index.js
-var require_dist14 = __commonJS({
+var require_dist15 = __commonJS({
   "../../packages/diff-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
@@ -30132,7 +30820,7 @@ var require_dist14 = __commonJS({
 });
 
 // ../../packages/memory-engine/dist/index.js
-var require_dist15 = __commonJS({
+var require_dist16 = __commonJS({
   "../../packages/memory-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
@@ -30657,7 +31345,7 @@ var require_dist15 = __commonJS({
 });
 
 // ../../providers/nvidia/dist/index.js
-var require_dist16 = __commonJS({
+var require_dist17 = __commonJS({
   "../../providers/nvidia/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -30860,7 +31548,7 @@ var require_dist16 = __commonJS({
           }
         }));
       }
-      async generate(request) {
+      async generate(request, context) {
         const messages = this.mapMessages(request);
         const tools = this.mapTools(request.tools);
         const body = {
@@ -30875,19 +31563,36 @@ var require_dist16 = __commonJS({
           body.tool_choice = "auto";
         }
         try {
-          const response = await fetch(this.endpoint, {
+          const fetchOptions = {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${this.apiKey}`
             },
             body: JSON.stringify(body)
-          });
+          };
+          if (context?.signal) {
+            fetchOptions.signal = context.signal;
+          }
+          const response = await fetch(this.endpoint, fetchOptions);
           if (!response.ok) {
             const errorText = await response.text();
-            throw new import_shared.ProviderError(`NVIDIA API Error: ${response.status} - ${errorText.slice(0, 100)}`);
+            const sanitizedText = errorText.slice(0, 100).replace(this.apiKey, "[REDACTED]");
+            const message2 = `NVIDIA API Error: ${response.status} - ${sanitizedText}`;
+            if (response.status === 401 || response.status === 403) {
+              throw new import_shared.ProviderAuthenticationError(message2);
+            } else if (response.status === 429) {
+              throw new import_shared.ProviderRateLimitError(message2);
+            } else if (response.status === 400 || response.status === 422) {
+              throw new import_shared.ProviderInvalidRequestError(message2);
+            } else {
+              throw new import_shared.ProviderError(message2);
+            }
           }
           const data = await response.json();
+          if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new import_shared.ProviderProtocolError("NVIDIA API returned malformed response payload.");
+          }
           const message = data.choices[0].message;
           let toolCalls;
           if (message.tool_calls && message.tool_calls.length > 0) {
@@ -30970,13 +31675,13 @@ var import_terminal = __toESM(require_dist5());
 var import_git = __toESM(require_dist6());
 var import_validation = __toESM(require_dist7());
 var import_tool_web_docs = __toESM(require_dist8());
-var import_agent_core = __toESM(require_dist13());
-var import_planning_engine = __toESM(require_dist9());
-var import_verification_engine = __toESM(require_dist10());
-var import_repair_engine = __toESM(require_dist12());
-var import_diff_engine = __toESM(require_dist14());
-var import_memory_engine = __toESM(require_dist15());
-var import_provider_nvidia = __toESM(require_dist16());
+var import_agent_core = __toESM(require_dist14());
+var import_planning_engine = __toESM(require_dist10());
+var import_verification_engine = __toESM(require_dist11());
+var import_repair_engine = __toESM(require_dist13());
+var import_diff_engine = __toESM(require_dist15());
+var import_memory_engine = __toESM(require_dist16());
+var import_provider_nvidia = __toESM(require_dist17());
 
 // src/event_store.ts
 var InMemoryTaskEventStore = class {
