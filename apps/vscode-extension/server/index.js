@@ -23009,6 +23009,7 @@ var require_dist = __commonJS({
       TaskCancelledError: () => TaskCancelledError,
       TimeoutError: () => TimeoutError,
       ToolError: () => ToolError,
+      UnsupportedModelError: () => UnsupportedModelError,
       WorkspaceError: () => WorkspaceError
     });
     module2.exports = __toCommonJS2(index_exports);
@@ -23042,6 +23043,8 @@ var require_dist = __commonJS({
     var ProviderCancelledError = class extends ProviderError {
     };
     var ProviderUnknownError = class extends ProviderError {
+    };
+    var UnsupportedModelError = class extends ProviderError {
     };
     var ToolError = class extends BaseError {
     };
@@ -31370,16 +31373,243 @@ var require_dist17 = __commonJS({
       NvidiaProvider: () => NvidiaProvider2
     });
     module2.exports = __toCommonJS2(index_exports);
+    var import_shared2 = require_dist();
     var import_shared = require_dist();
+    var NVIDIA_MODELS = [
+      {
+        id: "deepseek-ai/deepseek-v4-pro-0813",
+        providerId: "nvidia",
+        name: "DeepSeek V4 Pro 0813",
+        displayName: "DeepSeek V4 Pro 0813",
+        capabilities: {
+          toolCalling: true,
+          streaming: false,
+          reasoning: true,
+          vision: false,
+          structuredOutput: true,
+          maxContextTokens: 128e3,
+          chat: true,
+          coding: true
+        },
+        performanceTier: "deep",
+        defaults: {
+          temperature: 1,
+          topP: 0.95,
+          maxTokens: 16384,
+          seed: 42,
+          stream: false
+        },
+        modelSpecificOptions: {
+          chatTemplateKwargs: { thinking: false }
+        }
+      },
+      {
+        id: "nvidia/nemotron-3.5-lightning-30b-a3b",
+        providerId: "nvidia",
+        name: "Nemotron 3.5 Lightning 30B-A3B",
+        displayName: "Nemotron 3.5 Lightning 30B-A3B",
+        capabilities: {
+          toolCalling: true,
+          streaming: true,
+          reasoning: true,
+          vision: false,
+          structuredOutput: true,
+          maxContextTokens: 128e3,
+          chat: true,
+          coding: true
+        },
+        performanceTier: "fast",
+        defaults: {
+          temperature: 1,
+          topP: 0.95,
+          maxTokens: 16384,
+          stream: true
+        },
+        modelSpecificOptions: {
+          reasoningBudget: 16384,
+          chatTemplateKwargs: { enable_thinking: true }
+        }
+      },
+      {
+        id: "moonshotai/kimi-k3",
+        providerId: "nvidia",
+        name: "Kimi K3",
+        displayName: "Kimi K3",
+        capabilities: {
+          toolCalling: true,
+          streaming: true,
+          reasoning: true,
+          vision: true,
+          structuredOutput: true,
+          maxContextTokens: 128e3,
+          chat: true,
+          coding: true,
+          multimodal: true
+        },
+        performanceTier: "deep",
+        defaults: {
+          temperature: 1,
+          maxTokens: 16384,
+          seed: 0,
+          stream: true
+        },
+        modelSpecificOptions: {
+          reasoningEffort: "max"
+        }
+      },
+      {
+        id: "deepseek-ai/deepseek-v4-flash-0731",
+        providerId: "nvidia",
+        name: "DeepSeek V4 Flash 0731",
+        displayName: "DeepSeek V4 Flash 0731",
+        capabilities: {
+          toolCalling: true,
+          streaming: false,
+          reasoning: true,
+          vision: false,
+          structuredOutput: true,
+          maxContextTokens: 128e3,
+          chat: true,
+          coding: true
+        },
+        performanceTier: "fast",
+        defaults: {
+          temperature: 1,
+          topP: 0.95,
+          maxTokens: 16384,
+          stream: false
+        },
+        modelSpecificOptions: {
+          chatTemplateKwargs: { thinking: true, reasoning_effort: "high" }
+        }
+      },
+      {
+        id: "poolside/laguna-xs-2.1",
+        providerId: "nvidia",
+        name: "Laguna XS 2.1",
+        displayName: "Laguna XS 2.1",
+        capabilities: {
+          toolCalling: true,
+          streaming: false,
+          reasoning: true,
+          vision: false,
+          structuredOutput: true,
+          maxContextTokens: 32768,
+          chat: true,
+          coding: true
+        },
+        performanceTier: "balanced",
+        defaults: {
+          temperature: 1,
+          topP: 0.95,
+          maxTokens: 8192,
+          stream: false
+        }
+      },
+      {
+        id: "meta/muse-glimmer-30b",
+        providerId: "nvidia",
+        name: "Muse Glimmer 30B",
+        displayName: "Muse Glimmer 30B",
+        capabilities: {
+          toolCalling: false,
+          streaming: false,
+          reasoning: true,
+          vision: true,
+          structuredOutput: false,
+          maxContextTokens: 128e3,
+          chat: true,
+          coding: false,
+          multimodal: true
+        },
+        performanceTier: "balanced",
+        defaults: {
+          temperature: 1,
+          topP: 0.95,
+          maxTokens: 8192,
+          stream: false
+        }
+      },
+      // Legacy models
+      {
+        id: "nvidia/nemotron-3-ultra-550b-a55b",
+        providerId: "nvidia",
+        name: "Nemotron 3 Ultra",
+        displayName: "Nemotron 3 Ultra",
+        capabilities: {
+          toolCalling: true,
+          streaming: true,
+          reasoning: true,
+          vision: false,
+          structuredOutput: true,
+          maxContextTokens: 128e3,
+          chat: true,
+          coding: true
+        },
+        performanceTier: "deep",
+        defaults: {
+          temperature: 0.1,
+          maxTokens: 1024,
+          stream: true
+        },
+        modelSpecificOptions: {
+          chatTemplateKwargs: { enable_thinking: true }
+        }
+      },
+      {
+        id: "nvidia/nemotron-4-340b-instruct",
+        providerId: "nvidia",
+        name: "Nemotron 4 340B Instruct",
+        displayName: "Nemotron 4 340B Instruct",
+        capabilities: {
+          toolCalling: true,
+          streaming: true,
+          reasoning: true,
+          vision: false,
+          structuredOutput: true,
+          maxContextTokens: 128e3,
+          chat: true,
+          coding: true
+        },
+        performanceTier: "balanced",
+        defaults: {
+          temperature: 0.1,
+          maxTokens: 1024,
+          stream: true
+        },
+        modelSpecificOptions: {
+          chatTemplateKwargs: { enable_thinking: true }
+        }
+      }
+    ];
+    var NvidiaModelCatalog = class {
+      static models = new Map(
+        NVIDIA_MODELS.map((m) => [m.id, m])
+      );
+      static get(modelId) {
+        const profile = this.models.get(modelId);
+        if (!profile) {
+          throw new import_shared.UnsupportedModelError(`Model ${modelId} is not supported by the NVIDIA provider.`);
+        }
+        return profile;
+      }
+      static list() {
+        return Array.from(this.models.values());
+      }
+      static has(modelId) {
+        return this.models.has(modelId);
+      }
+      static getDefault() {
+        return this.get("nvidia/nemotron-3.5-lightning-30b-a3b");
+      }
+    };
     var NvidiaProvider2 = class _NvidiaProvider {
       id = "nvidia";
       name = "NVIDIA";
       providerId = "nvidia";
       displayName = "NVIDIA";
-      selectedModel = "Nemotron 3 Ultra";
+      selectedModel = "nvidia/nemotron-3.5-lightning-30b-a3b";
       static DEFAULT_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions";
-      static DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
-      static FALLBACK_MODEL = "nvidia/nemotron-4-340b-instruct";
       apiKey;
       endpoint;
       static normalizeEndpoint(endpoint) {
@@ -31398,18 +31628,21 @@ var require_dist17 = __commonJS({
         }
         return ep;
       }
-      constructor(apiKey, endpoint) {
+      constructor(apiKey, endpoint, modelId) {
         const resolvedKey = apiKey || process.env.NVIDIA_API_KEY;
         if (!resolvedKey) {
-          throw new import_shared.ProviderError("NVIDIA API Key is required");
+          throw new import_shared2.ProviderError("NVIDIA API Key is required");
         }
         this.apiKey = resolvedKey;
         this.endpoint = _NvidiaProvider.normalizeEndpoint(endpoint);
+        if (modelId) {
+          this.selectedModel = modelId;
+        }
       }
       static detectEnvironmentCredential() {
         return !!(process.env.NVIDIA_API_KEY && process.env.NVIDIA_API_KEY.trim().length > 0);
       }
-      static async testConnection(apiKey, endpoint = _NvidiaProvider.DEFAULT_ENDPOINT, timeoutMs = 15e3, model = _NvidiaProvider.DEFAULT_MODEL) {
+      static async testConnection(apiKey, endpoint = _NvidiaProvider.DEFAULT_ENDPOINT, timeoutMs = 15e3, model) {
         const resolvedEndpoint = _NvidiaProvider.normalizeEndpoint(endpoint);
         if (!apiKey || !apiKey.trim()) {
           return {
@@ -31421,6 +31654,7 @@ var require_dist17 = __commonJS({
         const startTime = Date.now();
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
+        const activeModel = model || NvidiaModelCatalog.getDefault().id;
         const ping = async (modelToTest) => {
           const body = {
             model: modelToTest,
@@ -31438,19 +31672,14 @@ var require_dist17 = __commonJS({
           });
         };
         try {
-          let activeModel = model;
-          let response = await ping(activeModel);
-          if (response.status === 404 && activeModel !== _NvidiaProvider.FALLBACK_MODEL) {
-            activeModel = _NvidiaProvider.FALLBACK_MODEL;
-            response = await ping(activeModel);
-          }
+          const response = await ping(activeModel);
           clearTimeout(timer);
           const latencyMs = Date.now() - startTime;
           if (response.ok) {
             return {
               provider: "nvidia",
               status: "CONNECTED",
-              model: activeModel === _NvidiaProvider.FALLBACK_MODEL ? "Nemotron 4 340B" : "Nemotron 3 Ultra",
+              model: activeModel,
               latencyMs
             };
           }
@@ -31465,7 +31694,7 @@ var require_dist17 = __commonJS({
             return {
               provider: "nvidia",
               status: "CONNECTION_ERROR",
-              message: `NVIDIA API returned HTTP 404. Neither Nemotron 3 Ultra nor Nemotron 4 could be accessed on this endpoint. Check model access or endpoint.`
+              message: `NVIDIA API returned HTTP 404. Model ${activeModel} could not be accessed.`
             };
           }
           return {
@@ -31479,7 +31708,7 @@ var require_dist17 = __commonJS({
             return {
               provider: "nvidia",
               status: "TIMEOUT",
-              message: `Connection to NVIDIA API timed out after ${Math.round(timeoutMs / 1e3)}s. NVIDIA cloud endpoints may be experiencing high queue times, cold-start latency, or network delays.`
+              message: `Connection to NVIDIA API timed out after ${Math.round(timeoutMs / 1e3)}s.`
             };
           }
           return {
@@ -31490,19 +31719,16 @@ var require_dist17 = __commonJS({
         }
       }
       async testConnection() {
-        return _NvidiaProvider.testConnection(this.apiKey, this.endpoint);
+        return _NvidiaProvider.testConnection(this.apiKey, this.endpoint, void 0, this.selectedModel);
       }
       getCapabilities() {
-        return {
-          toolCalling: true,
-          streaming: true,
-          reasoning: true,
-          vision: false,
-          structuredOutput: true,
-          maxContextTokens: 128e3
-        };
+        try {
+          return NvidiaModelCatalog.get(this.selectedModel).capabilities;
+        } catch {
+          return NvidiaModelCatalog.getDefault().capabilities;
+        }
       }
-      mapMessages(request) {
+      mapMessages(request, supportsMultimodal) {
         const messages = [];
         if (request.systemPrompt) {
           messages.push({ role: "system", content: request.systemPrompt });
@@ -31529,7 +31755,26 @@ var require_dist17 = __commonJS({
                 }))
               });
             } else {
-              messages.push({ role: msg.role, content: msg.content });
+              if (Array.isArray(msg.content)) {
+                if (supportsMultimodal) {
+                  const formattedContent = msg.content.map((part) => {
+                    if (part.type === "text") return { type: "text", text: part.text };
+                    if (part.type === "image_url") {
+                      if (part.imageUrl.startsWith("file://") || !part.imageUrl.startsWith("https://") && !part.imageUrl.startsWith("data:")) {
+                        throw new import_shared2.ProviderInvalidRequestError("Image URL must be HTTPS or data URI.");
+                      }
+                      return { type: "image_url", image_url: { url: part.imageUrl } };
+                    }
+                    return part;
+                  });
+                  messages.push({ role: msg.role, content: formattedContent });
+                } else {
+                  const textContent = msg.content.filter((p) => p.type === "text").map((p) => p.text).join("\n");
+                  messages.push({ role: msg.role, content: textContent });
+                }
+              } else {
+                messages.push({ role: msg.role, content: msg.content });
+              }
             }
           }
         } else {
@@ -31549,15 +31794,40 @@ var require_dist17 = __commonJS({
         }));
       }
       async generate(request, context) {
-        const messages = this.mapMessages(request);
-        const tools = this.mapTools(request.tools);
+        const modelId = request.model || this.selectedModel;
+        let profile;
+        try {
+          profile = NvidiaModelCatalog.get(modelId);
+        } catch (e) {
+          throw new import_shared2.UnsupportedModelError(e.message);
+        }
+        const messages = this.mapMessages(request, profile.capabilities.multimodal ?? false);
+        const tools = profile.capabilities.toolCalling ? this.mapTools(request.tools) : void 0;
+        const stream = request.temperature !== void 0 ? request.stream : profile.defaults.stream;
         const body = {
-          model: _NvidiaProvider.DEFAULT_MODEL,
+          model: modelId,
           messages,
-          temperature: request.temperature ?? 0.1,
-          max_tokens: request.maxTokens ?? 1024,
-          chat_template_kwargs: { enable_thinking: true }
+          temperature: request.temperature ?? profile.defaults.temperature,
+          max_tokens: request.maxTokens ?? profile.defaults.maxTokens,
+          stream: stream ?? false
         };
+        if (profile.defaults.topP !== void 0) {
+          body.top_p = profile.defaults.topP;
+        }
+        if (profile.defaults.seed !== void 0) {
+          body.seed = profile.defaults.seed;
+        }
+        if (profile.modelSpecificOptions) {
+          if (profile.modelSpecificOptions.chatTemplateKwargs) {
+            body.chat_template_kwargs = profile.modelSpecificOptions.chatTemplateKwargs;
+          }
+          if (profile.modelSpecificOptions.reasoningBudget !== void 0) {
+            body.reasoning_budget = profile.modelSpecificOptions.reasoningBudget;
+          }
+          if (profile.modelSpecificOptions.reasoningEffort !== void 0) {
+            body.reasoning_effort = profile.modelSpecificOptions.reasoningEffort;
+          }
+        }
         if (tools) {
           body.tools = tools;
           body.tool_choice = "auto";
@@ -31578,54 +31848,149 @@ var require_dist17 = __commonJS({
           if (!response.ok) {
             const errorText = await response.text();
             const sanitizedText = errorText.slice(0, 100).replace(this.apiKey, "[REDACTED]");
-            const message2 = `NVIDIA API Error: ${response.status} - ${sanitizedText}`;
+            const message = `NVIDIA API Error: ${response.status} - ${sanitizedText}`;
             if (response.status === 401 || response.status === 403) {
-              throw new import_shared.ProviderAuthenticationError(message2);
+              throw new import_shared2.ProviderAuthenticationError(message);
             } else if (response.status === 429) {
-              throw new import_shared.ProviderRateLimitError(message2);
+              throw new import_shared2.ProviderRateLimitError(message);
             } else if (response.status === 400 || response.status === 422) {
-              throw new import_shared.ProviderInvalidRequestError(message2);
+              throw new import_shared2.ProviderInvalidRequestError(message);
             } else {
-              throw new import_shared.ProviderError(message2);
+              throw new import_shared2.ProviderError(message);
             }
           }
-          const data = await response.json();
-          if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new import_shared.ProviderProtocolError("NVIDIA API returned malformed response payload.");
-          }
-          const message = data.choices[0].message;
-          let toolCalls;
-          if (message.tool_calls && message.tool_calls.length > 0) {
-            toolCalls = message.tool_calls.map((tc) => {
-              let parsedArgs = tc.function.arguments;
-              if (typeof parsedArgs === "string") {
-                try {
-                  parsedArgs = JSON.parse(parsedArgs);
-                } catch {
+          if (body.stream && response.body) {
+            return this.parseStream(response.body, context);
+          } else {
+            const data = await response.json();
+            if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+              throw new import_shared2.ProviderProtocolError("NVIDIA API returned malformed response payload.");
+            }
+            const message = data.choices[0].message;
+            let toolCalls;
+            if (message.tool_calls && message.tool_calls.length > 0) {
+              toolCalls = message.tool_calls.map((tc) => {
+                let parsedArgs = tc.function.arguments;
+                if (typeof parsedArgs === "string") {
+                  try {
+                    parsedArgs = JSON.parse(parsedArgs);
+                  } catch {
+                  }
                 }
-              }
-              return {
-                id: tc.id,
-                name: tc.function.name,
-                arguments: parsedArgs
-              };
-            });
-          }
-          const extracted = _NvidiaProvider.extractThinking(message.content || "", message.reasoning_content);
-          return {
-            text: extracted.text,
-            thinking: extracted.thinking,
-            toolCalls,
-            usage: {
-              promptTokens: data.usage?.prompt_tokens ?? 0,
-              completionTokens: data.usage?.completion_tokens ?? 0,
-              totalTokens: data.usage?.total_tokens ?? 0
+                return {
+                  id: tc.id,
+                  name: tc.function.name,
+                  arguments: parsedArgs
+                };
+              });
             }
-          };
+            const extracted = _NvidiaProvider.extractThinking(message.content || "", message.reasoning_content || message.reasoning);
+            return {
+              text: extracted.text,
+              thinking: extracted.thinking,
+              toolCalls,
+              usage: {
+                promptTokens: data.usage?.prompt_tokens ?? 0,
+                completionTokens: data.usage?.completion_tokens ?? 0,
+                totalTokens: data.usage?.total_tokens ?? 0
+              }
+            };
+          }
         } catch (error) {
-          if (error instanceof import_shared.ProviderError) throw error;
-          throw new import_shared.ProviderError(`Failed to call NVIDIA API: ${error.message}`);
+          if (error instanceof import_shared2.ProviderError) throw error;
+          if (error.name === "AbortError" || context?.signal?.aborted) {
+            throw new import_shared2.ProviderError("Request cancelled.");
+          }
+          throw new import_shared2.ProviderError(`Failed to call NVIDIA API: ${error.message}`);
         }
+      }
+      async parseStream(body, context) {
+        const reader = body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let fullText = "";
+        let fullReasoning = "";
+        let toolCallsMap = /* @__PURE__ */ new Map();
+        let promptTokens = 0;
+        let completionTokens = 0;
+        let totalTokens = 0;
+        let buffer = "";
+        try {
+          while (true) {
+            if (context?.signal?.aborted) {
+              throw new import_shared2.ProviderError("Request cancelled.");
+            }
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              if (line.trim() === "" || !line.startsWith("data: ")) continue;
+              const dataStr = line.replace(/^data: /, "").trim();
+              if (dataStr === "[DONE]") continue;
+              try {
+                const data = JSON.parse(dataStr);
+                if (data.usage) {
+                  promptTokens = data.usage.prompt_tokens ?? promptTokens;
+                  completionTokens = data.usage.completion_tokens ?? completionTokens;
+                  totalTokens = data.usage.total_tokens ?? totalTokens;
+                }
+                if (!data.choices || !data.choices[0] || !data.choices[0].delta) continue;
+                const delta = data.choices[0].delta;
+                if (delta.content) {
+                  fullText += delta.content;
+                }
+                if (delta.reasoning_content || delta.reasoning) {
+                  fullReasoning += delta.reasoning_content || delta.reasoning;
+                }
+                if (delta.tool_calls) {
+                  for (const tc of delta.tool_calls) {
+                    const index = tc.index;
+                    if (!toolCallsMap.has(index)) {
+                      toolCallsMap.set(index, {
+                        id: tc.id || `call_${index}`,
+                        type: "function",
+                        function: { name: tc.function?.name || "", arguments: tc.function?.arguments || "" }
+                      });
+                    } else {
+                      const existing = toolCallsMap.get(index);
+                      if (tc.function?.arguments) {
+                        existing.function.arguments += tc.function.arguments;
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        let toolCalls;
+        if (toolCallsMap.size > 0) {
+          toolCalls = Array.from(toolCallsMap.values()).map((tc) => {
+            let parsedArgs = tc.function.arguments;
+            try {
+              if (typeof parsedArgs === "string" && parsedArgs.trim() !== "") {
+                parsedArgs = JSON.parse(parsedArgs);
+              }
+            } catch {
+            }
+            return {
+              id: tc.id,
+              name: tc.function.name,
+              arguments: parsedArgs
+            };
+          });
+        }
+        const extracted = _NvidiaProvider.extractThinking(fullText, fullReasoning);
+        return {
+          text: extracted.text,
+          thinking: extracted.thinking,
+          toolCalls,
+          usage: { promptTokens, completionTokens, totalTokens }
+        };
       }
       static extractThinking(content, reasoningContent) {
         let rawContent = content || "";
