@@ -22,6 +22,64 @@ export interface TaskRequest {
   };
 }
 
+export type TraceEventType =
+  | "MODEL_REQUEST"
+  | "MODEL_RESPONSE"
+  | "TOOL_REQUEST"
+  | "TOOL_STARTED"
+  | "TOOL_COMPLETED"
+  | "TOOL_FAILED"
+  | "VALIDATION_STARTED"
+  | "VALIDATION_COMPLETED"
+  | "STATE_CHANGED";
+
+export interface ExecutionTraceEvent extends AgentEventBase {
+  type: "execution.trace";
+  runId: string;
+  stepId: string;
+  toolCallId?: string;
+  eventType: TraceEventType;
+}
+
+export interface ModelRequestEventBase extends AgentEventBase {
+  requestId: string;
+  runId: string;
+  attempt: number;
+}
+
+export interface ModelRequestCreatedEvent extends ModelRequestEventBase {
+  type: "model_request.created";
+}
+
+export interface ModelRequestStartedEvent extends ModelRequestEventBase {
+  type: "model_request.started";
+}
+
+export interface ModelRequestSucceededEvent extends ModelRequestEventBase {
+  type: "model_request.succeeded";
+  latencyMs: number;
+}
+
+export interface ModelRequestFailedEvent extends ModelRequestEventBase {
+  type: "model_request.failed";
+  error: string;
+}
+
+export interface ModelRequestTimedOutEvent extends ModelRequestEventBase {
+  type: "model_request.timed_out";
+  timeoutMs: number;
+}
+
+export interface ModelRequestCancelledEvent extends ModelRequestEventBase {
+  type: "model_request.cancelled";
+}
+
+export interface ModelRequestRetryingEvent extends ModelRequestEventBase {
+  type: "model_request.retrying";
+  delayMs: number;
+  nextAttempt: number;
+}
+
 export interface AgentEventBase {
   type: string;
   eventId: string;
@@ -478,6 +536,15 @@ export type AgentEvent =
   | InteractionRequestedEvent
   | InteractionRespondedEvent
   | InteractionExpiredEvent
+  // Phase 8 additions:
+  | ExecutionTraceEvent
+  | ModelRequestCreatedEvent
+  | ModelRequestStartedEvent
+  | ModelRequestSucceededEvent
+  | ModelRequestFailedEvent
+  | ModelRequestTimedOutEvent
+  | ModelRequestCancelledEvent
+  | ModelRequestRetryingEvent
   // Milestone 7 additions:
   | MemoryRecordedEvent
   | MemoryUpdatedEvent

@@ -13,6 +13,8 @@ export interface CancellationSignal {
 
 export interface ToolContext {
   taskId: string;
+  runId?: string;
+  stepId?: string;
   workspace: {
     rootPath: string;
   };
@@ -28,6 +30,10 @@ export interface ToolContext {
     maxConcurrentProcesses?: number;
   };
   permissions?: ToolPermissions;
+  onTrace?: (
+    eventType: "TOOL_REQUEST" | "TOOL_STARTED" | "TOOL_COMPLETED" | "TOOL_FAILED" | "VALIDATION_STARTED" | "VALIDATION_COMPLETED",
+    toolCallId?: string
+  ) => void;
 }
 
 export interface AgentTool<TArgs = any, TResult = any> {

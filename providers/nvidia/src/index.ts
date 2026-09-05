@@ -1,6 +1,12 @@
-import { ModelProvider, ModelCapabilities, ModelRequest, ModelResponse, ToolCall, ModelMessage } from "@comu/model-core";
+import { ModelProvider, ModelCapabilities, ModelRequest, ModelResponse, ToolCall, ModelMessage, ModelRequestContext } from "@comu/model-core";
 import { ProviderTestResult, ProviderStatus } from "@comu/protocol";
-import { ProviderError } from "@comu/shared";
+import { 
+  ProviderError,
+  ProviderAuthenticationError,
+  ProviderRateLimitError,
+  ProviderInvalidRequestError,
+  ProviderProtocolError
+} from "@comu/shared";
 
 export class NvidiaProvider implements ModelProvider {
   public id = "nvidia";
@@ -213,7 +219,7 @@ export class NvidiaProvider implements ModelProvider {
     }));
   }
 
-  async generate(request: ModelRequest): Promise<ModelResponse> {
+  async generate(request: ModelRequest, context?: ModelRequestContext): Promise<ModelResponse> {
     const messages = this.mapMessages(request);
     const tools = this.mapTools(request.tools);
 
@@ -231,21 +237,42 @@ export class NvidiaProvider implements ModelProvider {
     }
 
     try {
-      const response = await fetch(this.endpoint, {
+      const fetchOptions: RequestInit = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${this.apiKey}`
         },
         body: JSON.stringify(body)
-      });
+      };
+
+      if (context?.signal) {
+        fetchOptions.signal = context.signal;
+      }
+
+      const response = await fetch(this.endpoint, fetchOptions);
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new ProviderError(`NVIDIA API Error: ${response.status} - ${errorText.slice(0, 100)}`);
+        const sanitizedText = errorText.slice(0, 100).replace(this.apiKey, "[REDACTED]");
+        const message = `NVIDIA API Error: ${response.status} - ${sanitizedText}`;
+        
+        if (response.status === 401 || response.status === 403) {
+          throw new ProviderAuthenticationError(message);
+        } else if (response.status === 429) {
+          throw new ProviderRateLimitError(message);
+        } else if (response.status === 400 || response.status === 422) {
+          throw new ProviderInvalidRequestError(message);
+        } else {
+          throw new ProviderError(message);
+        }
       }
 
       const data = (await response.json()) as any;
+      if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new ProviderProtocolError("NVIDIA API returned malformed response payload.");
+      }
+      
       const message = data.choices[0].message;
 
       let toolCalls: ToolCall[] | undefined;

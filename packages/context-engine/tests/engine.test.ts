@@ -32,33 +32,39 @@ describe("Context Engine", () => {
       taskId: "test",
       prompt: "hi",
       modelId: "test",
-      workspace: { rootPath: root },
-      editor: {
-        activeFile: "src/active.ts",
-        openFiles: ["src/active.ts", "src/open.ts"],
-        selection: { filePath: "src/active.ts", startLine: 1, endLine: 1, startCharacter: 0, endCharacter: 5, text: "active" }
-      }
+      workspace: { rootPath: root }
+    };
+
+    const ws = {
+      activeFile: { path: "src/active.ts", content: "active file content", isTruncated: false },
+      openFiles: [
+        { path: "src/open.ts", content: "open file content".repeat(100), isTruncated: false }
+      ],
+      recentlyInspectedFiles: [],
+      searchResults: [],
+      diagnostics: [],
+      modifiedFiles: [],
+      budgets: { maxOpenFiles: 10, maxInspectedFiles: 10, maxSearchResults: 50, maxDiagnostics: 20, maxModifiedFiles: 20 },
+      revision: 1,
+      selection: { filePath: "src/active.ts", startLine: 1, endLine: 1, startCharacter: 0, endCharacter: 5, text: "active" }
     };
 
     const budget = {
       maxTotalChars: 1000,
-      maxFileChars: 100, // Small limit to force truncation
+      maxFileChars: 100, // Small limit
       maxTreeDepth: 2
     };
 
-    const compiled = await engine.compile(request, budget);
+    const compiled = await engine.compile(request, ws, budget);
 
     expect(compiled.workspace.rootPath).toBe(root);
     expect(compiled.selection?.text).toBe("active");
     
     // Check active file
     expect(compiled.activeFile?.content).toBe("active file content");
-    expect(compiled.activeFile?.isTruncated).toBe(false);
 
-    // Check open file (should be truncated because length > maxFileChars)
-    expect(compiled.openFiles).toHaveLength(1);
-    expect(compiled.openFiles[0].isTruncated).toBe(true);
-    expect(compiled.openFiles[0].content.length).toBe(100);
+    // Check open file (should be omitted completely because length > maxTotalChars budget)
+    expect(compiled.openFiles).toHaveLength(0);
 
     // Check repository map
     expect(compiled.repositoryMap?.tree).toContain("src/");

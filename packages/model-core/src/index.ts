@@ -46,11 +46,22 @@ export interface ModelResponse {
   };
 }
 
+export interface ModelRequestContext {
+  requestId: string;
+  taskId: string;
+  runId: string;
+  timeoutMs: number;
+  signal: AbortSignal;
+  attempt: number;
+  maxAttempts: number;
+  startedAt: number;
+}
+
 export interface ModelProvider {
   id: string;
   name: string;
   getCapabilities(): ModelCapabilities;
-  generate(request: ModelRequest): Promise<ModelResponse>;
+  generate(request: ModelRequest, context?: ModelRequestContext): Promise<ModelResponse>;
 }
 
 export interface ModelProfile {
@@ -62,3 +73,5 @@ export interface ModelProfile {
 export interface ModelRouter {
   selectModel(task: any, availableModels: ModelProfile[]): Promise<ModelProfile>;
 }
+
+export * from "./manager.js";
