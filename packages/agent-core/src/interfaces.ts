@@ -11,6 +11,7 @@ import {
 export type AgentState =
   | "IDLE"
   | "STARTING"
+  | "CLASSIFYING"
   | "ANALYZING"
   | "PLANNING"
   | "THINKING"

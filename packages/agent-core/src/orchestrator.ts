@@ -1,4 +1,5 @@
 import { AgentState, OrchestratorContext, AgentResult } from "./interfaces.js";
+import { TaskContract } from "./interaction/task_contract.js";
 import { ModelProvider, ModelMessage, ToolDefinition } from "@comu/model-core";
 import { ToolExecutor, ToolRegistry, ToolContext } from "@comu/tool-core";
 import { DiffEngine, ChangeSet } from "@comu/diff-engine";
@@ -72,18 +73,71 @@ export class AgentOrchestrator {
     return this.state;
   }
 
-  private changeState(ctx: OrchestratorContext, newState: AgentState, message?: string) {
-    this.state = newState;
+  public transition(ctx: OrchestratorContext, newState: AgentState, message?: string, contract?: any) {
+    const from = this.state;
+    const to = newState;
+
+    // Transition map
+    const validTransitions: Record<AgentState, AgentState[]> = {
+      IDLE: ["STARTING"],
+      STARTING: ["CLASSIFYING", "CANCELLED", "FAILED"],
+      CLASSIFYING: ["ANALYZING", "PLANNING", "THINKING", "WAITING_FOR_USER", "COMPLETED", "CANCELLED", "FAILED"],
+      ANALYZING: ["PLANNING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      PLANNING: ["THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      THINKING: ["TOOL_CALLING", "OBSERVING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      TOOL_CALLING: ["OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      OBSERVING: ["VERIFYING", "THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      VERIFYING: ["DIAGNOSING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      DIAGNOSING: ["REPAIRING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
+      REPAIRING: ["VERIFYING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
+      WAITING_FOR_USER: ["CLASSIFYING", "ANALYZING", "THINKING", "CANCELLED", "FAILED"],
+      COMPLETED: [],
+      FAILED: [],
+      CANCELLED: [],
+      LIMIT_REACHED: []
+    };
+
+    if (!validTransitions[from]?.includes(to)) {
+      throw new Error(`Invalid state transition from ${from} to ${to}`);
+    }
+
+    if (contract) {
+      if (to === "TOOL_CALLING" && (contract.mode === "CHAT" || contract.mode === "PLAN")) {
+        throw new Error(`Invalid state transition: ${contract.mode} mode cannot enter TOOL_CALLING`);
+      }
+      if (to === "REPAIRING" && contract.mode !== "AGENT") {
+        throw new Error(`Invalid state transition: ${contract.mode} mode cannot enter REPAIRING`);
+      }
+    }
+
+    this.state = to;
     ctx.onEvent({
       type: "agent.status",
       eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2)}`,
       taskId: ctx.taskId,
       timestamp: new Date().toISOString(),
-      status: message || newState
+      status: message || to
     });
   }
 
   public async run(ctx: OrchestratorContext): Promise<AgentResult> {
+    const { AgentKernel } = await import("./agent_kernel.js");
+    const kernel = new AgentKernel(this);
+    return kernel.handle({
+      taskId: ctx.taskId,
+      runId: ctx.taskId,
+      systemPrompt: ctx.systemPrompt,
+      userPrompt: ctx.userPrompt,
+      workspaceRoot: ctx.workspaceRoot,
+      workspaceId: ctx.workspaceId,
+      limits: ctx.limits,
+      abortSignal: ctx.abortSignal,
+      onEvent: ctx.onEvent,
+      gitConfig: ctx.gitConfig
+    });
+  }
+
+  public async runWithContract(ctx: OrchestratorContext, contract: TaskContract): Promise<AgentResult> {
     const startTime = Date.now();
     let steps = 0;
     let toolCallsCount = 0;
@@ -96,7 +150,7 @@ export class AgentOrchestrator {
       timestamp: new Date().toISOString()
     });
 
-    this.changeState(ctx, "STARTING", "Initializing task");
+    this.transition(ctx, "STARTING", "Initializing task", contract);
 
     const changeSet: ChangeSet = this.diffEngine.createChangeSet(ctx.taskId);
 
@@ -108,7 +162,7 @@ export class AgentOrchestrator {
     };
 
     if (ctx.abortSignal?.aborted) {
-      this.changeState(ctx, "CANCELLED", "Task was cancelled");
+      this.transition(ctx, "CANCELLED", "Task was cancelled");
       ctx.onEvent({
         type: "task.cancelled",
         eventId: `evt-${Date.now()}`,
@@ -121,7 +175,7 @@ export class AgentOrchestrator {
     // ==========================================
     // Phase 1: Task Analysis, Memory & Planning
     // ==========================================
-    this.changeState(ctx, "ANALYZING", "Analyzing task and workspace requirements");
+    this.transition(ctx, "ANALYZING", "Analyzing task and workspace requirements");
 
     let memoryContext = "";
     if (this.memoryEngine) {
@@ -158,11 +212,11 @@ export class AgentOrchestrator {
 
     let currentPlan: TaskPlan;
     try {
-      this.changeState(ctx, "PLANNING", "Generating structured engineering plan");
+      this.transition(ctx, "PLANNING", "Generating structured engineering plan");
       currentPlan = await this.planner.createPlan(ctx.taskId, ctx.userPrompt, ctx.abortSignal);
     } catch (planError: any) {
       if (ctx.abortSignal?.aborted) {
-        this.changeState(ctx, "CANCELLED", "Task was cancelled");
+        this.transition(ctx, "CANCELLED", "Task was cancelled");
         ctx.onEvent({
           type: "task.cancelled",
           eventId: `evt-${Date.now()}`,
@@ -171,7 +225,7 @@ export class AgentOrchestrator {
         });
         return { status: "cancelled", steps: 0, changeSet };
       }
-      this.changeState(ctx, "FAILED", `Planning error: ${planError.message}`);
+      this.transition(ctx, "FAILED", `Planning error: ${planError.message}`);
       ctx.onEvent({
         type: "task.failed",
         error: planError.message,
@@ -228,7 +282,7 @@ export class AgentOrchestrator {
     // ==========================================
     while (true) {
       if (ctx.abortSignal?.aborted) {
-        this.changeState(ctx, "CANCELLED", "Task was cancelled");
+        this.transition(ctx, "CANCELLED", "Task was cancelled");
         ctx.onEvent({
           type: "task.cancelled",
           eventId: `evt-${Date.now()}`,
@@ -239,7 +293,7 @@ export class AgentOrchestrator {
       }
 
       if (steps >= ctx.limits.maxSteps) {
-        this.changeState(ctx, "LIMIT_REACHED", `Max steps (${ctx.limits.maxSteps}) reached`);
+        this.transition(ctx, "LIMIT_REACHED", `Max steps (${ctx.limits.maxSteps}) reached`);
         ctx.onEvent({
           type: "agent.limit_reached",
           limit: "maxSteps",
@@ -251,7 +305,7 @@ export class AgentOrchestrator {
       }
 
       if (Date.now() - startTime > ctx.limits.maxExecutionTimeMs) {
-        this.changeState(ctx, "LIMIT_REACHED", "Max execution time reached");
+        this.transition(ctx, "LIMIT_REACHED", "Max execution time reached");
         ctx.onEvent({
           type: "agent.limit_reached",
           limit: "maxExecutionTimeMs",
@@ -304,7 +358,7 @@ export class AgentOrchestrator {
 
       // If the current step is a VALIDATE step, trigger VerificationEngine directly
       if (currentStep && currentStep.type === "VALIDATE") {
-        this.changeState(ctx, "VERIFYING", "Executing verification checks");
+        this.transition(ctx, "VERIFYING", "Executing verification checks");
         totalValidationRuns++;
 
         const changedFiles = Array.from(changeSet.changes.keys());
@@ -386,7 +440,7 @@ export class AgentOrchestrator {
             lastVerification.checks[0];
 
           if (failedCheck && failedCheck.status === "FAILED") {
-            this.changeState(ctx, "DIAGNOSING", `Diagnosing failure in ${failedCheck.name}`);
+            this.transition(ctx, "DIAGNOSING", `Diagnosing failure in ${failedCheck.name}`);
             lastDiagnosis = Diagnostician.diagnose(ctx.taskId, failedCheck);
 
             ctx.onEvent({
@@ -429,7 +483,7 @@ export class AgentOrchestrator {
                 createdAt: new Date().toISOString()
               });
 
-              this.changeState(ctx, "REPAIRING", `Repairing failure in ${repairDecision.targetFiles.join(", ")}`);
+              this.transition(ctx, "REPAIRING", `Repairing failure in ${repairDecision.targetFiles.join(", ")}`);
               
               // Dynamically mutate plan
               const mutatedPlan = this.planner.createRepairPlan(
@@ -463,7 +517,7 @@ export class AgentOrchestrator {
               // Repair ineligible (duplicate repair strategy or repair limits reached)
               const reason = repairDecision.reason;
               if (reason.includes("DUPLICATE_REPAIR_STRATEGY")) {
-                this.changeState(ctx, "LIMIT_REACHED", reason);
+                this.transition(ctx, "LIMIT_REACHED", reason);
                 ctx.onEvent({
                   type: "agent.limit_reached",
                   limit: "duplicateRepairStrategy",
@@ -482,7 +536,7 @@ export class AgentOrchestrator {
                   repairAttempts: this.repairEngine.getAttempts(ctx.taskId)
                 };
               } else {
-                this.changeState(ctx, "FAILED", reason);
+                this.transition(ctx, "FAILED", reason);
                 ctx.onEvent({
                   type: "task.failed",
                   error: reason,
@@ -505,7 +559,7 @@ export class AgentOrchestrator {
           } else {
             // Unavailable required check or other non-recoverable error
             const errSummary = lastVerification.summary;
-            this.changeState(ctx, "FAILED", errSummary);
+            this.transition(ctx, "FAILED", errSummary);
             ctx.onEvent({
               type: "task.failed",
               error: errSummary,
@@ -526,7 +580,7 @@ export class AgentOrchestrator {
       }
 
       // Step execution via Model
-      this.changeState(ctx, "THINKING", "Thinking...");
+      this.transition(ctx, "THINKING", "Thinking...");
       steps++;
 
       let response;
@@ -538,7 +592,7 @@ export class AgentOrchestrator {
           tools
         });
       } catch (err: any) {
-        this.changeState(ctx, "FAILED", `Provider Error: ${err.message}`);
+        this.transition(ctx, "FAILED", `Provider Error: ${err.message}`);
         ctx.onEvent({
           type: "task.failed",
           error: err.message,
@@ -599,12 +653,12 @@ export class AgentOrchestrator {
       }
 
       // Execute tool calls
-      this.changeState(ctx, "TOOL_CALLING", "Executing tools...");
+      this.transition(ctx, "TOOL_CALLING", "Executing tools...");
 
       for (const tc of response.toolCalls) {
         toolCallsCount++;
         if (toolCallsCount > ctx.limits.maxToolCalls) {
-          this.changeState(ctx, "LIMIT_REACHED", `Max tool calls (${ctx.limits.maxToolCalls}) reached`);
+          this.transition(ctx, "LIMIT_REACHED", `Max tool calls (${ctx.limits.maxToolCalls}) reached`);
           ctx.onEvent({
             type: "agent.limit_reached",
             limit: "maxToolCalls",
@@ -731,7 +785,7 @@ export class AgentOrchestrator {
                 const changed = baselineExists !== finalExists || baselineHash !== finalHash;
                 if (changed) {
                   if (readError && !baselineExists) {
-                    this.changeState(ctx, "FAILED", "Mutation failed and workspace state cannot be verified.");
+                    this.transition(ctx, "FAILED", "Mutation failed and workspace state cannot be verified.");
                     ctx.onEvent({
                       type: "task.failed",
                       error: "Workspace state unknown",
@@ -742,7 +796,7 @@ export class AgentOrchestrator {
                     });
                     return { status: "failed", error: "WORKSPACE_STATE_UNKNOWN", steps, changeSet, plan: planManager.getPlan() };
                   } else {
-                    this.changeState(ctx, "FAILED", "Integrity Error: Workspace mutated despite tool failure");
+                    this.transition(ctx, "FAILED", "Integrity Error: Workspace mutated despite tool failure");
                     ctx.onEvent({
                       type: "task.failed",
                       error: "Workspace state changed after failure",
@@ -808,7 +862,7 @@ export class AgentOrchestrator {
         });
       }
 
-      this.changeState(ctx, "OBSERVING", "Observing results");
+      this.transition(ctx, "OBSERVING", "Observing results");
     }
   }
 
@@ -822,7 +876,7 @@ export class AgentOrchestrator {
     toolCtx: any,
     finalText?: string
   ): Promise<AgentResult> {
-    this.changeState(ctx, "VERIFYING", "Evaluating completion gate and workspace integrity");
+    this.transition(ctx, "VERIFYING", "Evaluating completion gate and workspace integrity");
 
     // Run final verification if not already passed
     if (!lastVerification || lastVerification.status !== "PASSED") {
@@ -989,7 +1043,7 @@ export class AgentOrchestrator {
 
       const cleanFinalText = finalText ? finalText.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim() : undefined;
 
-      this.changeState(ctx, "COMPLETED", "Task verified and completed successfully");
+      this.transition(ctx, "COMPLETED", "Task verified and completed successfully");
       ctx.onEvent({
         type: "task.completed",
         eventId: `evt-${Date.now()}`,
@@ -1037,7 +1091,7 @@ export class AgentOrchestrator {
         }
       }
 
-      this.changeState(ctx, "FAILED", gateFailureReason);
+      this.transition(ctx, "FAILED", gateFailureReason);
       ctx.onEvent({
         type: "task.failed",
         error: gateFailureReason,
