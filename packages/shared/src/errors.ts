@@ -20,6 +20,7 @@ export class ProviderUnavailableError extends ProviderError {}
 export class ProviderProtocolError extends ProviderError {}
 export class ProviderCancelledError extends ProviderError {}
 export class ProviderUnknownError extends ProviderError {}
+export class UnsupportedModelError extends ProviderError {}
 
 export class ToolError extends BaseError {}
 export class PermissionError extends BaseError {}

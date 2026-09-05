@@ -199,6 +199,7 @@ describe("Agent Orchestrator M6", () => {
     };
 
     const res = await orchestrator.run(ctx);
+    console.log("RESULT:", res);
     expect(res.status).toBe("completed");
     expect(res.plan?.steps).toHaveLength(1);
     expect(res.finalText).toBe("Here is C++ sample code:\n```cpp\nint main() { return 0; }\n```");

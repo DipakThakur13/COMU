@@ -17,13 +17,49 @@ export class ProviderManager {
         {
             id: 'nvidia',
             displayName: 'NVIDIA',
-            description: 'NVIDIA Nemotron high-performance engineering models. Bring your own NVIDIA API key.',
+            description: 'NVIDIA NIM high-performance engineering models. Bring your own NVIDIA API key.',
             defaultEndpoint: NvidiaProvider.DEFAULT_ENDPOINT,
             models: [
                 {
-                    id: 'nvidia-nemotron-3-ultra',
-                    name: 'Nemotron 3 Ultra',
-                    description: 'Optimized for reasoning, refactoring, and deterministic coding',
+                    id: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+                    name: 'Nemotron 3.5 Lightning 30B-A3B',
+                    description: 'Fast Agent',
+                    contextTokens: 128000
+                },
+                {
+                    id: 'deepseek-ai/deepseek-v4-pro-0813',
+                    name: 'DeepSeek V4 Pro 0813',
+                    description: 'Deep Engineering',
+                    contextTokens: 128000
+                },
+                {
+                    id: 'deepseek-ai/deepseek-v4-flash-0731',
+                    name: 'DeepSeek V4 Flash 0731',
+                    description: 'Fast Agent + Chat',
+                    contextTokens: 128000
+                },
+                {
+                    id: 'moonshotai/kimi-k3',
+                    name: 'Kimi K3',
+                    description: 'Frontier Coding',
+                    contextTokens: 128000
+                },
+                {
+                    id: 'poolside/laguna-xs-2.1',
+                    name: 'Laguna XS 2.1',
+                    description: 'Long-Horizon Coding',
+                    contextTokens: 32768
+                },
+                {
+                    id: 'meta/muse-glimmer-30b',
+                    name: 'Muse Glimmer 30B',
+                    description: 'Multimodal Specialist',
+                    contextTokens: 128000
+                },
+                {
+                    id: 'nvidia/nemotron-3-ultra-550b-a55b',
+                    name: 'Nemotron 3 Ultra (Legacy)',
+                    description: 'Legacy / High Compute',
                     contextTokens: 128000
                 }
             ]
