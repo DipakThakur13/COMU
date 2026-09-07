@@ -19,8 +19,8 @@ function walk(dir) {
 const files = walk('d:/COMU');
 for (const file of files) {
     let content = fs.readFileSync(file, 'utf8');
-    if (content.includes('"version": "0.1.6"')) {
-        content = content.replace(/"version": "0.1.6"/g, '"version": "0.1.7"');
+    if (content.includes('"version": "0.1.7"')) {
+        content = content.replace(/"version": "0.1.7"/g, '"version": "0.1.8"');
         fs.writeFileSync(file, content);
         console.log('Updated ' + file);
     }
