@@ -59,7 +59,7 @@ export interface ChatSessionStateUI {
   taskId?: string;
   prompt?: string;
   modelId?: string;
-  status: "idle" | "running" | "waiting_for_user" | "completed" | "failed" | "cancelled" | "offline";
+  status: "idle" | "running" | "cancelling" | "waiting_for_user" | "completed" | "failed" | "cancelled" | "offline";
   events: AgentEvent[];
   changes: ChangeSummary[];
   finalResponse?: string;

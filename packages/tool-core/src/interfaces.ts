@@ -18,6 +18,7 @@ export interface ToolContext {
   workspace: {
     rootPath: string;
   };
+  abortSignal?: AbortSignal;
   cancellation?: CancellationSignal;
   limits: {
     maxResults?: number;

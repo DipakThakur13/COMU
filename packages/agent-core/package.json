@@ -19,6 +19,7 @@
     "@comu/verification-engine": "workspace:*",
     "@comu/diagnostics-engine": "workspace:*",
     "@comu/repair-engine": "workspace:*",
-    "@comu/memory-engine": "workspace:*"
+    "@comu/memory-engine": "workspace:*",
+    "@comu/context-engine": "workspace:*"
   }
 }

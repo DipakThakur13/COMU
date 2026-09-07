@@ -15,6 +15,12 @@ import { RepairEngine } from '@comu/repair-engine';
 import { ComuDiffEngine } from '@comu/diff-engine';
 import { MemoryEngine, MemoryStorage, MemorySanitizer } from '@comu/memory-engine';
 import { NvidiaProvider } from '@comu/provider-nvidia';
+import { 
+  ModelProvider, 
+  OpenAICompatibleProvider, 
+  ASTRA_CAPABILITY_PROFILE, 
+  DEFAULT_OPENAI_CAPABILITY_PROFILE 
+} from '@comu/model-core';
 import { AgentEvent, ProviderConfig, ProviderTestResult } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
 
@@ -83,6 +89,13 @@ app.post(['/v1/config/providers', '/v1/config'], (req, res) => {
 app.get('/v1/config/providers', (req, res) => {
   const envNvidia = NvidiaProvider.detectEnvironmentCredential();
   const hasNvidiaKey = !!(runtimeConfig.providers?.['nvidia']?.apiKey || envNvidia);
+
+  const envExperiential = OpenAICompatibleProvider.detectEnvironmentCredential('experiential');
+  const hasExperientialKey = !!(runtimeConfig.providers?.['experiential']?.apiKey || envExperiential);
+
+  const envOpenAI = OpenAICompatibleProvider.detectEnvironmentCredential('openai');
+  const hasOpenAIKey = !!(runtimeConfig.providers?.['openai']?.apiKey || envOpenAI);
+
   const providers: ProviderConfig[] = [
     {
       providerId: 'nvidia',
@@ -98,6 +111,36 @@ app.get('/v1/config/providers', (req, res) => {
         { id: 'nvidia-nemotron-3-ultra', name: 'Nemotron 3 Ultra', description: 'NVIDIA Nemotron high-performance engineering model' }
       ],
       description: 'High performance cloud inference powered by NVIDIA Nemotron'
+    },
+    {
+      providerId: 'experiential',
+      displayName: 'GPT-6 Astra (Experiential Labs)',
+      enabled: true,
+      endpoint: runtimeConfig.providers?.['experiential']?.endpoint || ASTRA_CAPABILITY_PROFILE.defaultEndpoint,
+      selectedModel: 'gpt-6-astra',
+      hasCredential: hasExperientialKey,
+      isLocal: false,
+      status: hasExperientialKey ? 'CONNECTED' : 'NOT_CONFIGURED',
+      environmentDetected: envExperiential,
+      models: [
+        { id: 'gpt-6-astra', name: 'GPT-6 Astra', description: 'Experiential Labs 1.05M context frontier model' }
+      ],
+      description: 'Experiential Labs OpenAI-compatible gateway powered by GPT-6 Astra'
+    },
+    {
+      providerId: 'openai',
+      displayName: 'OpenAI-Compatible',
+      enabled: true,
+      endpoint: runtimeConfig.providers?.['openai']?.endpoint || 'https://api.openai.com/v1',
+      selectedModel: 'gpt-4o',
+      hasCredential: hasOpenAIKey,
+      isLocal: false,
+      status: hasOpenAIKey ? 'CONNECTED' : 'NOT_CONFIGURED',
+      environmentDetected: envOpenAI,
+      models: [
+        { id: 'gpt-4o', name: 'GPT-4o', description: 'OpenAI multimodal flagship' }
+      ],
+      description: 'Connect any OpenAI-compatible API endpoint with your own API key'
     },
     {
       providerId: 'ollama',
@@ -129,6 +172,26 @@ app.get('/v1/config/providers/:providerId/status', (req, res) => {
       status: hasKey ? 'CONNECTED' : 'NOT_CONFIGURED',
       selectedModel: 'Nemotron 3 Ultra'
     });
+  } else if (providerId === 'experiential' || providerId === 'gpt-6-astra') {
+    const envExp = OpenAICompatibleProvider.detectEnvironmentCredential('experiential');
+    const hasKey = !!(runtimeConfig.providers?.['experiential']?.apiKey || envExp);
+    return res.status(200).json({
+      providerId: 'experiential',
+      hasCredential: hasKey,
+      environmentDetected: envExp,
+      status: hasKey ? 'CONNECTED' : 'NOT_CONFIGURED',
+      selectedModel: 'gpt-6-astra'
+    });
+  } else if (providerId === 'openai') {
+    const envOpenAI = OpenAICompatibleProvider.detectEnvironmentCredential('openai');
+    const hasKey = !!(runtimeConfig.providers?.['openai']?.apiKey || envOpenAI);
+    return res.status(200).json({
+      providerId: 'openai',
+      hasCredential: hasKey,
+      environmentDetected: envOpenAI,
+      status: hasKey ? 'CONNECTED' : 'NOT_CONFIGURED',
+      selectedModel: 'gpt-4o'
+    });
   } else if (providerId === 'ollama') {
     return res.status(200).json({
       providerId: 'ollama',
@@ -155,6 +218,30 @@ app.post('/v1/config/providers/:providerId/test', async (req, res) => {
     }
     const testResult = await NvidiaProvider.testConnection(key, endpoint);
     return res.status(200).json(testResult);
+  } else if (providerId === 'experiential' || providerId === 'gpt-6-astra') {
+    const key = req.body?.apiKey || runtimeConfig.providers?.['experiential']?.apiKey || process.env.EXPERIENTIAL_API_KEY;
+    const endpoint = req.body?.endpoint || runtimeConfig.providers?.['experiential']?.endpoint;
+    if (!key) {
+      return res.status(200).json({
+        provider: 'experiential',
+        status: 'NOT_CONFIGURED',
+        message: 'No Experiential Labs API key configured.'
+      });
+    }
+    const testResult = await OpenAICompatibleProvider.testConnection(key, endpoint, undefined, 'gpt-6-astra', ASTRA_CAPABILITY_PROFILE);
+    return res.status(200).json(testResult);
+  } else if (providerId === 'openai') {
+    const key = req.body?.apiKey || runtimeConfig.providers?.['openai']?.apiKey || process.env.OPENAI_API_KEY;
+    const endpoint = req.body?.endpoint || runtimeConfig.providers?.['openai']?.endpoint;
+    if (!key) {
+      return res.status(200).json({
+        provider: 'openai',
+        status: 'NOT_CONFIGURED',
+        message: 'No OpenAI API key configured.'
+      });
+    }
+    const testResult = await OpenAICompatibleProvider.testConnection(key, endpoint, undefined, req.body?.model || 'gpt-4o');
+    return res.status(200).json(testResult);
   }
   res.status(404).json({ error: `Provider '${providerId}' not testable` });
 });
@@ -169,7 +256,9 @@ app.post('/v1/tasks', async (req, res) => {
   const modelId = taskReq.modelId || 'nvidia-nemotron-3-ultra';
 
   // Task-Start Guard: verify provider credential exists before task launch
-  const isNvidia = modelId.toLowerCase().includes('nvidia') || modelId.toLowerCase().includes('nemotron');
+  const isNvidia = modelId.toLowerCase().includes('nvidia') || modelId.toLowerCase().includes('nemotron') || modelId.toLowerCase().includes('deepseek');
+  const isExperiential = modelId.toLowerCase().includes('experiential') || modelId.toLowerCase().includes('astra');
+  const isOpenAI = modelId.toLowerCase().includes('openai') || modelId.toLowerCase().includes('gpt-4');
   const isLocal = modelId.toLowerCase().includes('ollama') || modelId.toLowerCase().includes('local');
 
   if (isNvidia) {
@@ -180,6 +269,26 @@ app.post('/v1/tasks', async (req, res) => {
         code: 'PROVIDER_NOT_CONFIGURED',
         providerId: 'nvidia',
         message: 'Connect your NVIDIA API key before starting this task.'
+      });
+    }
+  } else if (isExperiential) {
+    const hasExperiential = !!(runtimeConfig.providers?.['experiential']?.apiKey || process.env.EXPERIENTIAL_API_KEY);
+    if (!hasExperiential) {
+      return res.status(400).json({
+        error: 'PROVIDER_NOT_CONFIGURED',
+        code: 'PROVIDER_NOT_CONFIGURED',
+        providerId: 'experiential',
+        message: 'Connect your Experiential Labs API key for GPT-6 Astra before starting this task.'
+      });
+    }
+  } else if (isOpenAI) {
+    const hasOpenAI = !!(runtimeConfig.providers?.['openai']?.apiKey || process.env.OPENAI_API_KEY);
+    if (!hasOpenAI) {
+      return res.status(400).json({
+        error: 'PROVIDER_NOT_CONFIGURED',
+        code: 'PROVIDER_NOT_CONFIGURED',
+        providerId: 'openai',
+        message: 'Connect your OpenAI API key before starting this task.'
       });
     }
   } else if (!isLocal && !runtimeConfig.providers?.[modelId]?.apiKey) {
@@ -194,15 +303,29 @@ app.post('/v1/tasks', async (req, res) => {
   const taskId = `task-${Date.now()}`;
   const workspaceRoot = resolve(process.cwd());
 
+  const controller = new AbortController();
+  taskControllers.set(taskId, controller);
+
   res.status(201).json({ taskId });
 
   // Run asynchronously
   setTimeout(async () => {
     try {
       // Setup provider dynamically
-      const nvidiaKey = runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
-      const nvidiaEndpoint = runtimeConfig.providers?.['nvidia']?.endpoint;
-      const model = new NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+      let model: ModelProvider;
+      if (isExperiential) {
+        const key = runtimeConfig.providers?.['experiential']?.apiKey || process.env.EXPERIENTIAL_API_KEY || "dummy-key";
+        const endpoint = runtimeConfig.providers?.['experiential']?.endpoint;
+        model = new OpenAICompatibleProvider(key, endpoint, "gpt-6-astra", ASTRA_CAPABILITY_PROFILE);
+      } else if (isOpenAI) {
+        const key = runtimeConfig.providers?.['openai']?.apiKey || process.env.OPENAI_API_KEY || "dummy-key";
+        const endpoint = runtimeConfig.providers?.['openai']?.endpoint;
+        model = new OpenAICompatibleProvider(key, endpoint, modelId);
+      } else {
+        const nvidiaKey = runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
+        const nvidiaEndpoint = runtimeConfig.providers?.['nvidia']?.endpoint;
+        model = new NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+      }
       
       const orchestrator = new AgentOrchestrator(model, registry, executor, diffEngine, {
         planner: new TaskPlanner(),
@@ -212,9 +335,6 @@ app.post('/v1/tasks', async (req, res) => {
         memoryEngine,
         subagentManager
       });
-
-      const controller = new AbortController();
-      taskControllers.set(taskId, controller);
 
       const ctx: OrchestratorContext = {
         taskId,
@@ -287,6 +407,21 @@ app.post('/v1/tasks/:id/cancel', (req, res) => {
   if (controller) {
     controller.abort();
     interactionManager.cancelTaskInteractions(taskId);
+
+    const cancelEvt = {
+      type: "task.cancelled",
+      eventId: `evt-${Date.now()}`,
+      taskId,
+      timestamp: new Date().toISOString()
+    };
+    eventStore.append(cancelEvt as any);
+    const streams = eventStreams.get(taskId) || [];
+    streams.forEach(stream => {
+      stream.write(`id: ${cancelEvt.eventId}\n`);
+      stream.write(`event: ${cancelEvt.type}\n`);
+      stream.write(`data: ${JSON.stringify(cancelEvt)}\n\n`);
+    });
+
     res.status(200).json({ status: "cancelled" });
   } else {
     res.status(404).json({ error: "Task not found or already completed" });

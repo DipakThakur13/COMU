@@ -136,4 +136,53 @@ describe("Runtime BYOK Provider Configuration & Task-Start Guard", () => {
     expect(statusData.hasCredential).toBe(true);
     expect(JSON.stringify(statusData)).not.toContain(canaryKey);
   });
+
+  it("GET /v1/config/providers lists experiential (GPT-6 Astra) and openai providers", async () => {
+    const res = await fetch(`${baseUrl}/v1/config/providers`);
+    const data = await res.json() as any;
+    const experiential = data.providers.find((p: any) => p.providerId === "experiential");
+    expect(experiential).toBeDefined();
+    expect(experiential.displayName).toContain("GPT-6 Astra");
+    expect(experiential.selectedModel).toBe("gpt-6-astra");
+
+    const openai = data.providers.find((p: any) => p.providerId === "openai");
+    expect(openai).toBeDefined();
+    expect(openai.displayName).toContain("OpenAI");
+  });
+
+  it("Task-Start Guard: rejects gpt-6-astra when experiential key not configured", async () => {
+    // Reset config
+    await fetch(`${baseUrl}/v1/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: {} })
+    });
+
+    const res = await fetch(`${baseUrl}/v1/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Refactor auth using Astra",
+        modelId: "gpt-6-astra"
+      })
+    });
+
+    expect(res.status).toBe(400);
+    const errData = await res.json() as any;
+    expect(errData.error).toBe("PROVIDER_NOT_CONFIGURED");
+    expect(errData.providerId).toBe("experiential");
+    expect(errData.message).toContain("Experiential Labs");
+  });
+
+  it("POST /v1/config/providers/experiential/test returns NOT_CONFIGURED when no key provided", async () => {
+    const res = await fetch(`${baseUrl}/v1/config/providers/experiential/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+
+    expect(res.status).toBe(200);
+    const result = await res.json() as any;
+    expect(result.status).toBe("NOT_CONFIGURED");
+  });
 });

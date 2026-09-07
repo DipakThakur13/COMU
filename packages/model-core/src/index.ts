@@ -104,3 +104,7 @@ export interface ModelRouter {
 }
 
 export * from "./manager.js";
+export * from "./capabilities.js";
+export * from "./profiles/astra.js";
+export * from "./sanitizer.js";
+export * from "./openai_provider.js";

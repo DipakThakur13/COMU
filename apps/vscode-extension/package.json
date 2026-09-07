@@ -106,6 +106,7 @@
     "test": "pnpm run test-compile && node ./dist/test/runTest.js"
   },
   "dependencies": {
+    "@comu/model-core": "workspace:*",
     "@comu/protocol": "workspace:*",
     "@comu/provider-nvidia": "workspace:*",
     "eventsource-parser": "^4.1.0"

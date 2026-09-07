@@ -111,6 +111,9 @@ importers:
 
   apps/vscode-extension:
     dependencies:
+      '@comu/model-core':
+        specifier: workspace:*
+        version: link:../../packages/model-core
       '@comu/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -142,6 +145,9 @@ importers:
 
   packages/agent-core:
     dependencies:
+      '@comu/context-engine':
+        specifier: workspace:*
+        version: link:../context-engine
       '@comu/diagnostics-engine':
         specifier: workspace:*
         version: link:../diagnostics-engine

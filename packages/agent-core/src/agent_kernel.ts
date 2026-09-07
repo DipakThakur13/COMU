@@ -32,6 +32,26 @@ export class AgentKernel {
    * The authoritative entry point for user-originated execution.
    */
   public async handle(input: AgentKernelInput): Promise<AgentResult> {
+    if (input.abortSignal?.aborted) {
+      input.onEvent({
+        type: "agent.status",
+        eventId: `evt-${Date.now()}`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString(),
+        status: "CANCELLED"
+      });
+      input.onEvent({
+        type: "task.cancelled",
+        eventId: `evt-${Date.now()}`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString()
+      });
+      return {
+        status: "cancelled",
+        steps: 0
+      };
+    }
+
     input.onEvent({
       type: "agent.status",
       eventId: `evt-${Date.now()}`,
@@ -40,11 +60,50 @@ export class AgentKernel {
       status: "CLASSIFYING"
     });
 
+    if (input.abortSignal?.aborted) {
+      input.onEvent({
+        type: "agent.status",
+        eventId: `evt-${Date.now()}`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString(),
+        status: "CANCELLED"
+      });
+      input.onEvent({
+        type: "task.cancelled",
+        eventId: `evt-${Date.now()}`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString()
+      });
+      return {
+        status: "cancelled",
+        steps: 0
+      };
+    }
+
     const classification = this.router.route(input.userPrompt, {
       activeTaskId: input.taskId
     });
 
     if (classification.mode === "AMBIGUOUS") {
+      if (input.abortSignal?.aborted) {
+        input.onEvent({
+          type: "agent.status",
+          eventId: `evt-${Date.now()}`,
+          taskId: input.taskId,
+          timestamp: new Date().toISOString(),
+          status: "CANCELLED"
+        });
+        input.onEvent({
+          type: "task.cancelled",
+          eventId: `evt-${Date.now()}`,
+          taskId: input.taskId,
+          timestamp: new Date().toISOString()
+        });
+        return {
+          status: "cancelled",
+          steps: 0
+        };
+      }
       input.onEvent({
         type: "agent.status",
         eventId: `evt-${Date.now()}`,

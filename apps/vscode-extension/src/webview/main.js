@@ -163,6 +163,8 @@
 
     function cancelTask() {
         if (state.status === 'running' || state.status === 'waiting_for_user') {
+            state.status = 'cancelling';
+            renderState();
             vscode.postMessage({ type: 'cancel_task' });
         }
     }
@@ -494,16 +496,26 @@
     function renderState() {
         const isWaiting = state.status === 'waiting_for_user';
         const isRunning = state.status === 'running' || state.status === 'starting';
+        const isCancelling = state.status === 'cancelling';
+        const isCancelled = state.status === 'cancelled';
         const isOffline = state.status === 'offline';
 
-        statusDot.className = 'dot ' + (isOffline ? 'offline' : (isWaiting ? 'waiting' : (isRunning ? 'starting' : 'online')));
-        statusText.innerText = isOffline ? 'Offline' : (isWaiting ? 'Waiting for User' : (isRunning ? 'Active' : 'Connected'));
+        statusDot.className = 'dot ' + (isOffline ? 'offline' : (isCancelled ? 'offline' : (isCancelling ? 'waiting' : (isWaiting ? 'waiting' : (isRunning ? 'starting' : 'online')))));
+        statusText.innerText = isOffline ? 'Offline' : (isCancelled ? 'Cancelled' : (isCancelling ? 'Cancelling...' : (isWaiting ? 'Waiting for User' : (isRunning ? 'Active' : 'Connected'))));
 
-        submitBtn.style.display = (isRunning || isWaiting) ? 'none' : 'flex';
-        cancelBtn.style.display = (isRunning || isWaiting) ? 'block' : 'none';
+        submitBtn.style.display = (isRunning || isWaiting || isCancelling) ? 'none' : 'flex';
+        cancelBtn.style.display = (isRunning || isWaiting || isCancelling) ? 'block' : 'none';
+
+        if (isCancelling) {
+            cancelBtn.innerText = '■ Cancelling...';
+            cancelBtn.disabled = true;
+        } else {
+            cancelBtn.innerText = '■ Stop';
+            cancelBtn.disabled = false;
+        }
 
         submitBtn.disabled = isOffline;
-        promptInput.disabled = isRunning || isWaiting || isOffline;
+        promptInput.disabled = isRunning || isWaiting || isCancelling || isOffline;
 
         if (!state.taskId && !state.prompt) {
             return;

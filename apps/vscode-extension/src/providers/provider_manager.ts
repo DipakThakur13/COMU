@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { SecretManager } from '../security/secrets';
 import { ProviderConfig, ProviderTestResult, ProviderStatus, ProviderModel } from '@comu/protocol';
 import { NvidiaProvider } from '@comu/provider-nvidia';
+import { OpenAICompatibleProvider, ASTRA_CAPABILITY_PROFILE } from '@comu/model-core';
 
 export interface ProviderDefinition {
     id: string;
@@ -65,6 +66,29 @@ export class ProviderManager {
             ]
         },
         {
+            id: 'experiential',
+            displayName: 'GPT-6 Astra (Experiential Labs)',
+            description: 'Frontier reasoning and coding model with 1.05M token context window. Connect via Experiential Labs OpenAI-compatible gateway.',
+            defaultEndpoint: ASTRA_CAPABILITY_PROFILE.defaultEndpoint,
+            models: [
+                {
+                    id: 'gpt-6-astra',
+                    name: 'GPT-6 Astra',
+                    description: 'Frontier reasoning and coding model with 1.05M context',
+                    contextTokens: 1050000
+                }
+            ]
+        },
+        {
+            id: 'openai',
+            displayName: 'OpenAI-Compatible',
+            description: 'Connect any OpenAI-compatible API endpoint with your own API key.',
+            defaultEndpoint: 'https://api.openai.com/v1',
+            models: [
+                { id: 'gpt-4o', name: 'GPT-4o', contextTokens: 128000 }
+            ]
+        },
+        {
             id: 'ollama',
             displayName: 'Ollama (Local)',
             description: 'Run open-weights models locally on your machine with zero external network access.',
@@ -76,15 +100,6 @@ export class ProviderManager {
                     description: 'Local on-device execution',
                     contextTokens: 8192
                 }
-            ]
-        },
-        {
-            id: 'openai',
-            displayName: 'OpenAI-Compatible',
-            description: 'Connect any OpenAI-compatible API endpoint with your own API key.',
-            defaultEndpoint: 'https://api.openai.com/v1',
-            models: [
-                { id: 'gpt-4o', name: 'GPT-4o', contextTokens: 128000 }
             ]
         },
         {
@@ -114,6 +129,10 @@ export class ProviderManager {
             } else {
                 if (p.id === 'nvidia') {
                     environmentDetected = NvidiaProvider.detectEnvironmentCredential();
+                } else if (p.id === 'experiential') {
+                    environmentDetected = OpenAICompatibleProvider.detectEnvironmentCredential('experiential');
+                } else if (p.id === 'openai') {
+                    environmentDetected = OpenAICompatibleProvider.detectEnvironmentCredential('openai');
                 }
                 const key = await secrets.getProviderKey(p.id);
                 hasCredential = !!key || environmentDetected;
@@ -205,6 +224,68 @@ export class ProviderManager {
             return res;
         }
 
+        if (providerId === 'experiential' || providerId === 'gpt-6-astra') {
+            if (!key && process.env.EXPERIENTIAL_API_KEY) {
+                key = process.env.EXPERIENTIAL_API_KEY;
+            }
+
+            if (!key) {
+                const res: ProviderTestResult = {
+                    provider: 'experiential',
+                    status: 'NOT_CONFIGURED',
+                    message: 'No Experiential Labs API key configured.'
+                };
+                this.providerStatuses.set(providerId, 'NOT_CONFIGURED');
+                return res;
+            }
+
+            const rawEndpoint = customEndpoint?.trim() || this.providerEndpoints.get('experiential') || ASTRA_CAPABILITY_PROFILE.defaultEndpoint;
+            const res = await OpenAICompatibleProvider.testConnection(key, rawEndpoint, undefined, 'gpt-6-astra', ASTRA_CAPABILITY_PROFILE);
+            this.providerStatuses.set(providerId, res.status);
+
+            if (res.status === 'CONNECTED') {
+                if (customKey && customKey.trim()) {
+                    await secrets.setProviderKey('experiential', customKey.trim());
+                }
+                if (customEndpoint !== undefined && customEndpoint.trim()) {
+                    await this.setProviderEndpoint('experiential', customEndpoint);
+                }
+            }
+
+            return res;
+        }
+
+        if (providerId === 'openai') {
+            if (!key && process.env.OPENAI_API_KEY) {
+                key = process.env.OPENAI_API_KEY;
+            }
+
+            if (!key) {
+                const res: ProviderTestResult = {
+                    provider: 'openai',
+                    status: 'NOT_CONFIGURED',
+                    message: 'No OpenAI API key configured.'
+                };
+                this.providerStatuses.set(providerId, 'NOT_CONFIGURED');
+                return res;
+            }
+
+            const rawEndpoint = customEndpoint?.trim() || this.providerEndpoints.get('openai') || 'https://api.openai.com/v1';
+            const res = await OpenAICompatibleProvider.testConnection(key, rawEndpoint, undefined, 'gpt-4o');
+            this.providerStatuses.set(providerId, res.status);
+
+            if (res.status === 'CONNECTED') {
+                if (customKey && customKey.trim()) {
+                    await secrets.setProviderKey('openai', customKey.trim());
+                }
+                if (customEndpoint !== undefined && customEndpoint.trim()) {
+                    await this.setProviderEndpoint('openai', customEndpoint);
+                }
+            }
+
+            return res;
+        }
+
         if (providerId === 'ollama') {
             const res: ProviderTestResult = {
                 provider: 'ollama',
@@ -245,6 +326,30 @@ export class ProviderManager {
             };
         }
 
+        if (idLower.includes('experiential') || idLower.includes('astra')) {
+            const secrets = SecretManager.getInstance();
+            const key = await secrets.getProviderKey('experiential');
+            const hasEnv = OpenAICompatibleProvider.detectEnvironmentCredential('experiential');
+            const configured = !!(key || hasEnv);
+            return {
+                configured,
+                providerId: 'experiential',
+                message: configured ? undefined : 'Connect your Experiential Labs API key for GPT-6 Astra before starting this task.'
+            };
+        }
+
+        if (idLower.includes('openai') || idLower.includes('gpt-4')) {
+            const secrets = SecretManager.getInstance();
+            const key = await secrets.getProviderKey('openai');
+            const hasEnv = OpenAICompatibleProvider.detectEnvironmentCredential('openai');
+            const configured = !!(key || hasEnv);
+            return {
+                configured,
+                providerId: 'openai',
+                message: configured ? undefined : 'Connect your OpenAI API key before starting this task.'
+            };
+        }
+
         // Generic cloud provider check
         const secrets = SecretManager.getInstance();
         const key = await secrets.getProviderKey(modelId);
@@ -264,6 +369,10 @@ export class ProviderManager {
                 let key = await secrets.getProviderKey(p.id);
                 if (!key && p.id === 'nvidia' && process.env.NVIDIA_API_KEY) {
                     key = process.env.NVIDIA_API_KEY;
+                } else if (!key && p.id === 'experiential' && process.env.EXPERIENTIAL_API_KEY) {
+                    key = process.env.EXPERIENTIAL_API_KEY;
+                } else if (!key && p.id === 'openai' && process.env.OPENAI_API_KEY) {
+                    key = process.env.OPENAI_API_KEY;
                 }
                 if (key) {
                     config[p.id] = {

@@ -34,19 +34,7 @@ export class IntentRouter {
       };
     }
 
-    // 2. ASK match
-    const askRegex = /^(explain|how does|what does|why is|search for)\b/i;
-    if (askRegex.test(text)) {
-      return {
-        mode: "ASK",
-        confidence: 0.9,
-        source: "deterministic",
-        reasons: ["explicit investigation/read-only verb detected"],
-        requiresClarification: false,
-      };
-    }
-
-    // 3. PLAN match
+    // 2. PLAN match (checked before askRegex so 'give me a plan' matches PLAN)
     const planRegex = /^(plan|give me a plan|how would you)\b/i;
     if (planRegex.test(text)) {
       return {
@@ -58,14 +46,39 @@ export class IntentRouter {
       };
     }
 
-    // 4. AGENT match
-    const agentRegex = /^(fix|implement|refactor|add|update)\b/i;
-    if (agentRegex.test(text)) {
+    // 3. ASK match
+    const askRegex = /^(explain|how does|what does|why is|why did|why does|why\b|search for|what is|where is|describe|show|give|tell|find|inspect|sample)\b/i;
+    if (askRegex.test(text)) {
+      return {
+        mode: "ASK",
+        confidence: 0.9,
+        source: "deterministic",
+        reasons: ["explicit investigation/read-only verb detected"],
+        requiresClarification: false,
+      };
+    }
+
+    // 4. Ambiguous pointers without context
+    const ambiguousRegex = /^(take a look|look at this|look into this|check this out|check this\b|what do you think)\b/i;
+    if (ambiguousRegex.test(text)) {
+      return {
+        mode: "AMBIGUOUS",
+        confidence: 0.9,
+        source: "deterministic",
+        reasons: ["ambiguous pointer phrase detected without target context"],
+        requiresClarification: true,
+      };
+    }
+
+    // 5. AGENT match (broad engineering action verbs and keywords)
+    const agentRegex = /^(fix|implement|refactor|add|update|create|delete|remove|run|test|build|check|modify|write|verify|investigate|repair|do|scenario|e2e|break|task|debug)\b/i;
+    const engineeringKeywords = /\b(fail|failing|broken|bug|error|tests?|issue|repair|patch|changes?|edits?|mutation|refactor|benchmark|cancellation|e2e|prompt)\b/i;
+    if (agentRegex.test(text) || engineeringKeywords.test(text)) {
       return {
         mode: "AGENT",
         confidence: 0.8,
         source: "deterministic",
-        reasons: ["explicit implementation/action verb detected"],
+        reasons: ["explicit implementation/action verb or engineering keyword detected"],
         requiresClarification: false,
       };
     }
@@ -121,11 +134,11 @@ export class IntentRouter {
    * Main entrypoint for routing an intent.
    */
   public route(message: string, context?: RouterContext): IntentClassification {
-    const det = this.checkDeterministic(message);
-    if (det) return det;
-
     const ctx = this.checkContext(message, context);
     if (ctx) return ctx;
+
+    const det = this.checkDeterministic(message);
+    if (det) return det;
 
     // Fallback to AMBIGUOUS
     return {

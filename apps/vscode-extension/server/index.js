@@ -23338,12 +23338,14 @@ var require_dist3 = __commonJS({
     var fs2 = __toESM2(require("fs/promises"));
     var ReadFileTool2 = {
       name: "read_file",
-      description: "Reads the contents of a file within the workspace",
+      description: "Reads the contents of a file within the workspace, optionally bounded by 1-indexed startLine and endLine",
       capabilities: ["read"],
       inputSchema: {
         type: "object",
         properties: {
-          path: { type: "string" }
+          path: { type: "string" },
+          startLine: { type: "number", description: "1-indexed starting line number" },
+          endLine: { type: "number", description: "1-indexed ending line number" }
         },
         required: ["path"]
       },
@@ -23357,10 +23359,33 @@ var require_dist3 = __commonJS({
           if (context.limits.maxBytes && stats.size > context.limits.maxBytes) {
             throw new import_shared2.ToolError(`File exceeds maximum allowed size of ${context.limits.maxBytes} bytes`);
           }
-          const content = await fs2.readFile(targetPath, "utf-8");
+          const rawContent = await fs2.readFile(targetPath, "utf-8");
           const crypto3 = await import("crypto");
-          const hash = crypto3.createHash("sha256").update(content).digest("hex");
-          return { content, hash };
+          const hash = crypto3.createHash("sha256").update(rawContent).digest("hex");
+          const lines = rawContent.split(/\r?\n/);
+          const totalLines = lines.length;
+          let returnContent = rawContent;
+          let truncated = false;
+          let startLine = args.startLine;
+          let endLine = args.endLine;
+          if (startLine !== void 0 || endLine !== void 0) {
+            const start = Math.max(1, startLine || 1);
+            const end = Math.min(totalLines, endLine || totalLines);
+            returnContent = lines.slice(start - 1, end).join("\n");
+            truncated = end - start + 1 < totalLines;
+            startLine = start;
+            endLine = end;
+          }
+          return {
+            content: returnContent,
+            hash,
+            path: args.path,
+            size: stats.size,
+            lineCount: totalLines,
+            truncated,
+            startLine,
+            endLine
+          };
         } catch (e) {
           if (e instanceof Error) throw e;
           throw new import_shared2.ToolError(`Failed to read file: ${e}`);
@@ -23477,6 +23502,7 @@ var require_dist3 = __commonJS({
     var import_shared5 = require_dist();
     var fs5 = __toESM2(require("fs/promises"));
     var crypto = __toESM2(require("crypto"));
+    var path3 = __toESM2(require("path"));
     var CreateFileTool2 = {
       name: "create_file",
       description: "Creates a new file. Fails if the file already exists.",
@@ -23498,6 +23524,7 @@ var require_dist3 = __commonJS({
           } catch (e) {
             if (e instanceof import_shared5.ToolError) throw e;
           }
+          await fs5.mkdir(path3.dirname(targetPath), { recursive: true });
           await fs5.writeFile(targetPath, args.content, "utf-8");
           const hash = crypto.createHash("sha256").update(args.content).digest("hex");
           return { success: true, hash };
@@ -23538,6 +23565,7 @@ var require_dist3 = __commonJS({
               }
             }
           }
+          await fs5.mkdir(path3.dirname(targetPath), { recursive: true });
           await fs5.writeFile(targetPath, args.content, "utf-8");
           const hash = crypto.createHash("sha256").update(args.content).digest("hex");
           return { success: true, hash };
@@ -24145,10 +24173,15 @@ var require_terminal_tool = __commonJS({
           throw new Error(`COMMAND_DENIED: ${decision.reason} (Category: ${decision.category})`);
         }
         const abortController = new AbortController();
+        if (context.abortSignal?.aborted || context.cancellation?.isCancelled) {
+          throw new Error("COMMAND_CANCELLED: Task was cancelled before command execution.");
+        }
+        if (context.abortSignal) {
+          context.abortSignal.addEventListener("abort", () => {
+            abortController.abort();
+          }, { once: true });
+        }
         if (context.cancellation) {
-          if (context.cancellation.isCancelled) {
-            throw new Error("COMMAND_CANCELLED: Task was cancelled before command execution.");
-          }
           context.cancellation.onCancel(() => {
             abortController.abort();
           });
@@ -25560,7 +25593,11 @@ var require_dist9 = __commonJS({
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
     var index_exports = {};
     __export2(index_exports, {
-      ModelRequestManager: () => ModelRequestManager
+      ASTRA_CAPABILITY_PROFILE: () => ASTRA_CAPABILITY_PROFILE2,
+      DEFAULT_OPENAI_CAPABILITY_PROFILE: () => DEFAULT_OPENAI_CAPABILITY_PROFILE2,
+      ModelRequestManager: () => ModelRequestManager,
+      OpenAICompatibleProvider: () => OpenAICompatibleProvider2,
+      RequestSanitizer: () => RequestSanitizer
     });
     module2.exports = __toCommonJS2(index_exports);
     var import_shared = require_dist();
@@ -25757,6 +25794,534 @@ var require_dist9 = __commonJS({
           runId,
           attempt
         });
+      }
+    };
+    var DEFAULT_OPENAI_CAPABILITY_PROFILE2 = {
+      id: "openai-standard",
+      name: "OpenAI Compatible Standard",
+      displayName: "OpenAI Compatible",
+      description: "Standard OpenAI-compatible chat completions interface",
+      supportsTemperature: true,
+      supportsTopP: true,
+      supportsTopK: false,
+      supportsStop: true,
+      supportsLogprobs: true,
+      supportsPresencePenalty: true,
+      supportsFrequencyPenalty: true,
+      supportsSeed: true,
+      supportsStreaming: true,
+      supportsToolCalling: true,
+      supportsReasoning: true,
+      supportsVision: true,
+      maxContextTokens: 128e3,
+      maxOutputTokens: 16384,
+      defaultEndpoint: "https://api.openai.com/v1"
+    };
+    var ASTRA_CAPABILITY_PROFILE2 = {
+      id: "gpt-6-astra",
+      name: "GPT-6 Astra",
+      displayName: "GPT-6 Astra (Experiential Labs)",
+      description: "Frontier reasoning and coding model with 1.05M token context window",
+      supportsTemperature: false,
+      supportsTopP: false,
+      supportsTopK: false,
+      supportsStop: false,
+      supportsLogprobs: false,
+      supportsPresencePenalty: false,
+      supportsFrequencyPenalty: false,
+      supportsSeed: false,
+      supportsStreaming: true,
+      supportsToolCalling: true,
+      supportsReasoning: true,
+      supportsVision: false,
+      maxContextTokens: 105e4,
+      maxOutputTokens: 128e3,
+      defaultEndpoint: "https://api.experiential.com/v1",
+      allowedModels: ["gpt-6-astra", "astra", "gpt-6-astra-pro"]
+    };
+    var RequestSanitizer = class {
+      /**
+       * Sanitizes an outgoing model request payload against a target provider's capability profile.
+       * Produces a clean payload without mutating the original input.
+       */
+      static sanitize(payload, profile) {
+        const sanitized = { ...payload };
+        if (!profile.supportsTemperature) {
+          delete sanitized.temperature;
+        }
+        if (!profile.supportsTopP) {
+          delete sanitized.top_p;
+        }
+        if (!profile.supportsTopK) {
+          delete sanitized.top_k;
+        }
+        if (!profile.supportsStop) {
+          delete sanitized.stop;
+        }
+        if (!profile.supportsLogprobs) {
+          delete sanitized.logprobs;
+          delete sanitized.top_logprobs;
+        }
+        if (!profile.supportsPresencePenalty) {
+          delete sanitized.presence_penalty;
+        }
+        if (!profile.supportsFrequencyPenalty) {
+          delete sanitized.frequency_penalty;
+        }
+        if (!profile.supportsSeed) {
+          delete sanitized.seed;
+        }
+        if (!profile.supportsStreaming && sanitized.stream) {
+          sanitized.stream = false;
+        }
+        if (!profile.supportsToolCalling) {
+          delete sanitized.tools;
+          delete sanitized.tool_choice;
+        }
+        if (profile.maxOutputTokens && sanitized.max_tokens !== void 0) {
+          if (typeof sanitized.max_tokens === "number" && sanitized.max_tokens > profile.maxOutputTokens) {
+            sanitized.max_tokens = profile.maxOutputTokens;
+          }
+        }
+        return sanitized;
+      }
+    };
+    var import_shared2 = require_dist();
+    var OpenAICompatibleProvider2 = class _OpenAICompatibleProvider {
+      id = "openai";
+      name = "OpenAI-Compatible";
+      providerId = "openai";
+      displayName = "OpenAI-Compatible";
+      selectedModel;
+      profile;
+      apiKey;
+      endpoint;
+      static normalizeEndpoint(endpoint, defaultEndpoint = "https://api.openai.com/v1") {
+        if (!endpoint || !endpoint.trim()) {
+          return defaultEndpoint.endsWith("/chat/completions") ? defaultEndpoint : `${defaultEndpoint.replace(/\/+$/, "")}/chat/completions`;
+        }
+        let ep = endpoint.trim().replace(/\/+$/, "");
+        if (ep.endsWith("/chat/completions")) {
+          return ep;
+        }
+        if (ep.endsWith("/v1")) {
+          return `${ep}/chat/completions`;
+        }
+        if (ep.endsWith("/chat") || ep.endsWith("/chat/c")) {
+          return ep.replace(/\/chat(\/c.*)?$/, "/chat/completions");
+        }
+        return `${ep}/chat/completions`;
+      }
+      constructor(apiKey, endpoint, modelId, profile) {
+        if (profile) {
+          this.profile = profile;
+        } else if (modelId?.toLowerCase().includes("astra") || endpoint?.toLowerCase().includes("experiential")) {
+          this.profile = ASTRA_CAPABILITY_PROFILE2;
+        } else {
+          this.profile = DEFAULT_OPENAI_CAPABILITY_PROFILE2;
+        }
+        if (this.profile.id === "gpt-6-astra") {
+          this.id = "experiential";
+          this.providerId = "experiential";
+          this.name = "Experiential Labs";
+          this.displayName = "GPT-6 Astra (Experiential Labs)";
+        }
+        const resolvedKey = apiKey || process.env.OPENAI_API_KEY || (this.profile.id === "gpt-6-astra" ? process.env.EXPERIENTIAL_API_KEY : void 0);
+        if (!resolvedKey) {
+          throw new import_shared2.ProviderError(`${this.displayName} API Key is required`);
+        }
+        this.apiKey = resolvedKey;
+        const baseEndpoint = endpoint || this.profile.defaultEndpoint || "https://api.openai.com/v1";
+        this.endpoint = _OpenAICompatibleProvider.normalizeEndpoint(baseEndpoint, this.profile.defaultEndpoint);
+        this.selectedModel = modelId || (this.profile.allowedModels?.[0] ?? "gpt-4o");
+      }
+      static detectEnvironmentCredential(providerId = "openai") {
+        if (providerId === "experiential" || providerId === "gpt-6-astra") {
+          return !!(process.env.EXPERIENTIAL_API_KEY && process.env.EXPERIENTIAL_API_KEY.trim().length > 0);
+        }
+        return !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0);
+      }
+      static async testConnection(apiKey, endpoint, timeoutMs = 15e3, model, profile) {
+        const activeProfile = profile || (model?.toLowerCase().includes("astra") || endpoint?.toLowerCase().includes("experiential") ? ASTRA_CAPABILITY_PROFILE2 : DEFAULT_OPENAI_CAPABILITY_PROFILE2);
+        const providerName = activeProfile.id === "gpt-6-astra" ? "experiential" : "openai";
+        const resolvedEndpoint = _OpenAICompatibleProvider.normalizeEndpoint(
+          endpoint || activeProfile.defaultEndpoint,
+          activeProfile.defaultEndpoint
+        );
+        if (!apiKey || !apiKey.trim()) {
+          return {
+            provider: providerName,
+            status: "NOT_CONFIGURED",
+            message: `No API key provided for ${activeProfile.displayName}.`
+          };
+        }
+        const startTime = Date.now();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        const activeModel = model || activeProfile.allowedModels?.[0] || "gpt-4o";
+        const rawPayload = {
+          model: activeModel,
+          messages: [{ role: "user", content: "ping" }],
+          max_tokens: 1
+        };
+        const sanitizedPayload = RequestSanitizer.sanitize(rawPayload, activeProfile);
+        try {
+          const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey.trim()}`,
+            ...activeProfile.customHeaders || {}
+          };
+          const response = await fetch(resolvedEndpoint, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(sanitizedPayload),
+            signal: controller.signal
+          });
+          clearTimeout(timer);
+          const latencyMs = Date.now() - startTime;
+          if (response.ok) {
+            return {
+              provider: providerName,
+              status: "CONNECTED",
+              model: activeModel,
+              latencyMs
+            };
+          }
+          if (response.status === 401 || response.status === 403) {
+            return {
+              provider: providerName,
+              status: "INVALID_CREDENTIAL",
+              message: `The ${activeProfile.displayName} API key was rejected.`
+            };
+          }
+          if (response.status === 404) {
+            return {
+              provider: providerName,
+              status: "CONNECTION_ERROR",
+              message: `Endpoint returned HTTP 404. Model '${activeModel}' could not be accessed.`
+            };
+          }
+          return {
+            provider: providerName,
+            status: "CONNECTION_ERROR",
+            message: `API returned HTTP ${response.status}.`
+          };
+        } catch (err) {
+          clearTimeout(timer);
+          if (err.name === "AbortError" || controller.signal.aborted) {
+            return {
+              provider: providerName,
+              status: "TIMEOUT",
+              message: `Connection to ${activeProfile.displayName} timed out after ${Math.round(timeoutMs / 1e3)}s.`
+            };
+          }
+          return {
+            provider: providerName,
+            status: "CONNECTION_ERROR",
+            message: `Could not reach ${activeProfile.displayName} endpoint.`
+          };
+        }
+      }
+      async testConnection() {
+        return _OpenAICompatibleProvider.testConnection(
+          this.apiKey,
+          this.endpoint,
+          void 0,
+          this.selectedModel,
+          this.profile
+        );
+      }
+      getCapabilities() {
+        return {
+          toolCalling: this.profile.supportsToolCalling,
+          streaming: this.profile.supportsStreaming,
+          reasoning: this.profile.supportsReasoning,
+          vision: this.profile.supportsVision,
+          structuredOutput: true,
+          maxContextTokens: this.profile.maxContextTokens,
+          chat: true,
+          coding: true,
+          longContext: this.profile.maxContextTokens > 1e5
+        };
+      }
+      mapMessages(request, supportsMultimodal) {
+        const messages = [];
+        if (request.systemPrompt) {
+          messages.push({ role: "system", content: request.systemPrompt });
+        }
+        if (request.messages && request.messages.length > 0) {
+          for (const msg of request.messages) {
+            if (msg.role === "tool") {
+              messages.push({
+                role: "tool",
+                content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
+                tool_call_id: msg.toolCallId
+              });
+            } else if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+              messages.push({
+                role: "assistant",
+                content: typeof msg.content === "string" ? msg.content : null,
+                tool_calls: msg.toolCalls.map((tc) => ({
+                  id: tc.id,
+                  type: "function",
+                  function: {
+                    name: tc.name,
+                    arguments: typeof tc.arguments === "string" ? tc.arguments : JSON.stringify(tc.arguments)
+                  }
+                }))
+              });
+            } else {
+              if (Array.isArray(msg.content)) {
+                if (supportsMultimodal) {
+                  const formattedContent = msg.content.map((part) => {
+                    if (part.type === "text") return { type: "text", text: part.text };
+                    if (part.type === "image_url") {
+                      if (part.imageUrl.startsWith("file://") || !part.imageUrl.startsWith("https://") && !part.imageUrl.startsWith("data:")) {
+                        throw new import_shared2.ProviderInvalidRequestError("Image URL must be HTTPS or data URI.");
+                      }
+                      return { type: "image_url", image_url: { url: part.imageUrl } };
+                    }
+                    return part;
+                  });
+                  messages.push({ role: msg.role, content: formattedContent });
+                } else {
+                  const textContent = msg.content.filter((p) => p.type === "text").map((p) => p.text).join("\n");
+                  messages.push({ role: msg.role, content: textContent });
+                }
+              } else {
+                messages.push({ role: msg.role, content: msg.content });
+              }
+            }
+          }
+        } else {
+          messages.push({ role: "user", content: request.prompt });
+        }
+        return messages;
+      }
+      mapTools(tools) {
+        if (!tools || tools.length === 0) return void 0;
+        return tools.map((tool) => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema
+          }
+        }));
+      }
+      async generate(request, context) {
+        const modelId = request.model || this.selectedModel;
+        const messages = this.mapMessages(request, this.profile.supportsVision);
+        const tools = this.profile.supportsToolCalling ? this.mapTools(request.tools) : void 0;
+        const stream = request.stream ?? this.profile.supportsStreaming;
+        const rawPayload = {
+          model: modelId,
+          messages,
+          temperature: request.temperature,
+          max_tokens: request.maxTokens,
+          stream
+        };
+        if (tools) {
+          rawPayload.tools = tools;
+          rawPayload.tool_choice = "auto";
+        }
+        const sanitizedBody = RequestSanitizer.sanitize(rawPayload, this.profile);
+        try {
+          const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${this.apiKey}`,
+            ...this.profile.customHeaders || {}
+          };
+          const fetchOptions = {
+            method: "POST",
+            headers,
+            body: JSON.stringify(sanitizedBody)
+          };
+          if (context?.signal) {
+            fetchOptions.signal = context.signal;
+          }
+          const response = await fetch(this.endpoint, fetchOptions);
+          if (!response.ok) {
+            const errorText = await response.text();
+            const sanitizedText = errorText.slice(0, 200).replace(this.apiKey, "[REDACTED]");
+            const message = `${this.displayName} API Error: ${response.status} - ${sanitizedText}`;
+            if (response.status === 401 || response.status === 403) {
+              throw new import_shared2.ProviderAuthenticationError(message);
+            } else if (response.status === 429) {
+              throw new import_shared2.ProviderRateLimitError(message);
+            } else if (response.status === 400 || response.status === 422) {
+              throw new import_shared2.ProviderInvalidRequestError(message);
+            } else {
+              throw new import_shared2.ProviderError(message);
+            }
+          }
+          if (sanitizedBody.stream && response.body) {
+            return this.parseStream(response.body, context);
+          } else {
+            const data = await response.json();
+            if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+              throw new import_shared2.ProviderProtocolError(`${this.displayName} API returned malformed response payload.`);
+            }
+            const message = data.choices[0].message;
+            let toolCalls;
+            if (message.tool_calls && message.tool_calls.length > 0) {
+              toolCalls = message.tool_calls.map((tc) => {
+                let parsedArgs = tc.function.arguments;
+                if (typeof parsedArgs === "string") {
+                  try {
+                    parsedArgs = JSON.parse(parsedArgs);
+                  } catch {
+                  }
+                }
+                return {
+                  id: tc.id,
+                  name: tc.function.name,
+                  arguments: parsedArgs
+                };
+              });
+            }
+            const extracted = _OpenAICompatibleProvider.extractThinking(
+              message.content || "",
+              message.reasoning_content || message.reasoning
+            );
+            return {
+              text: extracted.text,
+              thinking: extracted.thinking,
+              toolCalls,
+              usage: {
+                promptTokens: data.usage?.prompt_tokens ?? 0,
+                completionTokens: data.usage?.completion_tokens ?? 0,
+                totalTokens: data.usage?.total_tokens ?? 0
+              }
+            };
+          }
+        } catch (err) {
+          if (err instanceof import_shared2.ProviderError) throw err;
+          if (err.name === "AbortError" || context?.signal?.aborted) {
+            throw err;
+          }
+          const safeMessage = (err.message || String(err)).replace(this.apiKey, "[REDACTED]");
+          throw new import_shared2.ProviderError(`${this.displayName} request failed: ${safeMessage}`);
+        }
+      }
+      async parseStream(streamBody, context) {
+        const reader = streamBody.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let fullText = "";
+        let fullReasoning = "";
+        const toolCallsMap = /* @__PURE__ */ new Map();
+        let promptTokens = 0;
+        let completionTokens = 0;
+        let totalTokens = 0;
+        let buffer = "";
+        try {
+          while (true) {
+            if (context?.signal?.aborted) {
+              throw new Error("Stream aborted by context signal");
+            }
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith("data:")) continue;
+              const jsonStr = trimmed.slice(5).trim();
+              if (jsonStr === "[DONE]") continue;
+              try {
+                const data = JSON.parse(jsonStr);
+                if (data.usage) {
+                  promptTokens = data.usage.prompt_tokens ?? promptTokens;
+                  completionTokens = data.usage.completion_tokens ?? completionTokens;
+                  totalTokens = data.usage.total_tokens ?? totalTokens;
+                }
+                if (!data.choices || !data.choices[0] || !data.choices[0].delta) continue;
+                const delta = data.choices[0].delta;
+                if (delta.content) {
+                  fullText += delta.content;
+                }
+                if (delta.reasoning_content || delta.reasoning) {
+                  fullReasoning += delta.reasoning_content || delta.reasoning;
+                }
+                if (delta.tool_calls) {
+                  for (const tc of delta.tool_calls) {
+                    const index = tc.index ?? 0;
+                    if (!toolCallsMap.has(index)) {
+                      toolCallsMap.set(index, {
+                        id: tc.id || `call_${index}`,
+                        type: "function",
+                        function: { name: tc.function?.name || "", arguments: tc.function?.arguments || "" }
+                      });
+                    } else {
+                      const existing = toolCallsMap.get(index);
+                      if (tc.id) existing.id = tc.id;
+                      if (tc.function?.name) existing.function.name = tc.function.name;
+                      if (tc.function?.arguments) {
+                        existing.function.arguments += tc.function.arguments;
+                      }
+                    }
+                  }
+                }
+              } catch {
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        let toolCalls;
+        if (toolCallsMap.size > 0) {
+          toolCalls = Array.from(toolCallsMap.values()).map((tc) => {
+            let parsedArgs = tc.function.arguments;
+            try {
+              if (typeof parsedArgs === "string" && parsedArgs.trim() !== "") {
+                parsedArgs = JSON.parse(parsedArgs);
+              }
+            } catch {
+            }
+            return {
+              id: tc.id,
+              name: tc.function.name,
+              arguments: parsedArgs
+            };
+          });
+        }
+        const extracted = _OpenAICompatibleProvider.extractThinking(fullText, fullReasoning);
+        return {
+          text: extracted.text,
+          thinking: extracted.thinking,
+          toolCalls,
+          usage: { promptTokens, completionTokens, totalTokens }
+        };
+      }
+      static extractThinking(content, reasoningContent) {
+        let rawContent = content || "";
+        let thinking = reasoningContent ? String(reasoningContent).trim() : void 0;
+        const thinkTagRegex = /<(think|thought)>([\s\S]*?)<\/\1>/gi;
+        const unclosedThinkRegex = /<(think|thought)>([\s\S]*)$/i;
+        const extractedThoughts = [];
+        let match;
+        while ((match = thinkTagRegex.exec(rawContent)) !== null) {
+          if (match[2] && match[2].trim()) {
+            extractedThoughts.push(match[2].trim());
+          }
+        }
+        let cleanedContent = rawContent.replace(thinkTagRegex, "").trim();
+        const unclosedMatch = unclosedThinkRegex.exec(cleanedContent);
+        if (unclosedMatch) {
+          if (unclosedMatch[2] && unclosedMatch[2].trim()) {
+            extractedThoughts.push(unclosedMatch[2].trim());
+          }
+          cleanedContent = cleanedContent.replace(unclosedThinkRegex, "").trim();
+        }
+        if (extractedThoughts.length > 0) {
+          const joinedThoughts = extractedThoughts.join("\n\n");
+          thinking = thinking ? `${thinking}
+
+${joinedThoughts}` : joinedThoughts;
+        }
+        return { text: cleanedContent, thinking };
       }
     };
   }
@@ -27046,8 +27611,201 @@ var require_dist13 = __commonJS({
   }
 });
 
-// ../../packages/agent-core/dist/index.js
+// ../../packages/context-engine/dist/index.js
 var require_dist14 = __commonJS({
+  "../../packages/context-engine/dist/index.js"(exports2, module2) {
+    "use strict";
+    var __defProp2 = Object.defineProperty;
+    var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+    var __getOwnPropNames2 = Object.getOwnPropertyNames;
+    var __hasOwnProp2 = Object.prototype.hasOwnProperty;
+    var __export2 = (target, all) => {
+      for (var name in all)
+        __defProp2(target, name, { get: all[name], enumerable: true });
+    };
+    var __copyProps2 = (to, from, except, desc) => {
+      if (from && typeof from === "object" || typeof from === "function") {
+        for (let key of __getOwnPropNames2(from))
+          if (!__hasOwnProp2.call(to, key) && key !== except)
+            __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+      }
+      return to;
+    };
+    var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    var index_exports = {};
+    __export2(index_exports, {
+      ContextEngine: () => ContextEngine,
+      WorkingSetManager: () => WorkingSetManager
+    });
+    module2.exports = __toCommonJS2(index_exports);
+    var ContextEngine = class {
+      constructor(executor2) {
+        this.executor = executor2;
+      }
+      executor;
+      async compile(request, workingSet, budget) {
+        const rootPath = request.workspace.rootPath;
+        const compiled = {
+          workspace: request.workspace,
+          openFiles: []
+        };
+        if (workingSet.selection) {
+          compiled.selection = workingSet.selection;
+        }
+        let currentChars = 0;
+        const addFileToContext = (fileCtx) => {
+          if (currentChars + fileCtx.content.length <= budget.maxTotalChars) {
+            compiled.openFiles.push(fileCtx);
+            currentChars += fileCtx.content.length;
+            return true;
+          }
+          return false;
+        };
+        if (workingSet.activeFile) {
+          compiled.activeFile = workingSet.activeFile;
+          currentChars += workingSet.activeFile.content.length;
+        }
+        const seenPaths = /* @__PURE__ */ new Set();
+        if (workingSet.activeFile) seenPaths.add(workingSet.activeFile.path);
+        for (const f of workingSet.recentlyInspectedFiles) {
+          if (seenPaths.has(f.path)) continue;
+          if (addFileToContext(f)) {
+            seenPaths.add(f.path);
+          } else {
+            break;
+          }
+        }
+        for (const f of workingSet.openFiles) {
+          if (seenPaths.has(f.path)) continue;
+          if (addFileToContext(f)) {
+            seenPaths.add(f.path);
+          }
+        }
+        compiled.metadata = {
+          diagnostics: workingSet.diagnostics,
+          searchResults: workingSet.searchResults,
+          modifiedFiles: workingSet.modifiedFiles
+        };
+        const dummyToolContext = {
+          taskId: request.taskId,
+          workspace: request.workspace,
+          limits: { maxResults: 1e3, maxBytes: budget.maxFileChars }
+        };
+        try {
+          const treeResult = await this.executor.execute("get_workspace_tree", { maxDepth: budget.maxTreeDepth }, dummyToolContext);
+          compiled.repositoryMap = {
+            tree: treeResult.tree,
+            isTruncated: treeResult.truncated
+          };
+        } catch (e) {
+          console.warn("Failed to generate repository map context:", e);
+        }
+        return compiled;
+      }
+    };
+    var WorkingSetManager = class {
+      ws;
+      constructor(budgets) {
+        this.ws = {
+          openFiles: [],
+          recentlyInspectedFiles: [],
+          searchResults: [],
+          diagnostics: [],
+          modifiedFiles: [],
+          revision: 0,
+          budgets: {
+            maxOpenFiles: 10,
+            maxInspectedFiles: 10,
+            maxSearchResults: 50,
+            maxDiagnostics: 20,
+            maxModifiedFiles: 20,
+            ...budgets
+          }
+        };
+      }
+      get() {
+        return this.ws;
+      }
+      incrementRevision() {
+        this.ws.revision += 1;
+      }
+      updateActiveFile(file) {
+        this.ws.activeFile = file;
+        this.incrementRevision();
+      }
+      updateSelection(selection) {
+        this.ws.selection = selection;
+        this.incrementRevision();
+      }
+      setOpenFiles(files) {
+        this.ws.openFiles = files.slice(0, this.ws.budgets.maxOpenFiles);
+        this.incrementRevision();
+      }
+      addInspectedFile(file) {
+        this.ws.recentlyInspectedFiles = this.ws.recentlyInspectedFiles.filter((f) => f.path !== file.path);
+        this.ws.recentlyInspectedFiles.unshift(file);
+        if (this.ws.recentlyInspectedFiles.length > this.ws.budgets.maxInspectedFiles) {
+          this.ws.recentlyInspectedFiles.length = this.ws.budgets.maxInspectedFiles;
+        }
+        this.incrementRevision();
+      }
+      addSearchResults(results) {
+        for (const res of results) {
+          const exists = this.ws.searchResults.find((r) => r.file === res.file && r.line === res.line);
+          if (!exists) {
+            this.ws.searchResults.unshift(res);
+          }
+        }
+        if (this.ws.searchResults.length > this.ws.budgets.maxSearchResults) {
+          this.ws.searchResults.length = this.ws.budgets.maxSearchResults;
+        }
+        this.incrementRevision();
+      }
+      updateDiagnostics(diagnostics) {
+        this.ws.diagnostics = [];
+        const seen = /* @__PURE__ */ new Set();
+        for (const diag of diagnostics) {
+          const key = `${diag.file}:${diag.message}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            this.ws.diagnostics.push(diag);
+          }
+        }
+        if (this.ws.diagnostics.length > this.ws.budgets.maxDiagnostics) {
+          this.ws.diagnostics.length = this.ws.budgets.maxDiagnostics;
+        }
+        this.incrementRevision();
+      }
+      addModifiedFile(mod) {
+        this.ws.modifiedFiles = this.ws.modifiedFiles.filter((m) => m.path !== mod.path);
+        this.ws.modifiedFiles.unshift(mod);
+        if (this.ws.modifiedFiles.length > this.ws.budgets.maxModifiedFiles) {
+          this.ws.modifiedFiles.length = this.ws.budgets.maxModifiedFiles;
+        }
+        this.incrementRevision();
+      }
+      invalidateFile(path) {
+        let changed = false;
+        if (this.ws.activeFile?.path === path) {
+          this.ws.activeFile = void 0;
+          changed = true;
+        }
+        const openLen = this.ws.openFiles.length;
+        this.ws.openFiles = this.ws.openFiles.filter((f) => f.path !== path);
+        if (this.ws.openFiles.length !== openLen) changed = true;
+        const inspLen = this.ws.recentlyInspectedFiles.length;
+        this.ws.recentlyInspectedFiles = this.ws.recentlyInspectedFiles.filter((f) => f.path !== path);
+        if (this.ws.recentlyInspectedFiles.length !== inspLen) changed = true;
+        if (changed) {
+          this.incrementRevision();
+        }
+      }
+    };
+  }
+});
+
+// ../../packages/agent-core/dist/index.js
+var require_dist15 = __commonJS({
   "../../packages/agent-core/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -27090,16 +27848,6 @@ var require_dist14 = __commonJS({
                 requiresClarification: false
               };
             }
-            const askRegex = /^(explain|how does|what does|why is|search for)\b/i;
-            if (askRegex.test(text)) {
-              return {
-                mode: "ASK",
-                confidence: 0.9,
-                source: "deterministic",
-                reasons: ["explicit investigation/read-only verb detected"],
-                requiresClarification: false
-              };
-            }
             const planRegex = /^(plan|give me a plan|how would you)\b/i;
             if (planRegex.test(text)) {
               return {
@@ -27110,13 +27858,34 @@ var require_dist14 = __commonJS({
                 requiresClarification: false
               };
             }
-            const agentRegex = /^(fix|implement|refactor|add|update)\b/i;
-            if (agentRegex.test(text)) {
+            const askRegex = /^(explain|how does|what does|why is|why did|why does|why\b|search for|what is|where is|describe|show|give|tell|find|inspect|sample)\b/i;
+            if (askRegex.test(text)) {
+              return {
+                mode: "ASK",
+                confidence: 0.9,
+                source: "deterministic",
+                reasons: ["explicit investigation/read-only verb detected"],
+                requiresClarification: false
+              };
+            }
+            const ambiguousRegex = /^(take a look|look at this|look into this|check this out|check this\b|what do you think)\b/i;
+            if (ambiguousRegex.test(text)) {
+              return {
+                mode: "AMBIGUOUS",
+                confidence: 0.9,
+                source: "deterministic",
+                reasons: ["ambiguous pointer phrase detected without target context"],
+                requiresClarification: true
+              };
+            }
+            const agentRegex = /^(fix|implement|refactor|add|update|create|delete|remove|run|test|build|check|modify|write|verify|investigate|repair|do|scenario|e2e|break|task|debug)\b/i;
+            const engineeringKeywords = /\b(fail|failing|broken|bug|error|tests?|issue|repair|patch|changes?|edits?|mutation|refactor|benchmark|cancellation|e2e|prompt)\b/i;
+            if (agentRegex.test(text) || engineeringKeywords.test(text)) {
               return {
                 mode: "AGENT",
                 confidence: 0.8,
                 source: "deterministic",
-                reasons: ["explicit implementation/action verb detected"],
+                reasons: ["explicit implementation/action verb or engineering keyword detected"],
                 requiresClarification: false
               };
             }
@@ -27163,10 +27932,10 @@ var require_dist14 = __commonJS({
            * Main entrypoint for routing an intent.
            */
           route(message, context) {
-            const det = this.checkDeterministic(message);
-            if (det) return det;
             const ctx = this.checkContext(message, context);
             if (ctx) return ctx;
+            const det = this.checkDeterministic(message);
+            if (det) return det;
             return {
               mode: "AMBIGUOUS",
               confidence: 0,
@@ -27224,6 +27993,25 @@ var require_dist14 = __commonJS({
            * The authoritative entry point for user-originated execution.
            */
           async handle(input) {
+            if (input.abortSignal?.aborted) {
+              input.onEvent({
+                type: "agent.status",
+                eventId: `evt-${Date.now()}`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                status: "CANCELLED"
+              });
+              input.onEvent({
+                type: "task.cancelled",
+                eventId: `evt-${Date.now()}`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString()
+              });
+              return {
+                status: "cancelled",
+                steps: 0
+              };
+            }
             input.onEvent({
               type: "agent.status",
               eventId: `evt-${Date.now()}`,
@@ -27231,10 +28019,48 @@ var require_dist14 = __commonJS({
               timestamp: (/* @__PURE__ */ new Date()).toISOString(),
               status: "CLASSIFYING"
             });
+            if (input.abortSignal?.aborted) {
+              input.onEvent({
+                type: "agent.status",
+                eventId: `evt-${Date.now()}`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                status: "CANCELLED"
+              });
+              input.onEvent({
+                type: "task.cancelled",
+                eventId: `evt-${Date.now()}`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString()
+              });
+              return {
+                status: "cancelled",
+                steps: 0
+              };
+            }
             const classification = this.router.route(input.userPrompt, {
               activeTaskId: input.taskId
             });
             if (classification.mode === "AMBIGUOUS") {
+              if (input.abortSignal?.aborted) {
+                input.onEvent({
+                  type: "agent.status",
+                  eventId: `evt-${Date.now()}`,
+                  taskId: input.taskId,
+                  timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                  status: "CANCELLED"
+                });
+                input.onEvent({
+                  type: "task.cancelled",
+                  eventId: `evt-${Date.now()}`,
+                  taskId: input.taskId,
+                  timestamp: (/* @__PURE__ */ new Date()).toISOString()
+                });
+                return {
+                  status: "cancelled",
+                  steps: 0
+                };
+              }
               input.onEvent({
                 type: "agent.status",
                 eventId: `evt-${Date.now()}`,
@@ -27307,7 +28133,7 @@ var require_dist14 = __commonJS({
       validateTaskContract: () => validateTaskContract
     });
     module2.exports = __toCommonJS2(index_exports);
-    var import_model_core = require_dist9();
+    var import_model_core2 = require_dist9();
     var import_shared = require_dist();
     var import_planning_engine2 = require_dist10();
     var import_verification_engine2 = require_dist11();
@@ -27572,6 +28398,7 @@ var require_dist14 = __commonJS({
         return list;
       }
     };
+    var import_context_engine = require_dist14();
     function formatStepSummary(text, maxLen = 140) {
       if (!text) return void 0;
       let cleaned = text.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
@@ -27598,6 +28425,7 @@ var require_dist14 = __commonJS({
         this.interactionManager = options?.interactionManager;
         this.memoryEngine = options?.memoryEngine;
         this.subagentManager = options?.subagentManager || new SubagentManager2();
+        this.workingSetManager = options?.workingSetManager || new import_context_engine.WorkingSetManager();
       }
       model;
       registry;
@@ -27611,6 +28439,13 @@ var require_dist14 = __commonJS({
       memoryEngine;
       subagentManager;
       requestManager;
+      workingSetManager;
+      getWorkingSet() {
+        return this.workingSetManager.get();
+      }
+      getWorkingSetManager() {
+        return this.workingSetManager;
+      }
       getState() {
         return this.state;
       }
@@ -27688,7 +28523,20 @@ var require_dist14 = __commonJS({
           taskId: ctx.taskId,
           workspace: { rootPath: ctx.workspaceRoot },
           limits: { maxResults: 100, maxBytes: 1e6 },
-          permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } }
+          permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } },
+          abortSignal: ctx.abortSignal,
+          cancellation: ctx.abortSignal ? {
+            get isCancelled() {
+              return ctx.abortSignal?.aborted ?? false;
+            },
+            onCancel: (cb) => {
+              if (ctx.abortSignal?.aborted) {
+                cb();
+              } else {
+                ctx.abortSignal?.addEventListener("abort", cb, { once: true });
+              }
+            }
+          } : void 0
         };
         if (ctx.abortSignal?.aborted) {
           this.transition(ctx, "CANCELLED", "Task was cancelled");
@@ -27884,6 +28732,16 @@ ${memoryContext}` : ctx.userPrompt;
               verificationId: lastVerification.verificationId,
               result: lastVerification
             });
+            if (lastVerification.checks && lastVerification.checks.length > 0) {
+              this.workingSetManager.updateDiagnostics(
+                lastVerification.checks.map((c) => ({
+                  file: c.name || "verification",
+                  line: 1,
+                  message: c.message || c.status,
+                  severity: c.status === "FAILED" ? "error" : "warning"
+                }))
+              );
+            }
             if (lastVerification.status === "PASSED") {
               planManager.completeStep(currentStep.id, lastVerification.summary);
               ctx.onEvent({
@@ -28056,7 +28914,7 @@ Please implement targeted fixes to resolve this failure.`
           this.transition(ctx, "THINKING", "Thinking...");
           steps++;
           if (!this.requestManager) {
-            this.requestManager = new import_model_core.ModelRequestManager(this.model, ctx.onEvent);
+            this.requestManager = new import_model_core2.ModelRequestManager(this.model, ctx.onEvent);
           }
           let response;
           try {
@@ -28229,11 +29087,31 @@ Please implement targeted fixes to resolve this failure.`
                     baselineExists = true;
                   }
                 }
+                if (ctx.abortSignal?.aborted) {
+                  this.transition(ctx, "CANCELLED", "Task was cancelled");
+                  ctx.onEvent({
+                    type: "task.cancelled",
+                    eventId: `evt-${Date.now()}`,
+                    taskId: ctx.taskId,
+                    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+                  });
+                  return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
+                }
                 let toolError = null;
                 try {
                   result = await this.executor.execute(tc.name, tc.arguments, toolCtx);
                 } catch (e) {
                   toolError = e;
+                }
+                if (ctx.abortSignal?.aborted || toolError && (toolError.name === "AbortError" || String(toolError).includes("COMMAND_CANCELLED") || String(toolError).includes("CANCELLED"))) {
+                  this.transition(ctx, "CANCELLED", "Task was cancelled");
+                  ctx.onEvent({
+                    type: "task.cancelled",
+                    eventId: `evt-${Date.now()}`,
+                    taskId: ctx.taskId,
+                    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+                  });
+                  return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
                 }
                 if (isMutating) {
                   const targetPath = tc.arguments.path;
@@ -28311,6 +29189,25 @@ Please implement targeted fixes to resolve this failure.`
                 taskId: ctx.taskId,
                 timestamp: (/* @__PURE__ */ new Date()).toISOString()
               });
+              if (tc.name === "read_file" && result) {
+                const content = typeof result === "string" ? result : result.content || "";
+                const isTruncated = typeof result === "object" ? !!result.truncated : false;
+                this.workingSetManager.addInspectedFile({ path: tc.arguments?.path, content, isTruncated });
+              } else if (tc.name === "search_text" && result?.matches) {
+                this.workingSetManager.addSearchResults(
+                  result.matches.map((m) => ({
+                    file: m.file || m.path,
+                    line: m.line || 1,
+                    content: m.lineContent || m.text || ""
+                  }))
+                );
+              } else if ((tc.name === "create_file" || tc.name === "write_file" || tc.name === "edit_file") && tc.arguments?.path) {
+                this.workingSetManager.addModifiedFile({
+                  path: tc.arguments.path,
+                  source: "COMU_CHANGE",
+                  timestamp: (/* @__PURE__ */ new Date()).toISOString()
+                });
+              }
             } catch (e) {
               toolResultStr = `ERROR: ${e.message}`;
               ctx.onEvent({
@@ -30729,7 +31626,7 @@ var require_libcjs = __commonJS({
 });
 
 // ../../packages/diff-engine/dist/index.js
-var require_dist15 = __commonJS({
+var require_dist16 = __commonJS({
   "../../packages/diff-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
@@ -30823,7 +31720,7 @@ var require_dist15 = __commonJS({
 });
 
 // ../../packages/memory-engine/dist/index.js
-var require_dist16 = __commonJS({
+var require_dist17 = __commonJS({
   "../../packages/memory-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
@@ -31348,7 +32245,7 @@ var require_dist16 = __commonJS({
 });
 
 // ../../providers/nvidia/dist/index.js
-var require_dist17 = __commonJS({
+var require_dist18 = __commonJS({
   "../../providers/nvidia/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -32040,13 +32937,14 @@ var import_terminal = __toESM(require_dist5());
 var import_git = __toESM(require_dist6());
 var import_validation = __toESM(require_dist7());
 var import_tool_web_docs = __toESM(require_dist8());
-var import_agent_core = __toESM(require_dist14());
+var import_agent_core = __toESM(require_dist15());
 var import_planning_engine = __toESM(require_dist10());
 var import_verification_engine = __toESM(require_dist11());
 var import_repair_engine = __toESM(require_dist13());
-var import_diff_engine = __toESM(require_dist15());
-var import_memory_engine = __toESM(require_dist16());
-var import_provider_nvidia = __toESM(require_dist17());
+var import_diff_engine = __toESM(require_dist16());
+var import_memory_engine = __toESM(require_dist17());
+var import_provider_nvidia = __toESM(require_dist18());
+var import_model_core = __toESM(require_dist9());
 
 // src/event_store.ts
 var InMemoryTaskEventStore = class {
@@ -32127,6 +33025,10 @@ app.post(["/v1/config/providers", "/v1/config"], (req, res) => {
 app.get("/v1/config/providers", (req, res) => {
   const envNvidia = import_provider_nvidia.NvidiaProvider.detectEnvironmentCredential();
   const hasNvidiaKey = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || envNvidia);
+  const envExperiential = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
+  const hasExperientialKey = !!(runtimeConfig.providers?.["experiential"]?.apiKey || envExperiential);
+  const envOpenAI = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("openai");
+  const hasOpenAIKey = !!(runtimeConfig.providers?.["openai"]?.apiKey || envOpenAI);
   const providers = [
     {
       providerId: "nvidia",
@@ -32142,6 +33044,36 @@ app.get("/v1/config/providers", (req, res) => {
         { id: "nvidia-nemotron-3-ultra", name: "Nemotron 3 Ultra", description: "NVIDIA Nemotron high-performance engineering model" }
       ],
       description: "High performance cloud inference powered by NVIDIA Nemotron"
+    },
+    {
+      providerId: "experiential",
+      displayName: "GPT-6 Astra (Experiential Labs)",
+      enabled: true,
+      endpoint: runtimeConfig.providers?.["experiential"]?.endpoint || import_model_core.ASTRA_CAPABILITY_PROFILE.defaultEndpoint,
+      selectedModel: "gpt-6-astra",
+      hasCredential: hasExperientialKey,
+      isLocal: false,
+      status: hasExperientialKey ? "CONNECTED" : "NOT_CONFIGURED",
+      environmentDetected: envExperiential,
+      models: [
+        { id: "gpt-6-astra", name: "GPT-6 Astra", description: "Experiential Labs 1.05M context frontier model" }
+      ],
+      description: "Experiential Labs OpenAI-compatible gateway powered by GPT-6 Astra"
+    },
+    {
+      providerId: "openai",
+      displayName: "OpenAI-Compatible",
+      enabled: true,
+      endpoint: runtimeConfig.providers?.["openai"]?.endpoint || "https://api.openai.com/v1",
+      selectedModel: "gpt-4o",
+      hasCredential: hasOpenAIKey,
+      isLocal: false,
+      status: hasOpenAIKey ? "CONNECTED" : "NOT_CONFIGURED",
+      environmentDetected: envOpenAI,
+      models: [
+        { id: "gpt-4o", name: "GPT-4o", description: "OpenAI multimodal flagship" }
+      ],
+      description: "Connect any OpenAI-compatible API endpoint with your own API key"
     },
     {
       providerId: "ollama",
@@ -32171,6 +33103,26 @@ app.get("/v1/config/providers/:providerId/status", (req, res) => {
       status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
       selectedModel: "Nemotron 3 Ultra"
     });
+  } else if (providerId === "experiential" || providerId === "gpt-6-astra") {
+    const envExp = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
+    const hasKey = !!(runtimeConfig.providers?.["experiential"]?.apiKey || envExp);
+    return res.status(200).json({
+      providerId: "experiential",
+      hasCredential: hasKey,
+      environmentDetected: envExp,
+      status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
+      selectedModel: "gpt-6-astra"
+    });
+  } else if (providerId === "openai") {
+    const envOpenAI = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("openai");
+    const hasKey = !!(runtimeConfig.providers?.["openai"]?.apiKey || envOpenAI);
+    return res.status(200).json({
+      providerId: "openai",
+      hasCredential: hasKey,
+      environmentDetected: envOpenAI,
+      status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
+      selectedModel: "gpt-4o"
+    });
   } else if (providerId === "ollama") {
     return res.status(200).json({
       providerId: "ollama",
@@ -32195,6 +33147,30 @@ app.post("/v1/config/providers/:providerId/test", async (req, res) => {
     }
     const testResult = await import_provider_nvidia.NvidiaProvider.testConnection(key, endpoint);
     return res.status(200).json(testResult);
+  } else if (providerId === "experiential" || providerId === "gpt-6-astra") {
+    const key = req.body?.apiKey || runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY;
+    const endpoint = req.body?.endpoint || runtimeConfig.providers?.["experiential"]?.endpoint;
+    if (!key) {
+      return res.status(200).json({
+        provider: "experiential",
+        status: "NOT_CONFIGURED",
+        message: "No Experiential Labs API key configured."
+      });
+    }
+    const testResult = await import_model_core.OpenAICompatibleProvider.testConnection(key, endpoint, void 0, "gpt-6-astra", import_model_core.ASTRA_CAPABILITY_PROFILE);
+    return res.status(200).json(testResult);
+  } else if (providerId === "openai") {
+    const key = req.body?.apiKey || runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY;
+    const endpoint = req.body?.endpoint || runtimeConfig.providers?.["openai"]?.endpoint;
+    if (!key) {
+      return res.status(200).json({
+        provider: "openai",
+        status: "NOT_CONFIGURED",
+        message: "No OpenAI API key configured."
+      });
+    }
+    const testResult = await import_model_core.OpenAICompatibleProvider.testConnection(key, endpoint, void 0, req.body?.model || "gpt-4o");
+    return res.status(200).json(testResult);
   }
   res.status(404).json({ error: `Provider '${providerId}' not testable` });
 });
@@ -32204,7 +33180,9 @@ app.get("/v1/health", (req, res) => {
 app.post("/v1/tasks", async (req, res) => {
   const taskReq = req.body;
   const modelId = taskReq.modelId || "nvidia-nemotron-3-ultra";
-  const isNvidia = modelId.toLowerCase().includes("nvidia") || modelId.toLowerCase().includes("nemotron");
+  const isNvidia = modelId.toLowerCase().includes("nvidia") || modelId.toLowerCase().includes("nemotron") || modelId.toLowerCase().includes("deepseek");
+  const isExperiential = modelId.toLowerCase().includes("experiential") || modelId.toLowerCase().includes("astra");
+  const isOpenAI = modelId.toLowerCase().includes("openai") || modelId.toLowerCase().includes("gpt-4");
   const isLocal = modelId.toLowerCase().includes("ollama") || modelId.toLowerCase().includes("local");
   if (isNvidia) {
     const hasNvidia = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY);
@@ -32214,6 +33192,26 @@ app.post("/v1/tasks", async (req, res) => {
         code: "PROVIDER_NOT_CONFIGURED",
         providerId: "nvidia",
         message: "Connect your NVIDIA API key before starting this task."
+      });
+    }
+  } else if (isExperiential) {
+    const hasExperiential = !!(runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY);
+    if (!hasExperiential) {
+      return res.status(400).json({
+        error: "PROVIDER_NOT_CONFIGURED",
+        code: "PROVIDER_NOT_CONFIGURED",
+        providerId: "experiential",
+        message: "Connect your Experiential Labs API key for GPT-6 Astra before starting this task."
+      });
+    }
+  } else if (isOpenAI) {
+    const hasOpenAI = !!(runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY);
+    if (!hasOpenAI) {
+      return res.status(400).json({
+        error: "PROVIDER_NOT_CONFIGURED",
+        code: "PROVIDER_NOT_CONFIGURED",
+        providerId: "openai",
+        message: "Connect your OpenAI API key before starting this task."
       });
     }
   } else if (!isLocal && !runtimeConfig.providers?.[modelId]?.apiKey) {
@@ -32226,12 +33224,25 @@ app.post("/v1/tasks", async (req, res) => {
   }
   const taskId = `task-${Date.now()}`;
   const workspaceRoot = (0, import_path.resolve)(process.cwd());
+  const controller = new AbortController();
+  taskControllers.set(taskId, controller);
   res.status(201).json({ taskId });
   setTimeout(async () => {
     try {
-      const nvidiaKey = runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
-      const nvidiaEndpoint = runtimeConfig.providers?.["nvidia"]?.endpoint;
-      const model = new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+      let model;
+      if (isExperiential) {
+        const key = runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY || "dummy-key";
+        const endpoint = runtimeConfig.providers?.["experiential"]?.endpoint;
+        model = new import_model_core.OpenAICompatibleProvider(key, endpoint, "gpt-6-astra", import_model_core.ASTRA_CAPABILITY_PROFILE);
+      } else if (isOpenAI) {
+        const key = runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY || "dummy-key";
+        const endpoint = runtimeConfig.providers?.["openai"]?.endpoint;
+        model = new import_model_core.OpenAICompatibleProvider(key, endpoint, modelId);
+      } else {
+        const nvidiaKey = runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
+        const nvidiaEndpoint = runtimeConfig.providers?.["nvidia"]?.endpoint;
+        model = new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+      }
       const orchestrator = new import_agent_core.AgentOrchestrator(model, registry, executor, diffEngine, {
         planner: new import_planning_engine.TaskPlanner(),
         verificationEngine: new import_verification_engine.VerificationEngine(),
@@ -32240,8 +33251,6 @@ app.post("/v1/tasks", async (req, res) => {
         memoryEngine,
         subagentManager
       });
-      const controller = new AbortController();
-      taskControllers.set(taskId, controller);
       const ctx = {
         taskId,
         workspaceRoot,
@@ -32305,6 +33314,23 @@ app.post("/v1/tasks/:id/cancel", (req, res) => {
   if (controller) {
     controller.abort();
     interactionManager.cancelTaskInteractions(taskId);
+    const cancelEvt = {
+      type: "task.cancelled",
+      eventId: `evt-${Date.now()}`,
+      taskId,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    eventStore.append(cancelEvt);
+    const streams = eventStreams.get(taskId) || [];
+    streams.forEach((stream) => {
+      stream.write(`id: ${cancelEvt.eventId}
+`);
+      stream.write(`event: ${cancelEvt.type}
+`);
+      stream.write(`data: ${JSON.stringify(cancelEvt)}
+
+`);
+    });
     res.status(200).json({ status: "cancelled" });
   } else {
     res.status(404).json({ error: "Task not found or already completed" });

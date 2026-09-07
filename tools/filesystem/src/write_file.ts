@@ -3,6 +3,7 @@ import { resolveAndVerifyPath } from "./security.js";
 import { ToolError } from "@comu/shared";
 import * as fs from "fs/promises";
 import * as crypto from "crypto";
+import * as path from "path";
 
 export interface CreateFileArgs {
   path: string;
@@ -33,6 +34,7 @@ export const CreateFileTool: AgentTool<CreateFileArgs, { success: boolean; hash:
         // Proceed if file doesn't exist
       }
 
+      await fs.mkdir(path.dirname(targetPath), { recursive: true });
       await fs.writeFile(targetPath, args.content, "utf-8");
       const hash = crypto.createHash("sha256").update(args.content).digest("hex");
       return { success: true, hash };
@@ -74,7 +76,7 @@ export const WriteFileTool: AgentTool<WriteFileArgs, { success: boolean; hash: s
             throw new ToolError(`CONFLICT: The file at ${args.path} has been modified since it was last read. Expected hash: ${args.expectedHash}, Current hash: ${existingHash}`);
           }
         } catch (e: any) {
-          if (e.code !== "ENOENT") { // If ENOENT, it doesn't exist, so there's no hash conflict per se, but wait, if they expected a hash, it must exist.
+          if (e.code !== "ENOENT") {
             if (e instanceof ToolError) throw e;
           } else {
              throw new ToolError(`CONFLICT: The file at ${args.path} does not exist but a hash was expected.`);
@@ -82,6 +84,7 @@ export const WriteFileTool: AgentTool<WriteFileArgs, { success: boolean; hash: s
         }
       }
 
+      await fs.mkdir(path.dirname(targetPath), { recursive: true });
       await fs.writeFile(targetPath, args.content, "utf-8");
       const hash = crypto.createHash("sha256").update(args.content).digest("hex");
       return { success: true, hash };

@@ -193,8 +193,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private async handleCancelTask() {
         const state = this.sessionStore.getState();
-        if (state.taskId && state.status === 'running') {
+        if (state.taskId && (state.status === 'running' || state.status === 'waiting_for_user')) {
             try {
+                state.status = 'cancelling';
+                this.sendStateToWebview();
                 await this.runtimeClient.cancelTask(state.taskId);
             } catch (e: any) {
                 vscode.window.showErrorMessage(`Cancel failed: ${e.message}`);

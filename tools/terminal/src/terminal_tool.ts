@@ -64,12 +64,17 @@ export class TerminalTool implements AgentTool<ExecuteCommandArgs, CommandResult
       throw new Error(`COMMAND_DENIED: ${decision.reason} (Category: ${decision.category})`);
     }
 
-    // Set up AbortSignal from context cancellation
+    // Set up AbortSignal from context cancellation or abortSignal
     const abortController = new AbortController();
+    if (context.abortSignal?.aborted || context.cancellation?.isCancelled) {
+      throw new Error("COMMAND_CANCELLED: Task was cancelled before command execution.");
+    }
+    if (context.abortSignal) {
+      context.abortSignal.addEventListener("abort", () => {
+        abortController.abort();
+      }, { once: true });
+    }
     if (context.cancellation) {
-      if (context.cancellation.isCancelled) {
-        throw new Error("COMMAND_CANCELLED: Task was cancelled before command execution.");
-      }
       context.cancellation.onCancel(() => {
         abortController.abort();
       });

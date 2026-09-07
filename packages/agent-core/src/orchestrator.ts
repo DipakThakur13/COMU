@@ -11,6 +11,7 @@ import { RepairEngine } from "@comu/repair-engine";
 import { InteractionManager } from "./interaction_manager.js";
 import { MemoryEngine } from "@comu/memory-engine";
 import { SubagentManager } from "./subagent_manager.js";
+import { WorkingSetManager, WorkingSet } from "@comu/context-engine";
 import {
   TaskPlan,
   VerificationResult,
@@ -48,6 +49,7 @@ export class AgentOrchestrator {
   private memoryEngine?: MemoryEngine;
   private subagentManager: SubagentManager;
   private requestManager?: ModelRequestManager;
+  private workingSetManager: WorkingSetManager;
 
   constructor(
     private model: ModelProvider,
@@ -62,6 +64,7 @@ export class AgentOrchestrator {
       memoryEngine?: MemoryEngine;
       subagentManager?: SubagentManager;
       requestManagerConfig?: RequestManagerConfig;
+      workingSetManager?: WorkingSetManager;
     }
   ) {
     this.planner = options?.planner || new TaskPlanner();
@@ -70,7 +73,16 @@ export class AgentOrchestrator {
     this.interactionManager = options?.interactionManager;
     this.memoryEngine = options?.memoryEngine;
     this.subagentManager = options?.subagentManager || new SubagentManager();
+    this.workingSetManager = options?.workingSetManager || new WorkingSetManager();
     // requestManager is lazily initialized per-task in runWithContract
+  }
+
+  public getWorkingSet(): WorkingSet {
+    return this.workingSetManager.get();
+  }
+
+  public getWorkingSetManager(): WorkingSetManager {
+    return this.workingSetManager;
   }
 
   public getState(): AgentState {
@@ -162,7 +174,18 @@ export class AgentOrchestrator {
       taskId: ctx.taskId,
       workspace: { rootPath: ctx.workspaceRoot },
       limits: { maxResults: 100, maxBytes: 1000000 },
-      permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } }
+      permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } },
+      abortSignal: ctx.abortSignal,
+      cancellation: ctx.abortSignal ? {
+        get isCancelled() { return ctx.abortSignal?.aborted ?? false; },
+        onCancel: (cb: () => void) => {
+          if (ctx.abortSignal?.aborted) {
+            cb();
+          } else {
+            ctx.abortSignal?.addEventListener("abort", cb, { once: true });
+          }
+        }
+      } : undefined
     };
 
     if (ctx.abortSignal?.aborted) {
@@ -393,6 +416,17 @@ export class AgentOrchestrator {
           verificationId: lastVerification.verificationId,
           result: lastVerification
         });
+
+        if (lastVerification.checks && lastVerification.checks.length > 0) {
+          this.workingSetManager.updateDiagnostics(
+            lastVerification.checks.map((c: any) => ({
+              file: c.name || "verification",
+              line: 1,
+              message: c.message || c.status,
+              severity: (c.status === "FAILED" ? "error" : "warning") as "error" | "warning"
+            }))
+          );
+        }
 
         if (lastVerification.status === "PASSED") {
           planManager.completeStep(currentStep.id, lastVerification.summary);
@@ -783,11 +817,33 @@ export class AgentOrchestrator {
               }
             }
 
+            if (ctx.abortSignal?.aborted) {
+              this.transition(ctx, "CANCELLED", "Task was cancelled");
+              ctx.onEvent({
+                type: "task.cancelled",
+                eventId: `evt-${Date.now()}`,
+                taskId: ctx.taskId,
+                timestamp: new Date().toISOString()
+              });
+              return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
+            }
+
             let toolError: any = null;
             try {
               result = await this.executor.execute(tc.name, tc.arguments, toolCtx);
             } catch (e) {
               toolError = e;
+            }
+
+            if (ctx.abortSignal?.aborted || (toolError && (toolError.name === "AbortError" || String(toolError).includes("COMMAND_CANCELLED") || String(toolError).includes("CANCELLED")))) {
+              this.transition(ctx, "CANCELLED", "Task was cancelled");
+              ctx.onEvent({
+                type: "task.cancelled",
+                eventId: `evt-${Date.now()}`,
+                taskId: ctx.taskId,
+                timestamp: new Date().toISOString()
+              });
+              return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
             }
 
             if (isMutating) {
@@ -869,6 +925,27 @@ export class AgentOrchestrator {
             taskId: ctx.taskId,
             timestamp: new Date().toISOString()
           });
+
+          // Update working set tracking
+          if (tc.name === "read_file" && result) {
+            const content = typeof result === "string" ? result : result.content || "";
+            const isTruncated = typeof result === "object" ? !!result.truncated : false;
+            this.workingSetManager.addInspectedFile({ path: tc.arguments?.path, content, isTruncated });
+          } else if (tc.name === "search_text" && result?.matches) {
+            this.workingSetManager.addSearchResults(
+              result.matches.map((m: any) => ({
+                file: m.file || m.path,
+                line: m.line || 1,
+                content: m.lineContent || m.text || ""
+              }))
+            );
+          } else if ((tc.name === "create_file" || tc.name === "write_file" || tc.name === "edit_file") && tc.arguments?.path) {
+            this.workingSetManager.addModifiedFile({
+              path: tc.arguments.path,
+              source: "COMU_CHANGE",
+              timestamp: new Date().toISOString()
+            });
+          }
         } catch (e: any) {
           toolResultStr = `ERROR: ${e.message}`;
           ctx.onEvent({
