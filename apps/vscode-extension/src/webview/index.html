@@ -3,114 +3,373 @@
 
 <head>
     <meta charset="UTF-8">
-    <!-- Webview Security: CSP supporting VS Code Extension Host and Live Preview -->
+    <!-- Webview Security: Strict CSP supporting VS Code Extension Host and Live Preview -->
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'self' vscode-resource: vscode-webview: http: https: data:; style-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:; script-src 'unsafe-inline' 'self' vscode-resource: vscode-webview: http: https:; font-src 'self' vscode-resource: vscode-webview: https://fonts.gstatic.com https://fonts.googleapis.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COMU AI Software Engineer</title>
+    <title>COMU AI Software Engineering Workspace</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <!-- ═══════════════════════════════════════════════
-         MAIN VIEW — Command Center
+         APPLICATION SHELL — Engineering Workspace
          ═══════════════════════════════════════════════ -->
-    <div id="main-view">
-        <!-- Header Toolbar -->
-        <div class="header">
-            <div class="header-left">
+    <div id="app-shell">
+
+        <!-- ── HEADER ── -->
+        <header class="workspace-header" id="workspace-header">
+            <div class="header-branding">
                 <span class="logo">✦ COMU</span>
-                <span class="version-tag">v0.1.8</span>
-                <span class="subtitle">AI Software Engineer</span>
-            </div>
-            <div class="header-right">
-                <div class="status-indicator">
-                    <span id="runtime-status-dot" class="dot offline"></span>
-                    <span id="runtime-status-text">Offline</span>
+                <span class="version-badge">v0.1.8</span>
+                <div class="header-status" id="header-status">
+                    <span id="runtime-status-dot" class="dot online"></span>
+                    <span id="header-status-label" class="status-label">Ready</span>
                 </div>
-                <button id="settings-btn" class="icon-btn" title="Provider & API Key Settings">⚙</button>
             </div>
-        </div>
 
-        <!-- Workspace / Chat Area -->
-        <div id="chat-container" class="chat-container">
-            <!-- Dynamic chat goes here -->
-            <div class="empty-state" id="empty-state-view">
-                <div class="empty-logo">✦</div>
-                <h1>COMU</h1>
-                <h2>Autonomous AI Software Engineer</h2>
+            <div class="header-task-summary" id="header-task-summary" style="display: none;">
+                <span class="task-summary-state" id="header-state-pill">Agent</span>
+                <span class="task-summary-text" id="header-task-text">No active task</span>
+            </div>
 
-                <!-- BYOK Onboarding Banner -->
-                <div class="byok-onboarding-card" id="byok-onboarding-card">
-                    <div class="byok-badge">BRING YOUR OWN KEY</div>
-                    <div class="byok-title">Connect Your AI Provider</div>
-                    <p class="byok-desc">COMU is model-agnostic. Connect your own provider account (such as NVIDIA
-                        Nemotron) or use a local model. COMU does not provide or resell AI credits.</p>
-                    <div class="byok-actions">
-                        <button id="btn-onboarding-nvidia" class="byok-btn primary">Connect NVIDIA Nemotron</button>
-                        <button id="btn-onboarding-other" class="byok-btn secondary">Configure Other Provider</button>
-                        <button id="btn-onboarding-local" class="byok-btn secondary">Use Local Model</button>
+            <div class="header-controls">
+                <div class="header-model-badge" id="header-model-badge" title="Active Model">
+                    <span class="model-icon">⚡</span>
+                    <span id="header-model-name">Loading...</span>
+                </div>
+                <button id="btn-toggle-context" class="header-btn" title="Toggle Context Drawer" aria-label="Toggle Context">
+                    <span class="btn-icon">🗂</span>
+                    <span class="btn-text">Context</span>
+                    <span id="context-badge" class="badge-pill" style="display: none;">0</span>
+                </button>
+                <button id="settings-btn" class="header-btn icon-only" title="AI Provider & API Key Settings" aria-label="Settings">⚙</button>
+            </div>
+        </header>
+
+        <!-- ── NAVIGATION TABS ── -->
+        <nav class="workspace-nav" id="workspace-nav" role="tablist" aria-label="Workspace Sections">
+            <button class="nav-tab active" data-tab="activity" role="tab" aria-selected="true" id="tab-btn-activity">
+                <span class="nav-icon">⚡</span>
+                <span class="nav-label">Activity</span>
+                <span id="badge-activity" class="nav-badge live-dot" style="display: none;">●</span>
+            </button>
+            <button class="nav-tab" data-tab="overview" role="tab" aria-selected="false" id="tab-btn-overview">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Overview</span>
+            </button>
+            <button class="nav-tab" data-tab="plan" role="tab" aria-selected="false" id="tab-btn-plan">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">Plan</span>
+                <span id="badge-plan" class="nav-badge" style="display: none;">0/0</span>
+            </button>
+            <button class="nav-tab" data-tab="changes" role="tab" aria-selected="false" id="tab-btn-changes">
+                <span class="nav-icon">Δ</span>
+                <span class="nav-label">Changes</span>
+                <span id="badge-changes" class="nav-badge" style="display: none;">0</span>
+            </button>
+            <button class="nav-tab" data-tab="verification" role="tab" aria-selected="false" id="tab-btn-verification">
+                <span class="nav-icon">🛡️</span>
+                <span class="nav-label">Verification</span>
+                <span id="badge-verification" class="nav-badge" style="display: none;">✓</span>
+            </button>
+            <button class="nav-tab" data-tab="memory" role="tab" aria-selected="false" id="tab-btn-memory">
+                <span class="nav-icon">🧠</span>
+                <span class="nav-label">Memory</span>
+                <span id="badge-memory" class="nav-badge" style="display: none;">0</span>
+            </button>
+            <button class="nav-tab" data-tab="workers" role="tab" aria-selected="false" id="tab-btn-workers">
+                <span class="nav-icon">🤖</span>
+                <span class="nav-label">Workers</span>
+                <span id="badge-workers" class="nav-badge" style="display: none;">0</span>
+            </button>
+        </nav>
+
+        <!-- ── WORKSPACE BODY (Main Content + Context Drawer) ── -->
+        <div class="workspace-body">
+
+            <!-- MAIN CONTENT PANELS -->
+            <main class="workspace-main" id="workspace-main">
+
+                <!-- 1. ACTIVITY TIMELINE (Signature Surface) -->
+                <section class="tab-view active" id="view-activity" role="tabpanel">
+                    <div id="activity-container" class="activity-scroll-area">
+                        <!-- Empty State Hero -->
+                        <div class="empty-state" id="empty-state-view">
+                            <div class="empty-logo">✦</div>
+                            <h1>COMU</h1>
+                            <h2>AI Software Engineering Workspace</h2>
+
+                            <!-- BYOK Onboarding Banner -->
+                            <div class="byok-onboarding-card" id="byok-onboarding-card">
+                                <div class="byok-badge">BRING YOUR OWN KEY</div>
+                                <div class="byok-title">Connect Your AI Provider</div>
+                                <p class="byok-desc">COMU is model-agnostic and BYOK. Connect NVIDIA Nemotron, GPT-6 Astra, OpenAI, or run Ollama locally.</p>
+                                <div class="byok-actions">
+                                    <button id="btn-onboarding-nvidia" class="byok-btn primary">Connect NVIDIA Nemotron</button>
+                                    <button id="btn-onboarding-other" class="byok-btn secondary">Configure Other Provider</button>
+                                    <button id="btn-onboarding-local" class="byok-btn secondary">Use Local Ollama</button>
+                                </div>
+                            </div>
+
+                            <div class="empty-action-chips">
+                                <div class="chips-label">Suggested Engineering Workflows</div>
+                                <button class="chip" data-prompt="Fix the failing tests in this repository">🧪 Fix failing tests</button>
+                                <button class="chip" data-prompt="Analyze the codebase architecture and explain entry points">🔍 Explain project architecture</button>
+                                <button class="chip" data-prompt="Inspect and refactor authentication flow">🛠️ Refactor authentication</button>
+                                <button class="chip" data-prompt="Implement automated verification for core services">⚡ Add verification checks</button>
+                            </div>
+                        </div>
+
+                        <!-- Active Task Items (Dynamically Rendered) -->
+                        <div id="timeline-list" class="timeline-list" style="display: none;"></div>
+                    </div>
+
+                    <!-- Scroll assist pill -->
+                    <button id="btn-scroll-bottom" class="scroll-bottom-pill" style="display: none;">
+                        <span>↓ New activity</span>
+                    </button>
+                </section>
+
+                <!-- 2. TASK OVERVIEW -->
+                <section class="tab-view" id="view-overview" role="tabpanel" style="display: none;">
+                    <div class="overview-scroll-area">
+                        <div class="overview-card task-card">
+                            <div class="overview-section-header">ACTIVE TASK</div>
+                            <h3 id="overview-task-title">No task running</h3>
+                            <div class="overview-metrics-grid">
+                                <div class="metric-box">
+                                    <span class="metric-label">STATUS</span>
+                                    <span class="metric-value" id="ov-status">IDLE</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">MODE</span>
+                                    <span class="metric-value" id="ov-mode">CHAT</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">PLAN</span>
+                                    <span class="metric-value" id="ov-plan">—</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">CHANGES</span>
+                                    <span class="metric-value" id="ov-changes">0 files</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">VERIFICATION</span>
+                                    <span class="metric-value" id="ov-verification">—</span>
+                                </div>
+                                <div class="metric-box">
+                                    <span class="metric-label">DURATION</span>
+                                    <span class="metric-value" id="ov-duration">00:00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Completion Banner (Phase 35) -->
+                        <div id="completion-banner" class="completion-banner" style="display: none;">
+                            <div class="banner-title-row">
+                                <span class="completion-icon">✓</span>
+                                <span class="completion-title">TASK COMPLETED</span>
+                            </div>
+                            <p id="completion-summary-text" class="completion-desc"></p>
+                            <div class="completion-actions">
+                                <button id="btn-overview-review-changes" class="action-btn primary">Review Changes</button>
+                                <button id="btn-overview-open-files" class="action-btn secondary">Open Modified Files</button>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Failure Banner (Phase 36) -->
+                        <div id="failure-banner" class="failure-banner" style="display: none;">
+                            <div class="banner-title-row">
+                                <span class="failure-icon">✕</span>
+                                <span class="failure-title" id="failure-title">TASK FAILED</span>
+                            </div>
+                            <p id="failure-desc" class="failure-desc"></p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. IMPLEMENTATION PLAN -->
+                <section class="tab-view" id="view-plan" role="tabpanel" style="display: none;">
+                    <div class="plan-scroll-area">
+                        <div class="panel-header-bar">
+                            <div>
+                                <span class="panel-title">ENGINEERING PLAN</span>
+                                <span id="plan-version-badge" class="badge-pill">v1</span>
+                            </div>
+                            <span id="plan-status-badge" class="status-badge badge-pending">DRAFT</span>
+                        </div>
+                        <div id="plan-steps-list" class="plan-steps-container">
+                            <div class="empty-panel-text">No active plan generated yet.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. CHANGES PANEL -->
+                <section class="tab-view" id="view-changes" role="tabpanel" style="display: none;">
+                    <div class="changes-scroll-area">
+                        <div class="panel-header-bar">
+                            <span class="panel-title">CHANGESET</span>
+                            <span id="changes-count-badge" class="badge-pill">0 files</span>
+                        </div>
+                        <div id="changes-list" class="changes-list-container">
+                            <div class="empty-panel-text">No files modified in this task yet.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. VERIFICATION MATRIX -->
+                <section class="tab-view" id="view-verification" role="tabpanel" style="display: none;">
+                    <div class="verification-scroll-area">
+                        <div class="panel-header-bar">
+                            <span class="panel-title">VERIFICATION & COMPLETION GATE</span>
+                            <span id="verif-gate-badge" class="status-badge badge-pending">PENDING</span>
+                        </div>
+                        <div id="verif-checks-list" class="checks-list-container">
+                            <div class="empty-panel-text">No verification runs recorded yet.</div>
+                        </div>
+                        <div id="verif-diagnostics-card" class="diagnostics-summary-card" style="display: none;"></div>
+                        <div id="verif-repair-card" class="repair-summary-card" style="display: none;"></div>
+                    </div>
+                </section>
+
+                <!-- 6. WORKSPACE MEMORY -->
+                <section class="tab-view" id="view-memory" role="tabpanel" style="display: none;">
+                    <div class="memory-scroll-area">
+                        <div class="panel-header-bar">
+                            <span class="panel-title">WORKSPACE KNOWLEDGE & CONVENTIONS</span>
+                            <span id="memory-count-badge" class="badge-pill">0 verified</span>
+                        </div>
+                        <div id="memory-list" class="memory-list-container">
+                            <div class="empty-panel-text">No workspace conventions or lessons recorded.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 7. SUPERVISED WORKERS -->
+                <section class="tab-view" id="view-workers" role="tabpanel" style="display: none;">
+                    <div class="workers-scroll-area">
+                        <div class="panel-header-bar">
+                            <span class="panel-title">COLLABORATING SUBAGENTS</span>
+                            <span id="workers-count-badge" class="badge-pill">0 workers</span>
+                        </div>
+                        <div id="workers-list" class="workers-list-container">
+                            <div class="empty-panel-text">No background worker agents deployed.</div>
+                        </div>
+                    </div>
+                </section>
+
+            </main>
+
+            <!-- ── CONTEXT DRAWER / RIGHT RAIL ── -->
+            <aside class="context-drawer" id="context-drawer" aria-label="Context & Working Set">
+                <div class="drawer-header">
+                    <span class="drawer-title">WORKING SET CONTEXT</span>
+                    <button id="btn-close-drawer" class="icon-btn-sm" title="Close Drawer">✕</button>
+                </div>
+                <div class="drawer-content">
+                    <div class="context-section">
+                        <div class="section-subhead">ACTIVE FILE</div>
+                        <div id="context-active-file" class="context-item-pill">None</div>
+                    </div>
+
+                    <div class="context-section">
+                        <div class="section-subhead">INSPECTED FILES (<span id="count-inspected">0</span>)</div>
+                        <div id="context-inspected-list" class="context-chip-list">
+                            <span class="empty-subtext">No files inspected</span>
+                        </div>
+                    </div>
+
+                    <div class="context-section">
+                        <div class="section-subhead">MODIFIED FILES (<span id="count-modified">0</span>)</div>
+                        <div id="context-modified-list" class="context-chip-list">
+                            <span class="empty-subtext">No files modified</span>
+                        </div>
+                    </div>
+
+                    <div class="context-section">
+                        <div class="section-subhead">WORKSPACE DIAGNOSTICS (<span id="count-diag">0</span>)</div>
+                        <div id="context-diag-list" class="context-chip-list">
+                            <span class="empty-subtext">Clean — 0 issues</span>
+                        </div>
                     </div>
                 </div>
+            </aside>
 
-                <!-- <div class="action-chips">
-                    <div class="chips-label">Or get started with</div>
-                    <button class="chip" data-prompt="Implement a feature ">✨ Implement a feature</button>
-                    <button class="chip" data-prompt="Fix a bug in ">🐛 Fix a bug</button>
-                    <button class="chip" data-prompt="Add tests for ">🧪 Add tests</button>
-                    <button class="chip" data-prompt="Explain this project">🔍 Explain this project</button>
-                </div> -->
-            </div>
         </div>
 
-        <!-- Composer Bar -->
-        <div class="input-area">
+        <!-- ── MODE-AWARE COMPOSER (Phase 20) ── -->
+        <footer class="workspace-composer">
+            <!-- Attachment chip bar -->
+            <div id="composer-attachment-bar" class="attachment-bar" style="display: none;">
+                <span class="attachment-chip" id="active-file-chip">📎 active-file</span>
+            </div>
+
+            <!-- Composer input box -->
             <div class="composer-container">
-                <textarea id="prompt-input" placeholder="Ask COMU... (Shift+Enter for newline)" rows="1"></textarea>
-                <div class="composer-actions">
-                    <button id="cancel-btn" class="cancel-btn" style="display: none;">■ Stop</button>
+                <textarea id="prompt-input" placeholder="Ask COMU... (Shift+Enter for newline)" rows="1" aria-label="Message prompt"></textarea>
+                <div class="composer-side-actions">
+                    <button id="cancel-btn" class="cancel-btn" style="display: none;" title="Stop Task (Esc)">■ Stop</button>
                     <button id="submit-btn" class="submit-btn" title="Send (Enter)">➤</button>
                 </div>
             </div>
-            <div class="model-selector-container">
-                <div class="model-selector-left">
-                    <span class="model-label">Model:</span>
-                    <select id="model-select">
-                        <option value="" disabled selected>Loading models...</option>
-                    </select>
+
+            <!-- Controls bar: Mode selector & Model selector -->
+            <div class="composer-controls-bar">
+                <div class="composer-left-controls">
+                    <!-- Mode Selector -->
+                    <div class="mode-select-wrap">
+                        <span class="control-label">Mode:</span>
+                        <select id="mode-select" class="control-select" aria-label="Task Mode">
+                            <option value="AUTO" selected>Auto (Classify)</option>
+                            <option value="AGENT">Agent (Autonomous)</option>
+                            <option value="PLAN">Plan (Design)</option>
+                            <option value="ASK">Ask (Investigate)</option>
+                            <option value="CHAT">Chat (Conversational)</option>
+                        </select>
+                    </div>
+
+                    <!-- Model Selector -->
+                    <div class="model-select-wrap">
+                        <span class="control-label">Model:</span>
+                        <select id="model-select" class="control-select" aria-label="Model Selection">
+                            <option value="" disabled selected>Loading models...</option>
+                        </select>
+                    </div>
                 </div>
-                <button id="configure-model-btn" class="configure-link-btn" title="Configure AI Providers & Keys">⚙
-                    Configure</button>
+
+                <div class="composer-right-controls">
+                    <button id="configure-model-btn" class="configure-link-btn" title="Configure AI Providers">⚙ Providers</button>
+                </div>
             </div>
-        </div>
+        </footer>
+
     </div>
 
     <!-- ═══════════════════════════════════════════════
-         SETTINGS VIEW
+         SETTINGS VIEW (Phase 30, 31, 32)
          ═══════════════════════════════════════════════ -->
     <div id="settings-view" style="display: none;">
-        <div class="header">
-            <div class="header-left">
-                <button id="back-btn" class="icon-btn back-btn" title="Back to Chat">← Back</button>
-                <span class="logo">Provider & API Key Settings</span>
-            </div>
-        </div>
+        <header class="settings-header">
+            <button id="back-btn" class="header-btn" title="Back to Workspace">← Back to Workspace</button>
+            <span class="settings-title">AI Provider & API Key Settings</span>
+        </header>
+
         <div class="settings-scroll-area">
             <div class="byok-security-banner">
                 <div class="banner-icon">🛡️</div>
                 <div class="banner-content">
                     <div class="banner-title">Bring Your Own Key (BYOK) Security</div>
-                    <div class="banner-text">COMU does not provide or resell AI inference subscriptions. Your API keys
-                        are stored exclusively in VS Code <code>SecretStorage</code> on your device and sent directly to
-                        the provider endpoint. Keys are never logged, committed to Git, or transmitted anywhere else.
-                    </div>
+                    <div class="banner-text">COMU does not resell inference credits. Your API keys are encrypted strictly in VS Code <code>SecretStorage</code> on your device and transmitted directly to the configured provider endpoint over TLS. Keys are never logged, exposed to the webview JS, or sent elsewhere.</div>
                 </div>
             </div>
-            <div class="settings-content" id="providers-container">
-                <!-- Dynamic providers rendered here -->
+
+            <div class="providers-container" id="providers-container">
+                <!-- Dynamic provider cards rendered here -->
             </div>
+
             <div class="settings-version-footer">
-                <span>COMU AI Coding Agent · v0.1.8</span>
+                <span>COMU AI Software Engineering Workspace · v0.1.8 · BYOK Architecture</span>
             </div>
         </div>
     </div>

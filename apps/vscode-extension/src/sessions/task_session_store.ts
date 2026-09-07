@@ -37,15 +37,26 @@ export class TaskSessionStore {
     }
   }
 
-  public startNewTask(taskId: string, prompt: string, modelId: string) {
+  public startNewTask(taskId: string, prompt: string, modelId: string, mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT") {
+    const now = Date.now();
     this.state = {
       taskId,
       prompt,
       modelId,
+      interactionMode: mode && mode !== "AUTO" ? mode : undefined,
+      agentState: "STARTING",
       status: "running",
       events: [],
       changes: [],
-      repairAttempts: []
+      repairAttempts: [],
+      workingSet: {
+        openFiles: [],
+        recentlyInspectedFiles: [],
+        searchResults: [],
+        diagnostics: [],
+        modifiedFiles: []
+      },
+      startTime: now
     };
     this.seenEvents.clear();
   }
@@ -59,6 +70,16 @@ export class TaskSessionStore {
     this.seenEvents.add(uniqueId);
     this.state.events.push(event);
 
+    if (!this.state.workingSet) {
+      this.state.workingSet = {
+        openFiles: [],
+        recentlyInspectedFiles: [],
+        searchResults: [],
+        diagnostics: [],
+        modifiedFiles: []
+      };
+    }
+
     // Update projected state based on event
     if (event.type === 'change.created') {
       const ce = event as ChangeCreatedEvent;
@@ -66,22 +87,74 @@ export class TaskSessionStore {
       if (!existing) {
         this.state.changes.push({ path: ce.path, operation: ce.operation });
       }
+      if (this.state.workingSet && !this.state.workingSet.modifiedFiles?.some(m => m.path === ce.path)) {
+        this.state.workingSet.modifiedFiles = this.state.workingSet.modifiedFiles || [];
+        this.state.workingSet.modifiedFiles.push({ path: ce.path, source: 'COMU_CHANGE' });
+      }
+    } else if (event.type === 'agent.status') {
+      const se = event as any;
+      if (se.status) {
+        this.state.agentState = se.status;
+        const sUpper = se.status.toUpperCase();
+        if (sUpper.includes("AGENT")) this.state.interactionMode = "AGENT";
+        else if (sUpper.includes("PLAN")) this.state.interactionMode = "PLAN";
+        else if (sUpper.includes("ASK")) this.state.interactionMode = "ASK";
+        else if (sUpper.includes("CHAT")) this.state.interactionMode = "CHAT";
+        else if (sUpper.includes("AMBIGUOUS") || sUpper.includes("CLARIF")) this.state.interactionMode = "AMBIGUOUS";
+      }
+    } else if (event.type === 'tool.started' || event.type === 'tool.completed') {
+      const te = event as any;
+      const toolName = (te.tool || '').toLowerCase();
+      if (te.tool) {
+        this.state.agentState = `TOOL_CALLING`;
+      }
+      // Inspect tool args or results for file paths
+      const targetPath = te.path || te.filePath || (te.result && (te.result.path || te.result.filePath));
+      if (targetPath && typeof targetPath === 'string' && this.state.workingSet) {
+        this.state.workingSet.recentlyInspectedFiles = this.state.workingSet.recentlyInspectedFiles || [];
+        if (!this.state.workingSet.recentlyInspectedFiles.includes(targetPath)) {
+          this.state.workingSet.recentlyInspectedFiles.unshift(targetPath);
+          if (this.state.workingSet.recentlyInspectedFiles.length > 20) {
+            this.state.workingSet.recentlyInspectedFiles.length = 20;
+          }
+        }
+      }
     } else if (event.type === 'task.completed') {
       this.state.status = 'completed';
+      this.state.agentState = 'COMPLETED';
+      const now = Date.now();
+      this.state.completedTime = now;
+      if (this.state.startTime) {
+        this.state.durationMs = now - this.state.startTime;
+      }
       const te = event as any;
       if (te.finalText) {
         this.state.finalResponse = te.finalText;
       }
     } else if (event.type === 'task.failed') {
       this.state.status = 'failed';
+      this.state.agentState = 'FAILED';
+      const now = Date.now();
+      this.state.completedTime = now;
+      if (this.state.startTime) {
+        this.state.durationMs = now - this.state.startTime;
+      }
     } else if (event.type === 'task.cancelled') {
       this.state.status = 'cancelled';
+      this.state.agentState = 'CANCELLED';
+      const now = Date.now();
+      this.state.completedTime = now;
+      if (this.state.startTime) {
+        this.state.durationMs = now - this.state.startTime;
+      }
     } else if (event.type === 'plan.created') {
       const pe = event as PlanCreatedEvent;
       this.state.plan = pe.plan;
+      if (!this.state.interactionMode) this.state.interactionMode = 'PLAN';
     } else if (event.type === 'plan.updated') {
       const pe = event as PlanUpdatedEvent;
       this.state.plan = pe.plan;
+
     } else if (event.type === 'plan.step.started') {
       const se = event as PlanStepStartedEvent;
       if (this.state.plan) {

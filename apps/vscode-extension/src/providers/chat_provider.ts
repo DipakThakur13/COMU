@@ -63,13 +63,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     await this.sendProvidersToWebview();
                     break;
                 case 'submit_prompt':
-                    await this.handleSubmitPrompt(data.prompt, data.modelId);
+                    await this.handleSubmitPrompt(data.prompt, data.modelId, data.mode);
                     break;
                 case 'cancel_task':
                     await this.handleCancelTask();
                     break;
                 case 'request_diff':
                     await this.handleRequestDiff(data.path);
+                    break;
+                case 'open_file':
+                    await this.handleOpenFile(data.path, data.line);
                     break;
                 case 'request_providers':
                     await this.sendProvidersToWebview();
@@ -144,7 +147,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this.runtimeClient.pushConfig(config);
     }
 
-    private async handleSubmitPrompt(prompt: string, modelId: string) {
+    private async handleSubmitPrompt(prompt: string, modelId: string, mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT") {
         if (!prompt) return;
 
         // Task-Start Guard: Verify provider configuration before proceeding
@@ -178,7 +181,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 editor: editorCtx
             });
 
-            this.sessionStore.startNewTask(taskInfo.taskId, prompt, modelId);
+            this.sessionStore.startNewTask(taskInfo.taskId, prompt, modelId, mode);
             this.sendStateToWebview();
 
             const url = this.runtimeClient.getEventStreamUrl(taskInfo.taskId);
@@ -190,6 +193,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.sendErrorToWebview(`Failed to start task: ${e.message}`);
         }
     }
+
+    private async handleOpenFile(filePath: string, line?: number) {
+        try {
+            const workspaceCtx = await getWorkspaceContext();
+            let fullPath = filePath;
+            if (!path.isAbsolute(filePath) && workspaceCtx?.rootPath) {
+                fullPath = path.join(workspaceCtx.rootPath, filePath);
+            }
+            if (fs.existsSync(fullPath)) {
+                const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(fullPath));
+                const editor = await vscode.window.showTextDocument(doc, { preview: true });
+                if (line !== undefined && line > 0) {
+                    const pos = new vscode.Position(line - 1, 0);
+                    editor.selection = new vscode.Selection(pos, pos);
+                    editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+                }
+            }
+        } catch (e: any) {
+            console.error('[COMU ChatViewProvider] Failed to open file:', e);
+        }
+    }
+
 
     private async handleCancelTask() {
         const state = this.sessionStore.getState();

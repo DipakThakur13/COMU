@@ -1,70 +1,212 @@
 // @ts-check
-(function() {
-    // Acquire the vscode API safely (supports VS Code Webview and Live Preview)
+(function () {
+    // ═══════════════════════════════════════════════════════════
+    // 1. VS CODE API INITIALIZATION & SAFE SHIMS
+    // ═══════════════════════════════════════════════════════════
     // @ts-ignore
     const vscode = (typeof acquireVsCodeApi === 'function')
         ? acquireVsCodeApi()
-        : { postMessage: (msg) => console.log('[Live Preview postMessage]:', msg) };
+        : { postMessage: (msg) => console.log('[COMU Live Preview postMessage]:', msg) };
 
     const isLivePreview = typeof acquireVsCodeApi !== 'function';
 
+    // ═══════════════════════════════════════════════════════════
+    // 2. CENTRAL VIEW STATE (Phase 2)
+    // ═══════════════════════════════════════════════════════════
     const state = {
         taskId: null,
         prompt: null,
-        modelId: '',
-        status: 'idle', // idle, running, waiting_for_user, completed, failed, cancelled, offline
+        interactionMode: 'CHAT', // CHAT, ASK, PLAN, AGENT, AMBIGUOUS
+        agentState: 'IDLE',      // IDLE, STARTING, CLASSIFYING, ANALYZING, PLANNING, THINKING, TOOL_CALLING, OBSERVING, VERIFYING, DIAGNOSING, REPAIRING, WAITING_FOR_USER, COMPLETED, FAILED, CANCELLED, LIMIT_REACHED
+        status: 'idle',          // idle, running, cancelling, waiting_for_user, completed, failed, cancelled, offline
+        selectedModelId: '',
+        requestedMode: 'AUTO',   // AUTO, CHAT, ASK, PLAN, AGENT
+        activeNavTab: 'activity',// activity, overview, plan, changes, verification, memory, workers
         events: [],
+        rawEvents: [],
+        activity: [],
         changes: [],
-        finalResponse: null,
-        providers: [],
         plan: null,
         verification: null,
         diagnosis: null,
         repairAttempts: [],
+        workingSet: {
+            activeFile: null,
+            openFiles: [],
+            recentlyInspectedFiles: [],
+            searchResults: [],
+            diagnostics: [],
+            modifiedFiles: []
+        },
+        memory: [],
+        workers: [],
+        providers: [],
         pendingInteraction: null,
         gitCommitProposal: null,
-        gitCommitResult: null,
         gitPushProposal: null,
-        gitPushResult: null,
-        subagents: []
+        finalResponse: null,
+        startTime: null,
+        completedTime: null,
+        durationMs: null,
+        estimatedTokens: 0,
+        cancellation: {
+            requested: false,
+            acknowledged: false,
+            error: null
+        },
+        contextDrawerOpen: false
     };
 
-    const panelCollapseState = {
-        plan: false,
-        verification: false
+    let durationTimerInterval = null;
+    let userScrolledUp = false;
+
+    // ═══════════════════════════════════════════════════════════
+    // 3. DOM ELEMENTS
+    // ═══════════════════════════════════════════════════════════
+    const appShell = document.getElementById('app-shell');
+    const settingsView = document.getElementById('settings-view');
+
+    // Header elements
+    const statusDot = document.getElementById('runtime-status-dot');
+    const statusLabel = document.getElementById('header-status-label');
+    const headerTaskSummary = document.getElementById('header-task-summary');
+    const headerStatePill = document.getElementById('header-state-pill');
+    const headerTaskText = document.getElementById('header-task-text');
+    const headerModelName = document.getElementById('header-model-name');
+    const btnToggleContext = document.getElementById('btn-toggle-context');
+    const contextBadge = document.getElementById('context-badge');
+    const settingsBtn = document.getElementById('settings-btn');
+    const backBtn = document.getElementById('back-btn');
+
+    // Navigation tab buttons
+    const navTabs = document.querySelectorAll('.nav-tab');
+    const badgeActivity = document.getElementById('badge-activity');
+    const badgePlan = document.getElementById('badge-plan');
+    const badgeChanges = document.getElementById('badge-changes');
+    const badgeVerification = document.getElementById('badge-verification');
+    const badgeMemory = document.getElementById('badge-memory');
+    const badgeWorkers = document.getElementById('badge-workers');
+
+    // Views
+    const tabViews = {
+        activity: document.getElementById('view-activity'),
+        overview: document.getElementById('view-overview'),
+        plan: document.getElementById('view-plan'),
+        changes: document.getElementById('view-changes'),
+        verification: document.getElementById('view-verification'),
+        memory: document.getElementById('view-memory'),
+        workers: document.getElementById('view-workers')
     };
 
-    // DOM Elements - Main View
-    const mainView = document.getElementById('main-view');
-    const chatContainer = document.getElementById('chat-container');
+    // Activity Timeline elements
+    const activityContainer = document.getElementById('activity-container');
+    const emptyStateView = document.getElementById('empty-state-view');
+    const timelineList = document.getElementById('timeline-list');
+    const btnScrollBottom = document.getElementById('btn-scroll-bottom');
+
+    // Context Drawer elements
+    const contextDrawer = document.getElementById('context-drawer');
+    const btnCloseDrawer = document.getElementById('btn-close-drawer');
+    const contextActiveFile = document.getElementById('context-active-file');
+    const contextInspectedList = document.getElementById('context-inspected-list');
+    const contextModifiedList = document.getElementById('context-modified-list');
+    const contextDiagList = document.getElementById('context-diag-list');
+    const countInspected = document.getElementById('count-inspected');
+    const countModified = document.getElementById('count-modified');
+    const countDiag = document.getElementById('count-diag');
+
+    // Overview Elements
+    const overviewTaskTitle = document.getElementById('overview-task-title');
+    const ovStatus = document.getElementById('ov-status');
+    const ovMode = document.getElementById('ov-mode');
+    const ovPlan = document.getElementById('ov-plan');
+    const ovChanges = document.getElementById('ov-changes');
+    const ovVerification = document.getElementById('ov-verification');
+    const ovDuration = document.getElementById('ov-duration');
+    const completionBanner = document.getElementById('completion-banner');
+    const completionSummaryText = document.getElementById('completion-summary-text');
+    const failureBanner = document.getElementById('failure-banner');
+    const failureTitle = document.getElementById('failure-title');
+    const failureDesc = document.getElementById('failure-desc');
+
+    // Composer elements
     const promptInput = document.getElementById('prompt-input');
     const submitBtn = document.getElementById('submit-btn');
     const cancelBtn = document.getElementById('cancel-btn');
+    const modeSelect = document.getElementById('mode-select');
     const modelSelect = document.getElementById('model-select');
-    const statusDot = document.getElementById('runtime-status-dot');
-    const statusText = document.getElementById('runtime-status-text');
-    const settingsBtn = document.getElementById('settings-btn');
     const configureModelBtn = document.getElementById('configure-model-btn');
-    const emptyStateChips = document.querySelectorAll('.chip');
+    const attachmentBar = document.getElementById('composer-attachment-bar');
+    const activeFileChip = document.getElementById('active-file-chip');
 
-    // DOM Elements - Onboarding & Settings View
+    // Onboarding buttons
     const btnOnboardingNvidia = document.getElementById('btn-onboarding-nvidia');
     const btnOnboardingOther = document.getElementById('btn-onboarding-other');
     const btnOnboardingLocal = document.getElementById('btn-onboarding-local');
-    const settingsView = document.getElementById('settings-view');
-    const backBtn = document.getElementById('back-btn');
     const providersContainer = document.getElementById('providers-container');
 
-    // Event Listeners - Chat & Main View
+    // ═══════════════════════════════════════════════════════════
+    // 4. EVENT LISTENERS
+    // ═══════════════════════════════════════════════════════════
+
+    // Tab selection
+    navTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.getAttribute('data-tab');
+            if (targetTab) selectNavTab(targetTab);
+        });
+    });
+
+    // Composer inputs
     submitBtn.addEventListener('click', submitPrompt);
     cancelBtn.addEventListener('click', cancelTask);
 
+    promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submitPrompt();
+        } else if (e.key === 'Escape') {
+            if (state.status === 'running' || state.status === 'waiting_for_user') {
+                cancelTask();
+            }
+        }
+    });
+
+    // Auto-expand textarea
+    promptInput.addEventListener('input', () => {
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 180) + 'px';
+    });
+
+    // Mode and Model selection
+    // @ts-ignore
+    modeSelect.addEventListener('change', (e) => {
+        // @ts-ignore
+        state.requestedMode = e.target.value;
+    });
+
+    // @ts-ignore
+    modelSelect.addEventListener('change', (e) => {
+        // @ts-ignore
+        state.selectedModelId = e.target.value;
+        vscode.postMessage({ type: 'select_model', modelId: state.selectedModelId });
+        updateHeaderModelBadge();
+    });
+
+    // Context drawer toggle
+    btnToggleContext.addEventListener('click', () => toggleContextDrawer());
+    if (btnCloseDrawer) {
+        btnCloseDrawer.addEventListener('click', () => toggleContextDrawer(false));
+    }
+
+    // Settings Navigation
     settingsBtn.addEventListener('click', () => openSettingsView());
     if (configureModelBtn) {
         configureModelBtn.addEventListener('click', () => openSettingsView());
     }
     backBtn.addEventListener('click', () => closeSettingsView());
 
+    // Onboarding buttons
     if (btnOnboardingNvidia) {
         btnOnboardingNvidia.addEventListener('click', () => openSettingsView('nvidia'));
     }
@@ -75,41 +217,56 @@
         btnOnboardingLocal.addEventListener('click', () => openSettingsView('ollama'));
     }
 
-    emptyStateChips.forEach(chip => {
+    // Suggested Workflow Chips
+    document.querySelectorAll('.chip').forEach(chip => {
         chip.addEventListener('click', () => {
             promptInput.value = chip.getAttribute('data-prompt') || '';
             promptInput.focus();
+            promptInput.dispatchEvent(new Event('input'));
         });
     });
 
-    promptInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            submitPrompt();
-        }
+    // Activity Auto-scroll tracking
+    activityContainer.addEventListener('scroll', () => {
+        const threshold = 60;
+        const isNearBottom = activityContainer.scrollHeight - activityContainer.scrollTop - activityContainer.clientHeight < threshold;
+        userScrolledUp = !isNearBottom;
+        btnScrollBottom.style.display = userScrolledUp && state.status === 'running' ? 'block' : 'none';
     });
 
-    modelSelect.addEventListener('change', (e) => {
-        state.modelId = e.target.value;
-        vscode.postMessage({ type: 'select_model', modelId: state.modelId });
+    btnScrollBottom.addEventListener('click', () => {
+        activityContainer.scrollTop = activityContainer.scrollHeight;
+        userScrolledUp = false;
+        btnScrollBottom.style.display = 'none';
     });
 
-    // Handle messages from the extension
+    // Overview buttons
+    const btnOvReviewChanges = document.getElementById('btn-overview-review-changes');
+    if (btnOvReviewChanges) {
+        btnOvReviewChanges.addEventListener('click', () => selectNavTab('changes'));
+    }
+    const btnOvOpenFiles = document.getElementById('btn-overview-open-files');
+    if (btnOvOpenFiles) {
+        btnOvOpenFiles.addEventListener('click', () => {
+            if (state.changes && state.changes.length > 0) {
+                vscode.postMessage({ type: 'open_file', path: state.changes[0].path });
+            }
+        });
+    }
+
+    // Extension Message Dispatcher
     window.addEventListener('message', event => {
         const message = event.data;
+        if (!message) return;
+
         switch (message.type) {
             case 'state_update':
-                Object.assign(state, message.state);
-                renderState();
-                break;
-            case 'error':
-                appendError(message.message);
+                handleSessionStateUpdate(message.state);
                 break;
             case 'providers_update':
                 state.providers = message.providers || [];
                 renderProviders();
                 renderModels();
-                updateOnboardingState();
                 break;
             case 'provider_test_result':
                 handleProviderTestResult(message.providerId, message.result);
@@ -117,11 +274,43 @@
             case 'open_settings':
                 openSettingsView(message.targetProviderId);
                 break;
+            case 'error':
+                appendActivityError(message.message);
+                break;
         }
     });
 
+    // ═══════════════════════════════════════════════════════════
+    // 5. NAVIGATION & TAB SWITCHING
+    // ═══════════════════════════════════════════════════════════
+    function selectNavTab(tabName) {
+        state.activeNavTab = tabName;
+
+        navTabs.forEach(t => {
+            const isTarget = t.getAttribute('data-tab') === tabName;
+            t.classList.toggle('active', isTarget);
+            t.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        });
+
+        Object.keys(tabViews).forEach(k => {
+            if (tabViews[k]) {
+                tabViews[k].style.display = k === tabName ? 'flex' : 'none';
+            }
+        });
+
+        if (tabName === 'activity' && !userScrolledUp) {
+            activityContainer.scrollTop = activityContainer.scrollHeight;
+        }
+    }
+
+    function toggleContextDrawer(forceState) {
+        const nextState = forceState !== undefined ? forceState : !state.contextDrawerOpen;
+        state.contextDrawerOpen = nextState;
+        contextDrawer.classList.toggle('open', nextState);
+    }
+
     function openSettingsView(targetProviderId) {
-        mainView.style.display = 'none';
+        appShell.style.display = 'none';
         settingsView.style.display = 'flex';
         vscode.postMessage({ type: 'request_providers' });
 
@@ -139,71 +328,1095 @@
 
     function closeSettingsView() {
         settingsView.style.display = 'none';
-        mainView.style.display = 'flex';
+        appShell.style.display = 'flex';
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 6. COMPOSER ACTIONS & CANCELLATION (Phase 6, 16, 20)
+    // ═══════════════════════════════════════════════════════════
     function submitPrompt() {
         const text = promptInput.value.trim();
-        if (!text || state.status === 'running') return;
+        if (!text || state.status === 'running' || state.status === 'cancelling') return;
 
-        if (!state.modelId) {
-            appendError("No model selected. Please configure a provider in Settings.");
+        if (!state.selectedModelId) {
+            appendActivityError("No AI model configured. Please configure an AI provider in Settings.");
             openSettingsView();
             return;
         }
 
+        // Send typed WebviewMessage to extension host
         vscode.postMessage({
             type: 'submit_prompt',
             prompt: text,
-            modelId: state.modelId
+            modelId: state.selectedModelId,
+            mode: state.requestedMode
         });
 
         promptInput.value = '';
+        promptInput.style.height = 'auto';
+
+        // Auto-switch to Activity view on task start
+        selectNavTab('activity');
     }
 
     function cancelTask() {
         if (state.status === 'running' || state.status === 'waiting_for_user') {
+            // Immediate UI feedback (Phase 16)
             state.status = 'cancelling';
-            renderState();
+            state.cancellation.requested = true;
+            renderCancellationStatus();
             vscode.postMessage({ type: 'cancel_task' });
         }
     }
 
-    function requestDiff(path) {
-        vscode.postMessage({ type: 'request_diff', path });
-    }
-
-    function respondInteraction(taskId, interactionId, response) {
-        vscode.postMessage({
-            type: 'respond_interaction',
-            taskId,
-            interactionId,
-            response
-        });
-    }
-
-    function updateOnboardingState() {
-        const onboardingCard = document.getElementById('byok-onboarding-card');
-        if (!onboardingCard) return;
-
-        const hasConfiguredCloud = state.providers.some(p => !p.isLocal && p.hasCredential);
-
-        if (hasConfiguredCloud) {
-            onboardingCard.innerHTML = `
-                <div class="byok-badge active">● PROVIDER CONNECTED</div>
-                <div class="byok-title">Ready for Autonomous Engineering</div>
-                <p class="byok-desc">COMU is connected to your AI provider account. Select your model below or manage API keys in Settings.</p>
-                <div class="byok-actions">
-                    <button id="btn-onboarding-manage" class="byok-btn secondary">Manage Providers & Keys</button>
-                </div>
-            `;
-            const manageBtn = document.getElementById('btn-onboarding-manage');
-            if (manageBtn) {
-                manageBtn.addEventListener('click', () => openSettingsView());
-            }
+    function renderCancellationStatus() {
+        if (state.status === 'cancelling') {
+            cancelBtn.innerText = '◌ Cancelling…';
+            cancelBtn.disabled = true;
+            statusDot.className = 'dot waiting';
+            statusLabel.innerText = 'Cancelling…';
+        } else if (state.status === 'cancelled') {
+            cancelBtn.innerText = '✕ Cancelled';
+            cancelBtn.disabled = true;
+            statusDot.className = 'dot offline';
+            statusLabel.innerText = 'Cancelled';
+        } else if (state.status === 'running' || state.status === 'waiting_for_user') {
+            cancelBtn.innerText = '■ Stop';
+            cancelBtn.disabled = false;
         }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 7. EVENT NORMALIZATION & GROUPING (Phase 2, 6, 12)
+    // ═══════════════════════════════════════════════════════════
+    function normalizeRawEvent(event) {
+        if (!event || !event.type) return null;
+        const id = `${event.taskId || 'task'}-${event.eventId || Date.now()}-${event.type}`;
+        const timestamp = event.timestamp || new Date().toISOString();
+
+        switch (event.type) {
+            case 'task.started':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'completed',
+                    title: 'Task started',
+                    shortDescription: 'Initialized execution context',
+                    timestamp
+                };
+
+            case 'agent.status': {
+                const st = (event.status || '').toUpperCase();
+                let status = 'active';
+                if (st === 'COMPLETED') status = 'completed';
+                else if (st === 'FAILED' || st.includes('ERROR')) status = 'failed';
+                else if (st === 'CANCELLED') status = 'warning';
+
+                let toolCat = 'Generic';
+                if (st.includes('READ')) toolCat = 'Read';
+                else if (st.includes('SEARCH')) toolCat = 'Search';
+                else if (st.includes('EDIT')) toolCat = 'Edit';
+                else if (st.includes('VERIF')) toolCat = 'Verification';
+                else if (st.includes('DIAG')) toolCat = 'Diagnosis';
+                else if (st.includes('REPAIR')) toolCat = 'Repair';
+
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    toolCategory: toolCat,
+                    status,
+                    title: event.status,
+                    timestamp
+                };
+            }
+
+            case 'tool.started': {
+                const toolName = event.tool || 'tool';
+                const toolCat = categorizeTool(toolName);
+                const target = event.path || event.filePath || event.command || event.pattern || '';
+                return {
+                    id,
+                    category: 'TOOL_ACTIVITY',
+                    toolCategory: toolCat,
+                    status: 'active',
+                    title: `${toolCat}: ${formatFilePath(target, toolName)}`,
+                    shortDescription: target || toolName,
+                    timestamp,
+                    details: { tool: toolName, ...event }
+                };
+            }
+
+            case 'tool.completed': {
+                const toolName = event.tool || 'tool';
+                const toolCat = categorizeTool(toolName);
+                const target = event.path || event.filePath || (event.result && (event.result.path || event.result.target)) || '';
+                return {
+                    id,
+                    category: 'TOOL_ACTIVITY',
+                    toolCategory: toolCat,
+                    status: 'completed',
+                    title: `${toolCat}: ${formatFilePath(target, toolName)}`,
+                    shortDescription: (event.result && event.result.summary) || target || 'Done',
+                    timestamp,
+                    details: { tool: toolName, result: event.result }
+                };
+            }
+
+            case 'change.created':
+                return {
+                    id,
+                    category: 'TOOL_ACTIVITY',
+                    toolCategory: event.operation === 'CREATE' ? 'Create' : 'Edit',
+                    status: 'completed',
+                    title: `${event.operation === 'CREATE' ? 'Created' : 'Modified'} ${formatFilePath(event.path, '')}`,
+                    shortDescription: event.path,
+                    timestamp,
+                    details: { path: event.path, operation: event.operation }
+                };
+
+            case 'plan.created':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'completed',
+                    title: `Implementation Plan created (v${event.planVersion || 1})`,
+                    shortDescription: `${event.plan?.steps?.length || 0} steps`,
+                    timestamp,
+                    details: { plan: event.plan }
+                };
+
+            case 'plan.step.started':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'active',
+                    title: `Step started: ${event.stepId}`,
+                    timestamp
+                };
+
+            case 'plan.step.completed':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'completed',
+                    title: `Step completed: ${event.stepId}`,
+                    shortDescription: event.resultSummary,
+                    timestamp
+                };
+
+            case 'plan.step.failed':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'failed',
+                    title: `Step failed: ${event.stepId}`,
+                    shortDescription: event.error,
+                    timestamp
+                };
+
+            case 'verification.started':
+                return {
+                    id,
+                    category: 'VALIDATION',
+                    toolCategory: 'Verification',
+                    status: 'active',
+                    title: 'Workspace Verification started',
+                    timestamp
+                };
+
+            case 'verification.completed': {
+                const passed = event.result?.status === 'PASSED';
+                return {
+                    id,
+                    category: 'VALIDATION',
+                    toolCategory: 'Verification',
+                    status: passed ? 'completed' : 'failed',
+                    title: `Verification ${event.result?.status || 'completed'}`,
+                    shortDescription: event.result?.summary,
+                    timestamp,
+                    durationMs: event.result?.durationMs,
+                    details: { result: event.result }
+                };
+            }
+
+            case 'diagnosis.created':
+                return {
+                    id,
+                    category: 'DIAGNOSIS',
+                    toolCategory: 'Diagnosis',
+                    status: 'warning',
+                    title: `Diagnosis: ${event.diagnosis?.failureType || 'Issue identified'}`,
+                    shortDescription: event.diagnosis?.summary,
+                    timestamp,
+                    details: { diagnosis: event.diagnosis }
+                };
+
+            case 'repair.started':
+                return {
+                    id,
+                    category: 'REPAIR',
+                    toolCategory: 'Repair',
+                    status: 'active',
+                    title: `Repair attempt ${event.attemptNumber} started`,
+                    timestamp,
+                    details: { targetFiles: event.targetFiles }
+                };
+
+            case 'repair.completed':
+                return {
+                    id,
+                    category: 'REPAIR',
+                    toolCategory: 'Repair',
+                    status: 'completed',
+                    title: `Repair attempt ${event.attemptNumber} completed`,
+                    shortDescription: event.outcome,
+                    timestamp
+                };
+
+            case 'subagent.started':
+                return {
+                    id,
+                    category: 'TOOL_ACTIVITY',
+                    toolCategory: 'Worker',
+                    status: 'active',
+                    title: `${event.subagentType || 'Subagent'} worker started`,
+                    shortDescription: event.goal,
+                    timestamp
+                };
+
+            case 'subagent.completed':
+                return {
+                    id,
+                    category: 'TOOL_ACTIVITY',
+                    toolCategory: 'Worker',
+                    status: 'completed',
+                    title: `${event.subagentType || 'Subagent'} worker completed`,
+                    shortDescription: event.result?.summary,
+                    timestamp
+                };
+
+            case 'task.completed':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'completed',
+                    title: 'Task completed successfully',
+                    timestamp
+                };
+
+            case 'task.failed':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'failed',
+                    title: `Task failed: ${event.error || 'Execution halted'}`,
+                    timestamp
+                };
+
+            case 'task.cancelled':
+                return {
+                    id,
+                    category: 'SYSTEM_EVENT',
+                    status: 'warning',
+                    title: 'Task cancelled by user',
+                    timestamp
+                };
+
+            default:
+                return null;
+        }
+    }
+
+    function categorizeTool(name) {
+        const l = (name || '').toLowerCase();
+        if (l.includes('read')) return 'Read';
+        if (l.includes('search') || l.includes('find') || l.includes('grep')) return 'Search';
+        if (l.includes('edit') || l.includes('replace') || l.includes('patch')) return 'Edit';
+        if (l.includes('write')) return 'Write';
+        if (l.includes('create')) return 'Create';
+        if (l.includes('terminal') || l.includes('exec') || l.includes('bash') || l.includes('cmd')) return 'Terminal';
+        if (l.includes('git')) return 'Git';
+        if (l.includes('verif') || l.includes('test') || l.includes('lint')) return 'Verification';
+        if (l.includes('diag')) return 'Diagnosis';
+        if (l.includes('repair')) return 'Repair';
+        if (l.includes('worker') || l.includes('subagent')) return 'Worker';
+        return 'Generic';
+    }
+
+    function formatFilePath(target, fallback) {
+        if (!target) return fallback;
+        const normalized = target.replace(/\\/g, '/');
+        const parts = normalized.split('/');
+        return parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : normalized;
+    }
+
+    function groupEvents(items) {
+        if (!items || items.length === 0) return [];
+        const grouped = [];
+        let currentGroup = [];
+        let currentCategory = null;
+
+        function flush() {
+            if (currentGroup.length === 0) return;
+            if (currentGroup.length === 1) {
+                grouped.push(currentGroup[0]);
+            } else {
+                const first = currentGroup[0];
+                const cat = currentCategory || 'Generic';
+                let title = '';
+                if (cat === 'Read') title = `Read ${currentGroup.length} files`;
+                else if (cat === 'Search') title = `Searched repository (${currentGroup.length} queries)`;
+                else title = `${cat} operations (${currentGroup.length})`;
+
+                grouped.push({
+                    id: `group-${first.id}-${currentGroup.length}`,
+                    isGroup: true,
+                    category: first.category,
+                    toolCategory: cat,
+                    status: currentGroup.some(i => i.status === 'failed') ? 'failed' :
+                            currentGroup.some(i => i.status === 'active') ? 'active' : 'completed',
+                    title,
+                    shortDescription: `${currentGroup.length} ${cat.toLowerCase()} activities`,
+                    items: [...currentGroup],
+                    timestamp: currentGroup[currentGroup.length - 1].timestamp
+                });
+            }
+            currentGroup = [];
+            currentCategory = null;
+        }
+
+        for (const item of items) {
+            const isGroupable = item.category === 'TOOL_ACTIVITY' && (item.toolCategory === 'Read' || item.toolCategory === 'Search');
+            if (isGroupable) {
+                if (currentCategory === item.toolCategory) {
+                    currentGroup.push(item);
+                } else {
+                    flush();
+                    currentCategory = item.toolCategory;
+                    currentGroup.push(item);
+                }
+            } else {
+                flush();
+                grouped.push(item);
+            }
+        }
+        flush();
+        return grouped;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 8. STATE UPDATE REDUCER (Phase 2, 5)
+    // ═══════════════════════════════════════════════════════════
+    function handleSessionStateUpdate(newState) {
+        if (!newState) return;
+
+        state.taskId = newState.taskId !== undefined ? newState.taskId : state.taskId;
+        state.prompt = newState.prompt !== undefined ? newState.prompt : state.prompt;
+        state.status = newState.status || state.status;
+        state.selectedModelId = newState.modelId || state.selectedModelId;
+        state.changes = newState.changes || [];
+        state.plan = newState.plan !== undefined ? newState.plan : state.plan;
+        state.verification = newState.verification !== undefined ? newState.verification : state.verification;
+        state.diagnosis = newState.diagnosis !== undefined ? newState.diagnosis : state.diagnosis;
+        state.repairAttempts = newState.repairAttempts || [];
+        state.workingSet = newState.workingSet || state.workingSet;
+        state.memory = newState.memories || state.memory;
+        state.workers = newState.subagents || state.workers;
+        state.pendingInteraction = newState.pendingInteraction !== undefined ? newState.pendingInteraction : state.pendingInteraction;
+        state.gitCommitProposal = newState.gitCommitProposal !== undefined ? newState.gitCommitProposal : state.gitCommitProposal;
+        state.gitPushProposal = newState.gitPushProposal !== undefined ? newState.gitPushProposal : state.gitPushProposal;
+        state.finalResponse = newState.finalResponse !== undefined ? newState.finalResponse : state.finalResponse;
+        state.startTime = newState.startTime || state.startTime;
+        state.completedTime = newState.completedTime || state.completedTime;
+        state.durationMs = newState.durationMs || state.durationMs;
+
+        // Inferred or backend interaction mode
+        if (newState.interactionMode) {
+            state.interactionMode = newState.interactionMode;
+        }
+
+        // Deduplicate and normalize events
+        const seenIds = new Set();
+        const normalized = [];
+        if (newState.events && Array.isArray(newState.events)) {
+            for (const ev of newState.events) {
+                const norm = normalizeRawEvent(ev);
+                if (norm && !seenIds.has(norm.id)) {
+                    seenIds.add(norm.id);
+                    normalized.push(norm);
+                }
+            }
+        }
+        state.activity = groupEvents(normalized);
+
+        // Update Cancellation State
+        if (state.status === 'cancelling') {
+            state.cancellation.requested = true;
+        } else if (state.status === 'cancelled') {
+            state.cancellation.acknowledged = true;
+        }
+
+        renderWorkspace();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 9. WORKSPACE RENDER ORCHESTRATION
+    // ═══════════════════════════════════════════════════════════
+    function renderWorkspace() {
+        renderHeader();
+        renderNavBadges();
+        renderActivityTimeline();
+        renderOverview();
+        renderPlan();
+        renderChanges();
+        renderVerification();
+        renderMemory();
+        renderWorkers();
+        renderContextDrawer();
+        renderComposerControls();
+    }
+
+    // Header Rendering
+    function renderHeader() {
+        const isRunning = state.status === 'running';
+        const isCancelling = state.status === 'cancelling';
+        const isCancelled = state.status === 'cancelled';
+        const isCompleted = state.status === 'completed';
+        const isFailed = state.status === 'failed';
+        const isWaiting = state.status === 'waiting_for_user';
+        const isOffline = state.status === 'offline';
+
+        statusDot.className = 'dot ' + (
+            isOffline ? 'offline' :
+            isCancelled ? 'offline' :
+            isCancelling ? 'waiting' :
+            isWaiting ? 'waiting' :
+            isRunning ? 'online' :
+            isCompleted ? 'online' :
+            isFailed ? 'offline' : 'online'
+        );
+
+        statusLabel.innerText = (
+            isOffline ? 'Offline' :
+            isCancelled ? 'Cancelled' :
+            isCancelling ? 'Cancelling…' :
+            isWaiting ? 'Waiting for User' :
+            isRunning ? 'Running' :
+            isCompleted ? 'Completed' :
+            isFailed ? 'Failed' : 'Ready'
+        );
+
+        if (state.taskId && state.prompt) {
+            headerTaskSummary.style.display = 'flex';
+            headerStatePill.innerText = state.interactionMode;
+            headerTaskText.innerText = state.prompt;
+        } else {
+            headerTaskSummary.style.display = 'none';
+        }
+
+        updateHeaderModelBadge();
+    }
+
+    function updateHeaderModelBadge() {
+        if (!headerModelName) return;
+        let displayName = state.selectedModelId;
+        for (const p of state.providers) {
+            if (p.models) {
+                const found = p.models.find(m => m.id === state.selectedModelId);
+                if (found) {
+                    displayName = found.name;
+                    break;
+                }
+            }
+        }
+        headerModelName.innerText = displayName || 'Select Model';
+    }
+
+    // Navigation Badges Rendering
+    function renderNavBadges() {
+        // Plan badge
+        if (state.plan && state.plan.steps && state.plan.steps.length > 0) {
+            const completedCount = state.plan.steps.filter(s => s.status === 'COMPLETED').length;
+            badgePlan.style.display = 'inline-block';
+            badgePlan.innerText = `${completedCount}/${state.plan.steps.length}`;
+        } else {
+            badgePlan.style.display = 'none';
+        }
+
+        // Changes badge
+        if (state.changes && state.changes.length > 0) {
+            badgeChanges.style.display = 'inline-block';
+            badgeChanges.innerText = `${state.changes.length}`;
+        } else {
+            badgeChanges.style.display = 'none';
+        }
+
+        // Verification badge
+        if (state.verification) {
+            badgeVerification.style.display = 'inline-block';
+            badgeVerification.innerText = state.verification.status === 'PASSED' ? '✓' : '✕';
+            badgeVerification.className = `nav-badge ${state.verification.status === 'PASSED' ? 'badge-passed' : 'badge-failed'}`;
+        } else {
+            badgeVerification.style.display = 'none';
+        }
+
+        // Memory badge
+        if (state.memory && state.memory.length > 0) {
+            badgeMemory.style.display = 'inline-block';
+            badgeMemory.innerText = `${state.memory.length}`;
+        } else {
+            badgeMemory.style.display = 'none';
+        }
+
+        // Workers badge
+        if (state.workers && state.workers.length > 0) {
+            badgeWorkers.style.display = 'inline-block';
+            badgeWorkers.innerText = `${state.workers.length}`;
+        } else {
+            badgeWorkers.style.display = 'none';
+        }
+
+        // Activity live dot
+        badgeActivity.style.display = state.status === 'running' ? 'inline-block' : 'none';
+
+        // Context badge
+        const totalContextItems = (state.workingSet?.recentlyInspectedFiles?.length || 0) +
+                                  (state.workingSet?.modifiedFiles?.length || 0);
+        if (totalContextItems > 0) {
+            contextBadge.style.display = 'inline-block';
+            contextBadge.innerText = `${totalContextItems}`;
+        } else {
+            contextBadge.style.display = 'none';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 10. ACTIVITY TIMELINE RENDERING (Phase 7, 11, 13)
+    // ═══════════════════════════════════════════════════════════
+    function renderActivityTimeline() {
+        if (!state.taskId && (!state.activity || state.activity.length === 0)) {
+            emptyStateView.style.display = 'flex';
+            timelineList.style.display = 'none';
+            return;
+        }
+
+        emptyStateView.style.display = 'none';
+        timelineList.style.display = 'flex';
+        timelineList.innerHTML = '';
+
+        // 1. User prompt card
+        if (state.prompt) {
+            const promptCard = document.createElement('div');
+            promptCard.className = 'activity-card user-prompt-card';
+            promptCard.innerHTML = `
+                <div class="activity-header">
+                    <div class="activity-title-group">
+                        <span class="tool-tag">USER</span>
+                        <span class="activity-title-text">${escapeHtml(state.prompt)}</span>
+                    </div>
+                </div>
+            `;
+            timelineList.appendChild(promptCard);
+        }
+
+        // 2. Interactive Approval / Input Card if pending
+        if (state.pendingInteraction) {
+            const pi = state.pendingInteraction;
+            const card = document.createElement('div');
+            card.className = 'interaction-card';
+            let html = `
+                <div class="interaction-header">
+                    <span>${pi.type === 'APPROVAL' ? '🛡️ APPROVAL REQUIRED' : '💬 INPUT REQUIRED'}</span>
+                </div>
+                <div class="interaction-title">${escapeHtml(pi.title)}</div>
+                <div class="interaction-message">${escapeHtml(pi.message)}</div>
+            `;
+            if (pi.type === 'INPUT' && pi.options && pi.options.length > 0) {
+                html += `<div class="interaction-options">`;
+                pi.options.forEach((opt, idx) => {
+                    const checked = idx === 0 ? 'checked' : '';
+                    html += `<label class="interaction-option"><input type="radio" name="opt_choice" value="${escapeHtml(opt)}" ${checked}> <span>${escapeHtml(opt)}</span></label>`;
+                });
+                html += `</div><div class="interaction-actions"><button id="btn-submit-choice" class="primary">Submit</button></div>`;
+            } else if (pi.type === 'APPROVAL') {
+                html += `<div class="interaction-actions">
+                    <button id="btn-approve" class="primary">✓ Approve</button>
+                    <button id="btn-deny" class="danger">✕ Deny</button>
+                </div>`;
+            }
+            card.innerHTML = html;
+            timelineList.appendChild(card);
+
+            const btnApprove = card.querySelector('#btn-approve');
+            if (btnApprove) btnApprove.addEventListener('click', () => respondInteraction({ type: 'APPROVE' }));
+            const btnDeny = card.querySelector('#btn-deny');
+            if (btnDeny) btnDeny.addEventListener('click', () => respondInteraction({ type: 'DENY' }));
+            const btnChoice = card.querySelector('#btn-submit-choice');
+            if (btnChoice) {
+                btnChoice.addEventListener('click', () => {
+                    const radio = card.querySelector('input[name="opt_choice"]:checked');
+                    // @ts-ignore
+                    const val = radio ? radio.value : '';
+                    respondInteraction({ type: 'INPUT', value: val });
+                });
+            }
+        }
+
+        // 3. Render Timeline Items & Groups
+        state.activity.forEach(entry => {
+            const card = document.createElement('div');
+            card.className = 'activity-card';
+
+            const statusIcon = getStatusIcon(entry.status);
+            const toolTagClass = entry.toolCategory ? `tool-tag-${entry.toolCategory.toLowerCase()}` : '';
+
+            let detailsHtml = '';
+            if (entry.isGroup && entry.items) {
+                detailsHtml = `
+                    <div class="activity-details-panel" style="display: none;">
+                        ${entry.items.map(sub => `
+                            <div class="activity-details-row">
+                                <span>${escapeHtml(sub.title)}</span>
+                                <span class="activity-meta">${formatTimestamp(sub.timestamp)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else if (entry.details) {
+                detailsHtml = `
+                    <div class="activity-details-panel" style="display: none;">
+                        <pre class="inline-code">${escapeHtml(JSON.stringify(entry.details, null, 2))}</pre>
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="activity-header">
+                    <div class="activity-title-group">
+                        <span class="activity-status-icon status-icon-${entry.status}">${statusIcon}</span>
+                        ${entry.toolCategory ? `<span class="tool-tag ${toolTagClass}">${escapeHtml(entry.toolCategory)}</span>` : ''}
+                        <span class="activity-title-text">${escapeHtml(entry.title)}</span>
+                    </div>
+                    <div class="activity-meta">
+                        <span>${formatTimestamp(entry.timestamp)}</span>
+                        ${(entry.isGroup || entry.details) ? `<span class="activity-chevron">▸</span>` : ''}
+                    </div>
+                </div>
+                ${detailsHtml}
+            `;
+
+            // Expand/collapse details on click
+            if (entry.isGroup || entry.details) {
+                const header = card.querySelector('.activity-header');
+                const panel = card.querySelector('.activity-details-panel');
+                if (header && panel) {
+                    header.addEventListener('click', () => {
+                        card.classList.toggle('expanded');
+                        // @ts-ignore
+                        panel.style.display = card.classList.contains('expanded') ? 'flex' : 'none';
+                    });
+                }
+            }
+
+            timelineList.appendChild(card);
+        });
+
+        // 4. Final Response Card (if any)
+        if (state.finalResponse) {
+            const finalCard = document.createElement('div');
+            finalCard.className = 'activity-card final-response-card';
+            finalCard.innerHTML = `
+                <div class="activity-header">
+                    <div class="activity-title-group">
+                        <span class="activity-status-icon status-icon-completed">✓</span>
+                        <span class="tool-tag tool-tag-verification">RESULT</span>
+                        <span class="activity-title-text">COMU Solution</span>
+                    </div>
+                </div>
+                <div class="final-response-body" style="padding-top: var(--space-2); font-size: var(--text-sm); line-height: 1.5;">
+                    ${renderRichText(state.finalResponse)}
+                </div>
+            `;
+            timelineList.appendChild(finalCard);
+        }
+
+        // Auto-scroll if user has not scrolled up
+        if (!userScrolledUp) {
+            activityContainer.scrollTop = activityContainer.scrollHeight;
+        }
+    }
+
+    function getStatusIcon(status) {
+        switch (status) {
+            case 'completed': return '✓';
+            case 'active': return '◉';
+            case 'warning': return '⚠';
+            case 'failed': return '✕';
+            default: return '○';
+        }
+    }
+
+    function formatTimestamp(isoStr) {
+        if (!isoStr) return '';
+        try {
+            const d = new Date(isoStr);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        } catch {
+            return '';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 11. OVERVIEW PANEL RENDERING (Phase 8, 35, 36)
+    // ═══════════════════════════════════════════════════════════
+    function renderOverview() {
+        overviewTaskTitle.innerText = state.prompt || 'No active task';
+        ovStatus.innerText = state.status.toUpperCase();
+        ovMode.innerText = state.interactionMode;
+
+        // Plan count
+        if (state.plan?.steps) {
+            const done = state.plan.steps.filter(s => s.status === 'COMPLETED').length;
+            ovPlan.innerText = `${done} / ${state.plan.steps.length}`;
+        } else {
+            ovPlan.innerText = '—';
+        }
+
+        // Changes
+        ovChanges.innerText = `${state.changes?.length || 0} files`;
+
+        // Verification
+        if (state.verification) {
+            const pass = state.verification.checks?.filter(c => c.status === 'PASSED').length || 0;
+            const total = state.verification.checks?.length || 0;
+            ovVerification.innerText = `${pass} / ${total} (${state.verification.status})`;
+        } else {
+            ovVerification.innerText = '—';
+        }
+
+        // Duration timer
+        renderDuration();
+
+        // Completion Banner
+        if (state.status === 'completed') {
+            completionBanner.style.display = 'flex';
+            completionSummaryText.innerText = `${state.changes?.length || 0} files changed. All automated verification checks passed.`;
+        } else {
+            completionBanner.style.display = 'none';
+        }
+
+        // Failure Banner
+        if (state.status === 'failed') {
+            failureBanner.style.display = 'flex';
+            failureTitle.innerText = state.diagnosis?.failureType ? `TASK FAILED: ${state.diagnosis.failureType}` : 'TASK FAILED';
+            failureDesc.innerText = state.diagnosis?.summary || 'The task failed during execution. Check Verification and Activity for details.';
+        } else {
+            failureBanner.style.display = 'none';
+        }
+    }
+
+    function renderDuration() {
+        if (!state.startTime) {
+            ovDuration.innerText = '00:00';
+            return;
+        }
+        const end = state.completedTime || Date.now();
+        const diffSec = Math.max(0, Math.floor((end - state.startTime) / 1000));
+        const mins = String(Math.floor(diffSec / 60)).padStart(2, '0');
+        const secs = String(diffSec % 60).padStart(2, '0');
+        ovDuration.innerText = `${mins}:${secs}`;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 12. PLAN, CHANGES, VERIFICATION, MEMORY, WORKERS (Phases 9-13)
+    // ═══════════════════════════════════════════════════════════
+    function renderPlan() {
+        const list = document.getElementById('plan-steps-list');
+        const statusBadge = document.getElementById('plan-status-badge');
+        const versionBadge = document.getElementById('plan-version-badge');
+        if (!list) return;
+
+        if (!state.plan || !state.plan.steps || state.plan.steps.length === 0) {
+            list.innerHTML = '<div class="empty-panel-text">No active engineering plan.</div>';
+            return;
+        }
+
+        statusBadge.innerText = state.plan.status || 'READY';
+        statusBadge.className = `status-badge badge-${(state.plan.status || '').toLowerCase()}`;
+        versionBadge.innerText = `v${state.plan.version || 1}`;
+
+        list.innerHTML = '';
+        state.plan.steps.forEach((step, idx) => {
+            const card = document.createElement('div');
+            card.className = 'plan-step';
+            const icon = step.status === 'COMPLETED' ? '✓' :
+                         step.status === 'RUNNING' ? '●' :
+                         step.status === 'FAILED' ? '✕' : '○';
+
+            card.innerHTML = `
+                <div class="step-icon step-${(step.status || '').toLowerCase()}">${icon}</div>
+                <div class="step-info" style="flex-grow: 1;">
+                    <div class="step-title" style="font-weight: 600; font-size: var(--text-sm);">${idx + 1}. ${escapeHtml(step.title)}</div>
+                    ${step.resultSummary ? `<div class="step-summary" style="font-size: var(--text-xs); opacity: 0.6; margin-top: 2px;">${escapeHtml(step.resultSummary)}</div>` : ''}
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    function renderChanges() {
+        const list = document.getElementById('changes-list');
+        const badge = document.getElementById('changes-count-badge');
+        if (!list) return;
+
+        if (!state.changes || state.changes.length === 0) {
+            list.innerHTML = '<div class="empty-panel-text">No files modified in this task yet.</div>';
+            if (badge) badge.innerText = '0 files';
+            return;
+        }
+
+        if (badge) badge.innerText = `${state.changes.length} files`;
+        list.innerHTML = '';
+
+        state.changes.forEach(c => {
+            const row = document.createElement('div');
+            row.className = 'change-item';
+            const opTag = c.operation === 'CREATE' ? 'A' : 'M';
+
+            row.innerHTML = `
+                <div style="display: flex; align-items: center; gap: var(--space-2);">
+                    <span class="change-op op-${c.operation}">${opTag}</span>
+                    <span style="font-family: var(--font-mono); font-size: var(--text-xs);">${escapeHtml(c.path)}</span>
+                </div>
+                <button class="byok-action-btn secondary" style="padding: 2px var(--space-2); font-size: 10px;">Diff →</button>
+            `;
+
+            row.addEventListener('click', () => {
+                vscode.postMessage({ type: 'request_diff', path: c.path });
+            });
+
+            list.appendChild(row);
+        });
+    }
+
+    function renderVerification() {
+        const list = document.getElementById('verif-checks-list');
+        const gateBadge = document.getElementById('verif-gate-badge');
+        const diagCard = document.getElementById('verif-diagnostics-card');
+        const repairCard = document.getElementById('verif-repair-card');
+        if (!list) return;
+
+        if (!state.verification) {
+            list.innerHTML = '<div class="empty-panel-text">No verification runs recorded yet.</div>';
+            if (gateBadge) gateBadge.innerText = 'PENDING';
+            return;
+        }
+
+        if (gateBadge) {
+            gateBadge.innerText = state.verification.status;
+            gateBadge.className = `status-badge badge-${state.verification.status.toLowerCase()}`;
+        }
+
+        list.innerHTML = '';
+        if (state.verification.checks) {
+            state.verification.checks.forEach(check => {
+                const item = document.createElement('div');
+                item.className = `check-item check-${check.status.toLowerCase()}`;
+                const icon = check.status === 'PASSED' ? '✓' : check.status === 'FAILED' ? '✕' : '↷';
+
+                item.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: var(--space-2);">
+                        <span>${icon}</span>
+                        <strong>${escapeHtml(check.name)}</strong>
+                        <span class="badge-pill">${check.required ? 'REQ' : 'OPT'}</span>
+                    </div>
+                    <span style="font-size: var(--text-xs); opacity: 0.5;">${escapeHtml(check.skipReason || check.details || check.status)}</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // Failure Diagnosis
+        if (state.diagnosis && diagCard) {
+            diagCard.style.display = 'block';
+            diagCard.innerHTML = `
+                <div class="overview-section-header">FAILURE DIAGNOSIS</div>
+                <div style="font-weight: 700; color: var(--comu-error); margin-top: 4px;">${escapeHtml(state.diagnosis.failureType)}</div>
+                <div style="font-size: var(--text-sm); opacity: 0.8; margin-top: 2px;">${escapeHtml(state.diagnosis.summary)}</div>
+            `;
+        } else if (diagCard) {
+            diagCard.style.display = 'none';
+        }
+
+        // Repair Attempts
+        if (state.repairAttempts && state.repairAttempts.length > 0 && repairCard) {
+            repairCard.style.display = 'block';
+            repairCard.innerHTML = `
+                <div class="overview-section-header">REPAIR ATTEMPTS (${state.repairAttempts.length})</div>
+                ${state.repairAttempts.map(r => `
+                    <div style="display: flex; justify-content: space-between; font-size: var(--text-xs); padding: 4px 0;">
+                        <span>Attempt ${r.attemptNumber}: ${escapeHtml(r.changeSummary || 'Applied fix')}</span>
+                        <span class="status-badge badge-${r.validationStatus.toLowerCase()}">${r.validationStatus}</span>
+                    </div>
+                `).join('')}
+            `;
+        } else if (repairCard) {
+            repairCard.style.display = 'none';
+        }
+    }
+
+    function renderMemory() {
+        const list = document.getElementById('memory-list');
+        const badge = document.getElementById('memory-count-badge');
+        if (!list) return;
+
+        if (!state.memory || state.memory.length === 0) {
+            list.innerHTML = '<div class="empty-panel-text">No workspace conventions or memories recorded.</div>';
+            if (badge) badge.innerText = '0 verified';
+            return;
+        }
+
+        if (badge) badge.innerText = `${state.memory.length} verified`;
+        list.innerHTML = '';
+
+        state.memory.forEach(m => {
+            const card = document.createElement('div');
+            card.className = 'activity-card';
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="tool-tag tool-tag-verification">${escapeHtml(m.type || 'CONVENTION')}</span>
+                    <span class="status-badge badge-passed">${escapeHtml(m.trustLevel || 'VERIFIED')}</span>
+                </div>
+                <div style="font-size: var(--text-sm); font-weight: 600; margin-top: var(--space-1);">${escapeHtml(m.content)}</div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    function renderWorkers() {
+        const list = document.getElementById('workers-list');
+        const badge = document.getElementById('workers-count-badge');
+        if (!list) return;
+
+        if (!state.workers || state.workers.length === 0) {
+            list.innerHTML = '<div class="empty-panel-text">No background worker agents deployed.</div>';
+            if (badge) badge.innerText = '0 workers';
+            return;
+        }
+
+        if (badge) badge.innerText = `${state.workers.length} workers`;
+        list.innerHTML = '';
+
+        state.workers.forEach(w => {
+            const card = document.createElement('div');
+            card.className = 'activity-card';
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="tool-tag tool-tag-worker">${escapeHtml(w.subagentType || 'RESEARCH')} WORKER</span>
+                    <span class="status-badge badge-${(w.status || '').toLowerCase()}">${escapeHtml(w.status)}</span>
+                </div>
+                <div style="font-size: var(--text-sm); font-weight: 600; margin-top: 4px;">Goal: ${escapeHtml(w.goal)}</div>
+                ${w.findings ? `<div style="font-size: var(--text-xs); opacity: 0.6; margin-top: 2px;">${escapeHtml(w.findings.slice(0, 180))}...</div>` : ''}
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    function renderContextDrawer() {
+        const ws = state.workingSet || {};
+
+        // Active file
+        if (ws.activeFile) {
+            contextActiveFile.innerText = ws.activeFile;
+            contextActiveFile.style.cursor = 'pointer';
+            contextActiveFile.onclick = () => vscode.postMessage({ type: 'open_file', path: ws.activeFile });
+        } else {
+            contextActiveFile.innerText = 'None';
+            contextActiveFile.style.cursor = 'default';
+            contextActiveFile.onclick = null;
+        }
+
+        // Inspected files
+        const inspected = ws.recentlyInspectedFiles || [];
+        countInspected.innerText = `${inspected.length}`;
+        if (inspected.length === 0) {
+            contextInspectedList.innerHTML = '<span class="empty-subtext">No files inspected</span>';
+        } else {
+            contextInspectedList.innerHTML = '';
+            inspected.forEach(p => {
+                const chip = document.createElement('div');
+                chip.className = 'context-chip';
+                chip.innerText = formatFilePath(p, p);
+                chip.title = p;
+                chip.addEventListener('click', () => vscode.postMessage({ type: 'open_file', path: p }));
+                contextInspectedList.appendChild(chip);
+            });
+        }
+
+        // Modified files
+        const modified = ws.modifiedFiles || [];
+        countModified.innerText = `${modified.length}`;
+        if (modified.length === 0) {
+            contextModifiedList.innerHTML = '<span class="empty-subtext">No files modified</span>';
+        } else {
+            contextModifiedList.innerHTML = '';
+            modified.forEach(m => {
+                const chip = document.createElement('div');
+                chip.className = 'context-chip';
+                chip.innerText = formatFilePath(m.path, m.path);
+                chip.title = m.path;
+                chip.addEventListener('click', () => vscode.postMessage({ type: 'open_file', path: m.path }));
+                contextModifiedList.appendChild(chip);
+            });
+        }
+
+        // Diagnostics
+        const diags = ws.diagnostics || [];
+        countDiag.innerText = `${diags.length}`;
+        if (diags.length === 0) {
+            contextDiagList.innerHTML = '<span class="empty-subtext">Clean — 0 issues</span>';
+        } else {
+            contextDiagList.innerHTML = '';
+            diags.forEach(d => {
+                const chip = document.createElement('div');
+                chip.className = 'context-chip';
+                chip.innerHTML = `<span style="color: var(--comu-error);">●</span> ${escapeHtml(d.message)}`;
+                contextDiagList.appendChild(chip);
+            });
+        }
+    }
+
+    function renderComposerControls() {
+        const isRunning = state.status === 'running' || state.status === 'starting';
+        const isWaiting = state.status === 'waiting_for_user';
+        const isCancelling = state.status === 'cancelling';
+        const isOffline = state.status === 'offline';
+
+        submitBtn.style.display = (isRunning || isWaiting || isCancelling) ? 'none' : 'flex';
+        cancelBtn.style.display = (isRunning || isWaiting || isCancelling) ? 'block' : 'none';
+
+        renderCancellationStatus();
+
+        submitBtn.disabled = isOffline;
+        promptInput.disabled = isRunning || isWaiting || isCancelling || isOffline;
+        // @ts-ignore
+        modeSelect.disabled = isRunning || isWaiting || isCancelling;
+    }
+
+    function respondInteraction(response) {
+        if (state.taskId && state.pendingInteraction) {
+            vscode.postMessage({
+                type: 'respond_interaction',
+                taskId: state.taskId,
+                interactionId: state.pendingInteraction.interactionId,
+                response
+            });
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 13. MODEL & PROVIDER CATALOG (Phase 14, 15, 31, 32)
+    // ═══════════════════════════════════════════════════════════
     function renderModels() {
         modelSelect.innerHTML = '';
         let hasModels = false;
@@ -212,11 +1425,11 @@
             const isReady = p.hasCredential || p.isLocal;
             if (p.models && p.models.length > 0) {
                 const group = document.createElement('optgroup');
-                group.label = p.displayName + (isReady ? '' : ' (Not Configured)');
+                group.label = p.displayName + (isReady ? '' : ' (Needs Key)');
                 p.models.forEach(m => {
                     const opt = document.createElement('option');
                     opt.value = m.id;
-                    opt.textContent = m.name + (isReady ? '' : ' ⚠️ (Needs Key)');
+                    opt.textContent = m.name + (isReady ? '' : ' ⚠️');
                     opt.dataset.providerId = p.providerId;
                     opt.dataset.configured = isReady ? 'true' : 'false';
                     group.appendChild(opt);
@@ -228,27 +1441,28 @@
 
         if (!hasModels) {
             const opt = document.createElement('option');
-            opt.value = "";
+            opt.value = '';
             opt.disabled = true;
             opt.selected = true;
-            opt.textContent = "No models available - Click ⚙ to configure";
+            opt.textContent = 'No models available';
             modelSelect.appendChild(opt);
         } else {
-            if (state.modelId && modelSelect.querySelector(`option[value="${state.modelId}"]`)) {
-                modelSelect.value = state.modelId;
+            if (state.selectedModelId && modelSelect.querySelector(`option[value="${state.selectedModelId}"]`)) {
+                // @ts-ignore
+                modelSelect.value = state.selectedModelId;
             } else {
                 const preferred = modelSelect.querySelector('option[data-configured="true"]') || modelSelect.options[0];
                 if (preferred) {
+                    // @ts-ignore
                     modelSelect.value = preferred.value;
-                    state.modelId = preferred.value;
+                    // @ts-ignore
+                    state.selectedModelId = preferred.value;
                 }
             }
         }
+        updateHeaderModelBadge();
     }
 
-    // ═══════════════════════════════════════════════
-    //  RENDER PROVIDERS — Premium Provider Cards
-    // ═══════════════════════════════════════════════
     function renderProviders() {
         providersContainer.innerHTML = '';
 
@@ -267,7 +1481,7 @@
                 statusIcon = '●';
             } else if (p.status === 'CONNECTING') {
                 statusClass = 'connecting';
-                statusLabel = 'Testing...';
+                statusLabel = 'Testing…';
                 statusIcon = '◌';
             } else if (p.status === 'INVALID_CREDENTIAL') {
                 statusClass = 'invalid';
@@ -279,7 +1493,7 @@
                 statusIcon = '✕';
             }
 
-            const tagText = p.isLocal ? 'Local / On-Device' : (p.providerId === 'nvidia' ? 'Cloud · Nemotron 3 Ultra' : 'Cloud');
+            const tagText = p.isLocal ? 'Local / On-Device' : (p.providerId === 'nvidia' ? 'Cloud · Nemotron' : 'Cloud');
             const iconEmoji = p.providerId === 'nvidia' ? '✦' : (p.isLocal ? '🦙' : '⚡');
 
             let cardHtml = `
@@ -301,7 +1515,7 @@
                 cardHtml += `
                     <div class="env-detected-badge">
                         <span>ℹ</span>
-                        <span>Detected in environment variable (<code>NVIDIA_API_KEY</code>). You can override it by entering a key below.</span>
+                        <span>Detected from environment. You can override it below.</span>
                     </div>
                 `;
             }
@@ -312,22 +1526,22 @@
                         <div class="form-group">
                             <div class="form-label-row">
                                 <label for="input-key-${p.providerId}">API Key</label>
-                                ${p.providerId === 'nvidia' ? '<a href="https://build.nvidia.com/" target="_blank" class="get-key-link">Get an NVIDIA API key ↗</a>' : ''}
+                                ${p.providerId === 'nvidia' ? '<a href="https://build.nvidia.com/" target="_blank" class="get-key-link">Get an NVIDIA key ↗</a>' : ''}
                             </div>
                             <div class="input-with-toggle">
-                                <input type="password" id="input-key-${p.providerId}" 
-                                    placeholder="${p.hasCredential ? '••••••••••••••••••••' : 'Enter API Key (e.g. nvapi-...)'}" 
+                                <input type="password" id="input-key-${p.providerId}"
+                                    placeholder="${p.hasCredential ? '••••••••••••••••••••' : 'Enter API Key'}"
                                     autocomplete="off" spellcheck="false">
-                                <button type="button" class="btn-toggle-eye" id="toggle-eye-${p.providerId}" title="Show / Hide Key">👁</button>
+                                <button type="button" class="btn-toggle-eye" id="toggle-eye-${p.providerId}" title="Show/Hide">👁</button>
                             </div>
-                            <div class="input-helper">Stored securely in VS Code <code>SecretStorage</code>. Never logged or exposed.</div>
+                            <div class="input-helper">Encrypted in VS Code <code>SecretStorage</code>. Never exposed.</div>
                         </div>
 
                         <div class="form-group">
                             <label for="input-endpoint-${p.providerId}">Endpoint URL</label>
-                            <input type="text" id="input-endpoint-${p.providerId}" 
-                                value="${escapeHtml(p.endpoint || '')}" 
-                                placeholder="Default: ${p.defaultEndpoint || 'https://...'}" 
+                            <input type="text" id="input-endpoint-${p.providerId}"
+                                value="${escapeHtml(p.endpoint || '')}"
+                                placeholder="${p.defaultEndpoint || 'https://api.openai.com/v1'}"
                                 autocomplete="off" spellcheck="false">
                         </div>
 
@@ -358,62 +1572,50 @@
             card.innerHTML = cardHtml;
             providersContainer.appendChild(card);
 
-            // Attach event listeners for this card
+            // Wire Card Events
             if (!p.isLocal) {
                 const keyInput = card.querySelector(`#input-key-${p.providerId}`);
                 const endpointInput = card.querySelector(`#input-endpoint-${p.providerId}`);
-                const toggleEyeBtn = card.querySelector(`#toggle-eye-${p.providerId}`);
+                const toggleEye = card.querySelector(`#toggle-eye-${p.providerId}`);
                 const saveBtn = card.querySelector(`#btn-save-${p.providerId}`);
                 const testBtn = card.querySelector(`#btn-test-${p.providerId}`);
                 const removeBtn = card.querySelector(`#btn-remove-${p.providerId}`);
 
-                if (toggleEyeBtn && keyInput) {
-                    toggleEyeBtn.addEventListener('click', () => {
-                        if (keyInput.type === 'password') {
-                            keyInput.type = 'text';
-                            toggleEyeBtn.textContent = '🔒';
-                        } else {
-                            keyInput.type = 'password';
-                            toggleEyeBtn.textContent = '👁';
-                        }
+                if (toggleEye && keyInput) {
+                    toggleEye.addEventListener('click', () => {
+                        // @ts-ignore
+                        keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
+                        // @ts-ignore
+                        toggleEye.textContent = keyInput.type === 'password' ? '👁' : '🔒';
                     });
                 }
 
                 if (saveBtn) {
                     saveBtn.addEventListener('click', () => {
+                        // @ts-ignore
                         const keyVal = keyInput ? keyInput.value.trim() : '';
+                        // @ts-ignore
                         const endpointVal = endpointInput ? endpointInput.value.trim() : undefined;
                         if (!keyVal && !p.hasCredential) {
-                            const resEl = document.getElementById(`test-result-${p.providerId}`);
-                            if (resEl) {
-                                resEl.style.display = 'block';
-                                resEl.className = 'test-result-container error';
-                                resEl.textContent = 'Please enter an API key to save.';
-                            }
+                            showProviderTestError(p.providerId, 'Please enter an API key to save.');
                             return;
                         }
-                        if (keyVal) {
-                            vscode.postMessage({
-                                type: 'save_provider_key',
-                                providerId: p.providerId,
-                                key: keyVal,
-                                endpoint: endpointVal
-                            });
-                            keyInput.value = '';
-                        } else if (endpointVal !== undefined) {
-                            vscode.postMessage({
-                                type: 'save_provider_key',
-                                providerId: p.providerId,
-                                key: '',
-                                endpoint: endpointVal
-                            });
-                        }
+                        vscode.postMessage({
+                            type: 'save_provider_key',
+                            providerId: p.providerId,
+                            key: keyVal,
+                            endpoint: endpointVal
+                        });
+                        // @ts-ignore
+                        if (keyInput) keyInput.value = '';
                     });
                 }
 
                 if (testBtn) {
                     testBtn.addEventListener('click', () => {
+                        // @ts-ignore
                         const keyVal = keyInput ? keyInput.value.trim() : '';
+                        // @ts-ignore
                         const endpointVal = endpointInput ? endpointInput.value.trim() : undefined;
                         setTestingState(p.providerId);
                         vscode.postMessage({
@@ -445,16 +1647,20 @@
     function setTestingState(providerId) {
         const card = document.getElementById(`provider-card-${providerId}`);
         if (!card) return;
-        const statusPill = card.querySelector('.status-pill');
-        if (statusPill) {
-            statusPill.className = 'status-pill status-connecting';
-            statusPill.innerHTML = '<span class="status-dot"><span class="spin">◌</span></span><span class="status-text">Testing...</span>';
-        }
         const testResultEl = document.getElementById(`test-result-${providerId}`);
         if (testResultEl) {
             testResultEl.style.display = 'block';
             testResultEl.className = 'test-result-container testing';
-            testResultEl.innerHTML = '<span class="spin">◌</span> Testing connection...';
+            testResultEl.innerHTML = '<span class="spin">◌</span> Testing connection…';
+        }
+    }
+
+    function showProviderTestError(providerId, msg) {
+        const testResultEl = document.getElementById(`test-result-${providerId}`);
+        if (testResultEl) {
+            testResultEl.style.display = 'block';
+            testResultEl.className = 'test-result-container error';
+            testResultEl.innerText = msg;
         }
     }
 
@@ -469,9 +1675,8 @@
                 statusPill.className = 'status-pill status-connected';
                 statusPill.innerHTML = '<span class="status-dot">●</span><span class="status-text">Connected</span>';
             } else {
-                const isInvalid = result.status === 'INVALID_CREDENTIAL';
-                statusPill.className = `status-pill status-${isInvalid ? 'invalid' : 'error'}`;
-                statusPill.innerHTML = `<span class="status-dot">✕</span><span class="status-text">${isInvalid ? 'Invalid Key' : 'Connection Failed'}</span>`;
+                statusPill.className = 'status-pill status-error';
+                statusPill.innerHTML = '<span class="status-dot">✕</span><span class="status-text">Failed</span>';
             }
         }
 
@@ -480,481 +1685,40 @@
             testResultEl.style.display = 'block';
             if (isConnected) {
                 testResultEl.className = 'test-result-container success';
-                const latencyStr = result.latencyMs ? ` (${result.latencyMs}ms)` : '';
-                const modelStr = result.model ? ` · Model: ${escapeHtml(result.model)}` : '';
-                testResultEl.innerHTML = `✓ <strong>Connected successfully</strong>${latencyStr}${modelStr}`;
+                const latStr = result.latencyMs ? ` (${result.latencyMs}ms)` : '';
+                testResultEl.innerHTML = `✓ <strong>Connected successfully</strong>${latStr}`;
             } else {
                 testResultEl.className = 'test-result-container error';
-                testResultEl.innerHTML = `✕ <strong>Connection failed:</strong> ${escapeHtml(result.message || 'Check your API key and network connection.')}`;
+                testResultEl.innerHTML = `✕ <strong>Connection failed:</strong> ${escapeHtml(result.message || 'Check your credentials and endpoint.')}`;
             }
         }
     }
 
-    // ═══════════════════════════════════════════════
-    //  RENDER STATE — Premium Workspace Panels
-    // ═══════════════════════════════════════════════
-    function renderState() {
-        const isWaiting = state.status === 'waiting_for_user';
-        const isRunning = state.status === 'running' || state.status === 'starting';
-        const isCancelling = state.status === 'cancelling';
-        const isCancelled = state.status === 'cancelled';
-        const isOffline = state.status === 'offline';
-
-        statusDot.className = 'dot ' + (isOffline ? 'offline' : (isCancelled ? 'offline' : (isCancelling ? 'waiting' : (isWaiting ? 'waiting' : (isRunning ? 'starting' : 'online')))));
-        statusText.innerText = isOffline ? 'Offline' : (isCancelled ? 'Cancelled' : (isCancelling ? 'Cancelling...' : (isWaiting ? 'Waiting for User' : (isRunning ? 'Active' : 'Connected'))));
-
-        submitBtn.style.display = (isRunning || isWaiting || isCancelling) ? 'none' : 'flex';
-        cancelBtn.style.display = (isRunning || isWaiting || isCancelling) ? 'block' : 'none';
-
-        if (isCancelling) {
-            cancelBtn.innerText = '■ Cancelling...';
-            cancelBtn.disabled = true;
-        } else {
-            cancelBtn.innerText = '■ Stop';
-            cancelBtn.disabled = false;
-        }
-
-        submitBtn.disabled = isOffline;
-        promptInput.disabled = isRunning || isWaiting || isCancelling || isOffline;
-
-        if (!state.taskId && !state.prompt) {
-            return;
-        }
-
-        chatContainer.innerHTML = '';
-
-        // ── User Command Card ──
-        const userMsg = document.createElement('div');
-        userMsg.className = 'message user';
-        userMsg.innerHTML = `
-            <div class="message-label">You</div>
-            <div class="bubble">${escapeHtml(state.prompt || '')}</div>
-        `;
-        chatContainer.appendChild(userMsg);
-
-        // ── Agent Workspace Panel ──
-        const agentMsg = document.createElement('div');
-        agentMsg.className = 'message agent';
-
-        let agentHtml = `<div class="message-label"><span style="background: var(--comu-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">✦</span> COMU</div>`;
-        agentHtml += `<div class="bubble">`;
-
-        // 1. Interactive Prompt (Approval / Input)
-        if (state.pendingInteraction) {
-            const pi = state.pendingInteraction;
-            agentHtml += `<div class="interaction-card">`;
-            agentHtml += `<div class="interaction-header">`;
-            agentHtml += `<span>${pi.type === 'APPROVAL' ? '🛡️ APPROVAL REQUIRED' : '💬 INPUT REQUIRED'}</span>`;
-            agentHtml += `</div>`;
-            agentHtml += `<div class="interaction-title">${escapeHtml(pi.title)}</div>`;
-            agentHtml += `<div class="interaction-message">${escapeHtml(pi.message)}</div>`;
-
-            if (pi.type === 'INPUT' && pi.options && pi.options.length > 0) {
-                agentHtml += `<div class="interaction-options" id="interaction-options-container">`;
-                pi.options.forEach((opt, idx) => {
-                    const checked = idx === 0 ? 'checked' : '';
-                    agentHtml += `<label class="interaction-option"><input type="radio" name="input_opt" value="${escapeHtml(opt)}" ${checked}> <span>${escapeHtml(opt)}</span></label>`;
-                });
-                agentHtml += `</div>`;
-                agentHtml += `<div class="interaction-actions"><button id="btn-submit-interaction-input" class="primary">Submit Choice</button></div>`;
-            } else if (pi.type === 'APPROVAL') {
-                agentHtml += `<div class="interaction-actions">
-                    <button id="btn-approve-interaction" class="primary">✓ Approve</button>
-                    <button id="btn-deny-interaction" class="danger">✕ Deny</button>
-                </div>`;
-            }
-            agentHtml += `</div>`;
-        }
-
-        // 2. Plan Timeline
-        if (state.plan && state.plan.steps && state.plan.steps.length > 0) {
-            const isPlanCollapsed = !!panelCollapseState.plan;
-            agentHtml += `<div class="plan-panel ${isPlanCollapsed ? 'panel-collapsed' : ''}" id="plan-panel">`;
-            agentHtml += `<div class="panel-header clickable-header" data-panel="plan">
-                <div class="panel-header-title">
-                    <span class="panel-toggle-chevron">${isPlanCollapsed ? '▸' : '▾'}</span>
-                    <span>IMPLEMENTATION PLAN · v${state.plan.version}</span>
-                </div>
-                <span class="status-badge badge-${state.plan.status.toLowerCase()}">${state.plan.status}</span>
-            </div>`;
-            agentHtml += `<div class="plan-steps" style="${isPlanCollapsed ? 'display: none;' : ''}">`;
-            state.plan.steps.forEach((s, idx) => {
-                let icon = '○';
-                let iconClass = 'step-pending';
-                if (s.status === 'COMPLETED') { icon = '✓'; iconClass = 'step-completed'; }
-                else if (s.status === 'RUNNING') { icon = '●'; iconClass = 'step-running'; }
-                else if (s.status === 'FAILED') { icon = '✕'; iconClass = 'step-failed'; }
-                else if (s.status === 'BLOCKED') { icon = '⊘'; iconClass = 'step-blocked'; }
-                else if (s.status === 'SKIPPED') { icon = '↷'; iconClass = 'step-skipped'; }
-
-                agentHtml += `<div class="plan-step ${iconClass}">`;
-                agentHtml += `<span class="step-icon">${icon}</span>`;
-                agentHtml += `<div class="step-info">`;
-                agentHtml += `<div class="step-title">${idx + 1}. ${escapeHtml(s.title)}</div>`;
-                if (s.resultSummary) {
-                    const parsedSummary = extractThinking(s.resultSummary);
-                    const cleanSummary = parsedSummary.content || parsedSummary.thinking || s.resultSummary;
-                    const isLongSummary = cleanSummary.length > 90;
-                    const sumId = `step-sum-${idx}`;
-                    agentHtml += `<div class="step-summary-container">`;
-                    agentHtml += `<div class="step-summary ${isLongSummary ? 'step-summary-clamped' : ''}" id="${sumId}">${renderRichText(cleanSummary)}</div>`;
-                    if (isLongSummary) {
-                        agentHtml += `<button class="step-expand-btn" data-target="${sumId}">Show more ▾</button>`;
-                    }
-                    agentHtml += `</div>`;
-                }
-                agentHtml += `</div></div>`;
-            });
-            agentHtml += `</div></div>`;
-        }
-
-        // 3. Verification Matrix
-        if (state.verification) {
-            const v = state.verification;
-            const isVerifCollapsed = !!panelCollapseState.verification;
-            agentHtml += `<div class="verification-panel ${isVerifCollapsed ? 'panel-collapsed' : ''}" id="verification-panel">`;
-            agentHtml += `<div class="panel-header clickable-header" data-panel="verification">
-                <div class="panel-header-title">
-                    <span class="panel-toggle-chevron">${isVerifCollapsed ? '▸' : '▾'}</span>
-                    <span>VERIFICATION · ${v.status}</span>
-                </div>
-                <span class="status-badge badge-${v.status.toLowerCase()}">${v.status}</span>
-            </div>`;
-            agentHtml += `<div class="verification-checks" style="${isVerifCollapsed ? 'display: none;' : ''}">`;
-            v.checks.forEach(c => {
-                let cIcon = '✓';
-                let cClass = 'check-passed';
-                if (c.status === 'FAILED') { cIcon = '✕'; cClass = 'check-failed'; }
-                else if (c.status === 'UNAVAILABLE') { cIcon = '⊘'; cClass = 'check-unavailable'; }
-                else if (c.status === 'SKIPPED') { cIcon = '↷'; cClass = 'check-skipped'; }
-
-                const reqBadge = c.required ? `<span class="badge-req">REQ</span>` : `<span class="badge-opt">OPT</span>`;
-                agentHtml += `<div class="check-item ${cClass}">`;
-                agentHtml += `<span>${cIcon} <strong>${escapeHtml(c.name)}</strong> ${reqBadge}</span>`;
-                agentHtml += `<span class="check-details">${escapeHtml(c.skipReason || c.details || c.status)}</span>`;
-                agentHtml += `</div>`;
-            });
-            agentHtml += `</div></div>`;
-        }
-
-        // 4. Failure Diagnosis
-        if (state.diagnosis) {
-            const d = state.diagnosis;
-            agentHtml += `<div class="diagnosis-panel">`;
-            agentHtml += `<div class="panel-header"><span>FAILURE DIAGNOSIS</span> <span class="badge-fail">${escapeHtml(d.failureType)}</span></div>`;
-            agentHtml += `<div class="diag-summary">${escapeHtml(d.summary)}</div>`;
-            if (d.affectedFiles && d.affectedFiles.length > 0) {
-                agentHtml += `<div class="diag-files">Affected: ${d.affectedFiles.map(f => `<code>${escapeHtml(f)}</code>`).join(", ")}</div>`;
-            }
-            agentHtml += `</div>`;
-        }
-
-        // 5. Repair Attempts
-        if (state.repairAttempts && state.repairAttempts.length > 0) {
-            agentHtml += `<div class="repair-panel">`;
-            agentHtml += `<div class="panel-header"><span>REPAIR ATTEMPTS</span> <span>${state.repairAttempts.length} attempt(s)</span></div>`;
-            state.repairAttempts.forEach(r => {
-                agentHtml += `<div class="repair-item">`;
-                agentHtml += `<span>Attempt ${r.attemptNumber} · ${escapeHtml(r.changeSummary)}</span>`;
-                agentHtml += `<span class="status-badge badge-${r.validationStatus.toLowerCase()}">${r.validationStatus}</span>`;
-                agentHtml += `</div>`;
-            });
-            agentHtml += `</div>`;
-        }
-
-        // 5b. Supervised Worker Agents
-        if (state.subagents && state.subagents.length > 0) {
-            agentHtml += `<div class="subagents-panel">`;
-            agentHtml += `<div class="subagents-header">🤖 <span>Supervised Workers · ${state.subagents.length}</span></div>`;
-            state.subagents.forEach(sub => {
-                const statusLower = (sub.status || '').toLowerCase();
-                agentHtml += `<div class="subagent-card ${statusLower}">
-                    <div class="subagent-card-header">
-                        <span class="subagent-type">${escapeHtml(sub.subagentType)} Worker</span>
-                        <span class="subagent-status" style="color: var(--comu-${statusLower === 'completed' ? 'success' : statusLower === 'running' ? 'warning' : 'error'})">${escapeHtml(sub.status)}</span>
-                    </div>
-                    <div class="subagent-goal">Goal: ${escapeHtml(sub.goal)}</div>
-                    ${sub.findings ? `<div class="subagent-findings">${escapeHtml(sub.findings.slice(0, 150))}...</div>` : ''}
-                </div>`;
-            });
-            agentHtml += `</div>`;
-        }
-
-        // 5c. Git Commit Proposal
-        if (state.gitCommitProposal) {
-            agentHtml += `<div class="git-proposal-card">`;
-            agentHtml += `<div class="git-proposal-header"><span>📦</span> <span>GIT COMMIT PROPOSAL</span></div>`;
-            agentHtml += `<div class="git-proposal-body"><strong>Proposed Message:</strong> <input type="text" id="git-commit-msg-input" value="${escapeHtml(state.gitCommitProposal.message)}" /></div>`;
-            agentHtml += `<div class="git-proposal-files">Files to stage (${state.gitCommitProposal.files.length}): ${state.gitCommitProposal.files.map(f => escapeHtml(f)).join(', ')}</div>`;
-            agentHtml += `<div class="git-proposal-actions">
-                <button id="btn-approve-commit" class="primary">Approve Commit</button>
-                <button id="btn-deny-commit">Deny</button>
-            </div>`;
-            agentHtml += `</div>`;
-        }
-
-        // 5d. Git Push Proposal
-        if (state.gitPushProposal) {
-            agentHtml += `<div class="git-push-card">`;
-            agentHtml += `<div class="git-push-header">🚀 GIT PUSH AUTHORIZATION REQUIRED</div>`;
-            agentHtml += `<div class="git-push-details">Remote: <strong>${escapeHtml(state.gitPushProposal.remote)}</strong> · Branch: <strong>${escapeHtml(state.gitPushProposal.branch)}</strong></div>`;
-            agentHtml += `<div class="git-push-commit">Commit: <code>${escapeHtml(state.gitPushProposal.commitHash)}</code></div>`;
-            agentHtml += `<div class="git-proposal-actions">
-                <button id="btn-approve-push" class="primary">Approve Push</button>
-                <button id="btn-deny-push">Deny</button>
-            </div>`;
-            agentHtml += `</div>`;
-        }
-
-        // 6. Final Response & Thinking Block
-        if (state.finalResponse) {
-            const parsed = extractThinking(state.finalResponse);
-            if (parsed.thinking) {
-                agentHtml += `
-                <div class="thinking-block">
-                    <div class="thinking-header" data-target="final-thinking-content">
-                        <div class="thinking-title">
-                            <span class="thinking-icon">💭</span>
-                            <span>Thinking Process</span>
-                        </div>
-                        <span class="thinking-toggle-icon">▸</span>
-                    </div>
-                    <div class="thinking-content collapsed" id="final-thinking-content">
-                        <pre class="thinking-pre">${escapeHtml(parsed.thinking)}</pre>
-                    </div>
-                </div>`;
-            }
-            if (parsed.content) {
-                const isLong = parsed.content.length > 380;
-                agentHtml += `<div class="final-response-container">`;
-                agentHtml += `<div class="final-response-body ${isLong ? 'response-clamped' : ''}" id="final-response-body">${renderRichText(parsed.content)}</div>`;
-                if (isLong) {
-                    agentHtml += `<button class="response-expand-btn" data-target="final-response-body">Show full response ▾</button>`;
-                }
-                agentHtml += `</div>`;
-            }
-        }
-
-        // 7. Changes Panel
-        if (state.changes && state.changes.length > 0) {
-            agentHtml += `<div class="changes-panel">`;
-            agentHtml += `<div class="changes-header">Changes · ${state.changes.length}</div>`;
-            state.changes.forEach(c => {
-                const op = c.operation === 'CREATE' ? 'A' : 'M';
-                agentHtml += `<div class="change-item" data-path="${escapeHtml(c.path)}">
-                    <div><span class="change-op op-${c.operation}">${op}</span> ${escapeHtml(c.path)}</div>
-                    <div style="opacity: 0.4; font-size: var(--text-xs); font-weight: 600;">DIFF →</div>
-                </div>`;
-            });
-            agentHtml += `</div>`;
-        }
-
-        agentHtml += `</div>`;
-        agentMsg.innerHTML = agentHtml;
-
-        chatContainer.appendChild(agentMsg);
-
-        // Panel collapse/expand toggles
-        chatContainer.querySelectorAll('.clickable-header').forEach(hdr => {
-            hdr.addEventListener('click', () => {
-                const panel = hdr.getAttribute('data-panel');
-                if (panel && panelCollapseState.hasOwnProperty(panel)) {
-                    panelCollapseState[panel] = !panelCollapseState[panel];
-                    renderState();
-                }
-            });
-        });
-
-        // Step summary expand/collapse toggles
-        chatContainer.querySelectorAll('.step-expand-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const targetId = btn.getAttribute('data-target');
-                const targetEl = targetId ? document.getElementById(targetId) : null;
-                if (targetEl) {
-                    targetEl.classList.toggle('step-summary-clamped');
-                    const isClamped = targetEl.classList.contains('step-summary-clamped');
-                    btn.textContent = isClamped ? 'Show more ▾' : 'Show less ▴';
-                }
-            });
-        });
-
-        // Final response expand/collapse toggle
-        chatContainer.querySelectorAll('.response-expand-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const targetId = btn.getAttribute('data-target');
-                const targetEl = targetId ? document.getElementById(targetId) : null;
-                if (targetEl) {
-                    targetEl.classList.toggle('response-clamped');
-                    const isClamped = targetEl.classList.contains('response-clamped');
-                    btn.textContent = isClamped ? 'Show full response ▾' : 'Show less ▴';
-                }
-            });
-        });
-
-        // Thinking process expand/collapse toggles
-        chatContainer.querySelectorAll('.thinking-header').forEach(hdr => {
-            hdr.addEventListener('click', () => {
-                const targetId = hdr.getAttribute('data-target');
-                const targetEl = targetId ? document.getElementById(targetId) : null;
-                const iconEl = hdr.querySelector('.thinking-toggle-icon');
-                if (targetEl) {
-                    targetEl.classList.toggle('collapsed');
-                    const isCollapsed = targetEl.classList.contains('collapsed');
-                    if (iconEl) iconEl.textContent = isCollapsed ? '▸' : '▾';
-                }
-            });
-        });
-
-        // Code block copy buttons
-        chatContainer.querySelectorAll('.rich-code-copy').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const code = btn.getAttribute('data-clipboard') || '';
-                try {
-                    const unescaped = code
-                        .replace(/&amp;/g, '&')
-                        .replace(/&lt;/g, '<')
-                        .replace(/&gt;/g, '>')
-                        .replace(/&quot;/g, '"')
-                        .replace(/&#039;/g, "'");
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        await navigator.clipboard.writeText(unescaped);
-                    } else {
-                        const ta = document.createElement('textarea');
-                        ta.value = unescaped;
-                        document.body.appendChild(ta);
-                        ta.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(ta);
-                    }
-                    const origText = btn.textContent;
-                    btn.textContent = 'Copied!';
-                    btn.classList.add('copied');
-                    setTimeout(() => {
-                        btn.textContent = origText;
-                        btn.classList.remove('copied');
-                    }, 2000);
-                } catch (err) {
-                    console.error('Copy failed', err);
-                }
-            });
-        });
-
-        // Attach listeners to diff buttons
-        const changeItems = chatContainer.querySelectorAll('.change-item');
-        changeItems.forEach(item => {
-            item.addEventListener('click', () => {
-                requestDiff(item.getAttribute('data-path'));
-            });
-        });
-
-        // Attach listeners to interaction buttons
-        const submitInputBtn = document.getElementById('btn-submit-interaction-input');
-        if (submitInputBtn && state.pendingInteraction) {
-            submitInputBtn.addEventListener('click', () => {
-                const selectedRadio = document.querySelector('input[name="input_opt"]:checked');
-                // @ts-ignore
-                const val = selectedRadio ? selectedRadio.value : '';
-                respondInteraction(state.taskId, state.pendingInteraction.interactionId, { type: 'INPUT', value: val });
-            });
-        }
-
-        const approveBtn = document.getElementById('btn-approve-interaction');
-        if (approveBtn && state.pendingInteraction) {
-            approveBtn.addEventListener('click', () => {
-                respondInteraction(state.taskId, state.pendingInteraction.interactionId, { type: 'APPROVE' });
-            });
-        }
-
-        const denyBtn = document.getElementById('btn-deny-interaction');
-        if (denyBtn && state.pendingInteraction) {
-            denyBtn.addEventListener('click', () => {
-                respondInteraction(state.taskId, state.pendingInteraction.interactionId, { type: 'DENY' });
-            });
-        }
-
-        // Attach listeners to Git buttons
-        const approveCommitBtn = document.getElementById('btn-approve-commit');
-        if (approveCommitBtn && state.taskId) {
-            approveCommitBtn.addEventListener('click', () => {
-                const msgInput = document.getElementById('git-commit-msg-input');
-                // @ts-ignore
-                const msg = msgInput ? msgInput.value : undefined;
-                vscode.postMessage({ type: 'approve_commit', taskId: state.taskId, message: msg });
-            });
-        }
-
-        const denyCommitBtn = document.getElementById('btn-deny-commit');
-        if (denyCommitBtn && state.taskId) {
-            denyCommitBtn.addEventListener('click', () => {
-                vscode.postMessage({ type: 'deny_commit', taskId: state.taskId });
-            });
-        }
-
-        const approvePushBtn = document.getElementById('btn-approve-push');
-        if (approvePushBtn && state.taskId) {
-            approvePushBtn.addEventListener('click', () => {
-                vscode.postMessage({ type: 'approve_push', taskId: state.taskId });
-            });
-        }
-
-        const denyPushBtn = document.getElementById('btn-deny-push');
-        if (denyPushBtn && state.taskId) {
-            denyPushBtn.addEventListener('click', () => {
-                vscode.postMessage({ type: 'deny_push', taskId: state.taskId });
-            });
-        }
-
-        // Scroll to bottom
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+    function appendActivityError(msg) {
+        const banner = document.createElement('div');
+        banner.className = 'comu-error-banner';
+        banner.innerHTML = `⚠️ <span>${escapeHtml(msg)}</span>`;
+        timelineList.appendChild(banner);
+        activityContainer.scrollTop = activityContainer.scrollHeight;
     }
 
-    function appendError(msg) {
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'comu-error-banner';
-        errorDiv.innerHTML = `⚠️ <span>${escapeHtml(msg)}</span>`;
-        chatContainer.appendChild(errorDiv);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
-
+    // ═══════════════════════════════════════════════════════════
+    // 14. RICH TEXT & ESCAPING UTILITIES
+    // ═══════════════════════════════════════════════════════════
     function escapeHtml(unsafe) {
         return (unsafe || '').toString()
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
-    }
-
-    function extractThinking(text) {
-        if (!text) return { thinking: null, content: '' };
-        const thinkRegex = /<(think|thought)>([\s\S]*?)<\/\1>/gi;
-        const unclosedRegex = /<(think|thought)>([\s\S]*)$/i;
-        const thoughts = [];
-        let m;
-        while ((m = thinkRegex.exec(text)) !== null) {
-            if (m[2] && m[2].trim()) thoughts.push(m[2].trim());
-        }
-        let cleaned = text.replace(thinkRegex, '').trim();
-        const unclosed = unclosedRegex.exec(cleaned);
-        if (unclosed) {
-            if (unclosed[2] && unclosed[2].trim()) thoughts.push(unclosed[2].trim());
-            cleaned = cleaned.replace(unclosedRegex, '').trim();
-        }
-        return {
-            thinking: thoughts.length > 0 ? thoughts.join('\n\n') : null,
-            content: cleaned
-        };
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     function renderRichText(text) {
         if (!text) return '';
-        // 1. First escape all raw HTML to prevent injection
         let safe = escapeHtml(text);
 
-        // 2. Fenced code blocks ```lang\ncode\n```
+        // Fenced code blocks
         safe = safe.replace(/```([a-zA-Z0-9_\-\+]*)\n?([\s\S]*?)```/g, (match, lang, code) => {
             const langLabel = lang ? lang.toUpperCase() : 'CODE';
             const encodedCode = code.replace(/"/g, '&quot;');
@@ -967,66 +1731,99 @@
             </div>`;
         });
 
-        // 3. Inline code `code`
+        // Inline code
         safe = safe.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>');
-
-        // 4. Bold **text**
+        // Bold
         safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-        // 5. Italic *text*
+        // Italic
         safe = safe.replace(/(^|[^*])\*([^*]+)\*([^*]|$)/g, '$1<em>$2</em>$3');
-
-        // 6. Headers
-        safe = safe.replace(/^### (.*$)/gim, '<h4 class="rich-h4">$1</h4>');
-        safe = safe.replace(/^## (.*$)/gim, '<h3 class="rich-h3">$1</h3>');
-        safe = safe.replace(/^# (.*$)/gim, '<h2 class="rich-h2">$1</h2>');
-
-        // 7. Bullet lists
-        safe = safe.replace(/^\s*[-*]\s+(.*)$/gim, '<div class="rich-bullet"><span class="bullet-dot">•</span> <span>$1</span></div>');
-
-        // 8. Line breaks outside of pre blocks
+        // Line breaks outside <pre>
         const parts = safe.split(/(<pre>[\s\S]*?<\/pre>)/gi);
-        safe = parts.map((part, i) => {
-            if (i % 2 === 1) return part;
-            return part.replace(/\n/g, '<br/>');
-        }).join('');
+        safe = parts.map((part, i) => i % 2 === 1 ? part : part.replace(/\n/g, '<br/>')).join('');
 
         return safe;
     }
 
-    // Initial requests
+    // Attach copy button handler
+    document.addEventListener('click', async (e) => {
+        // @ts-ignore
+        if (e.target && e.target.classList && e.target.classList.contains('rich-code-copy')) {
+            // @ts-ignore
+            const btn = e.target;
+            const code = btn.getAttribute('data-clipboard') || '';
+            try {
+                const unescaped = code
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#039;/g, "'");
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(unescaped);
+                }
+                const orig = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = orig; }, 2000);
+            } catch (err) {
+                console.error('Copy failed', err);
+            }
+        }
+    });
+
+    // Duration timer ticker
+    if (durationTimerInterval) clearInterval(durationTimerInterval);
+    durationTimerInterval = setInterval(() => {
+        if (state.status === 'running') {
+            renderDuration();
+        }
+    }, 1000);
+
+    // Initial Requests
     vscode.postMessage({ type: 'request_providers' });
     vscode.postMessage({ type: 'ready' });
 
-    // In Live Preview (outside VS Code Extension Host), populate preview data
+    // Live Preview Mock Data
     if (isLivePreview) {
         state.providers = [
             {
                 providerId: 'nvidia',
-                displayName: 'NVIDIA',
-                description: 'NVIDIA Nemotron high-performance engineering models. Bring your own NVIDIA API key.',
+                displayName: 'NVIDIA Nemotron',
+                description: 'NVIDIA Nemotron high-performance engineering models.',
                 defaultEndpoint: 'https://integrate.api.nvidia.com/v1',
-                selectedModel: 'Nemotron 3 Ultra',
+                hasCredential: true,
+                isLocal: false,
+                status: 'CONNECTED',
+                models: [
+                    { id: 'nvidia-nemotron-3-ultra', name: 'Nemotron 3.5 Lightning' },
+                    { id: 'nvidia-deepseek-v4-pro', name: 'DeepSeek V4 Pro' }
+                ]
+            },
+            {
+                providerId: 'experiential',
+                displayName: 'Experiential Labs (GPT-6 Astra)',
+                description: 'Frontier AI software engineering gateway.',
+                defaultEndpoint: 'https://api.experiential.com/v1',
                 hasCredential: false,
                 isLocal: false,
                 status: 'NOT_CONFIGURED',
-                models: [{ id: 'nvidia-nemotron-3-ultra', name: 'Nemotron 3 Ultra' }]
+                models: [
+                    { id: 'gpt-6-astra', name: 'GPT-6 Astra' }
+                ]
             },
             {
                 providerId: 'ollama',
                 displayName: 'Ollama (Local)',
-                description: 'Run open-weights models locally on your machine with zero external network access.',
+                description: 'Local open-weights models with zero telemetry.',
                 defaultEndpoint: 'http://localhost:11434',
-                selectedModel: 'Llama 3 (Local)',
                 hasCredential: true,
                 isLocal: true,
                 status: 'CONNECTED',
-                models: [{ id: 'ollama-llama-3', name: 'Llama 3 (Local)' }]
+                models: [
+                    { id: 'ollama-llama-3', name: 'Llama 3' }
+                ]
             }
         ];
         renderProviders();
         renderModels();
-        updateOnboardingState();
     }
-
 })();

@@ -27,9 +27,10 @@ export interface SubagentSummaryUI {
 
 export type WebviewMessage =
   | { type: "ready" }
-  | { type: "submit_prompt"; prompt: string; modelId: string }
+  | { type: "submit_prompt"; prompt: string; modelId: string; mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT" }
   | { type: "cancel_task" }
   | { type: "request_diff"; path: string }
+  | { type: "open_file"; path: string; line?: number }
   | { type: "select_model"; modelId: string }
   | { type: "save_provider_key"; providerId: string; key: string; endpoint?: string }
   | { type: "remove_provider_key"; providerId: string }
@@ -54,11 +55,22 @@ export type ExtensionMessage =
   | { type: "memory_update"; entries: WorkspaceMemoryEntry[] }
   | { type: "agent_event"; event: AgentEvent };
 
+export interface WorkingSetUI {
+  activeFile?: string;
+  openFiles?: string[];
+  recentlyInspectedFiles?: string[];
+  searchResults?: Array<{ file: string; line: number; content: string }>;
+  diagnostics?: Array<{ file: string; line: number; message: string; severity: string }>;
+  modifiedFiles?: Array<{ path: string; source?: string }>;
+}
+
 // UI projection of ChatSessionState
 export interface ChatSessionStateUI {
   taskId?: string;
   prompt?: string;
   modelId?: string;
+  interactionMode?: "CHAT" | "ASK" | "PLAN" | "AGENT" | "AMBIGUOUS";
+  agentState?: string;
   status: "idle" | "running" | "cancelling" | "waiting_for_user" | "completed" | "failed" | "cancelled" | "offline";
   events: AgentEvent[];
   changes: ChangeSummary[];
@@ -74,4 +86,10 @@ export interface ChatSessionStateUI {
   gitPushResult?: { remote: string; branch: string; commitHash: string };
   subagents?: SubagentSummaryUI[];
   memories?: WorkspaceMemoryEntry[];
+  workingSet?: WorkingSetUI;
+  startTime?: number;
+  completedTime?: number;
+  durationMs?: number;
+  estimatedTokens?: number;
 }
+
