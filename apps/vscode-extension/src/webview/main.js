@@ -1,15 +1,45 @@
 // @ts-check
 (function () {
+    console.log("[COMU_BOOT] main.js loaded");
+
+    // Global error capture (Phase 3, Phase 10)
+    window.addEventListener("error", function (ev) {
+        console.error("[COMU_BOOT ERROR]", ev.message, ev.filename, ev.lineno, ev.colno, ev.error);
+        const diagError = document.getElementById("diag-error");
+        if (diagError) {
+            diagError.textContent = "ERR: " + (ev.message || "Script Error");
+            diagError.style.color = "#f87171";
+        }
+        const diagJs = document.getElementById("diag-js");
+        if (diagJs) diagJs.textContent = "✕";
+    });
+
+    window.addEventListener("unhandledrejection", function (ev) {
+        console.error("[COMU_BOOT REJECTION]", ev.reason);
+        const diagError = document.getElementById("diag-error");
+        if (diagError) {
+            diagError.textContent = "REJ: " + (ev.reason?.message || ev.reason || "Unhandled Rejection");
+            diagError.style.color = "#f87171";
+        }
+    });
+
+    // Update startup diagnostic panel (Phase 25)
+    (function updateBootDiag() {
+        const diagJs = document.getElementById("diag-js");
+        if (diagJs) diagJs.textContent = "✓";
+        const diagDom = document.getElementById("diag-dom");
+        if (diagDom) diagDom.textContent = "✓";
+    })();
+
     // ═══════════════════════════════════════════════════════════
     // 1. TIMING INSTRUMENTATION & DIAGNOSTIC LOGGING (Phase 1)
     // ═══════════════════════════════════════════════════════════
-    const tStartup = (typeof window !== 'undefined' && window.performance && window.performance.timing)
-        ? window.performance.timing.navigationStart
-        : performance.now();
-    const t3 = performance.now();
+    const tBootOrigin = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+        ? performance.now()
+        : 0;
 
     function logDiag(category, msg, data) {
-        const elapsed = (performance.now() - tStartup).toFixed(1);
+        const elapsed = (performance.now() - tBootOrigin).toFixed(1);
         console.log(`${category} [${elapsed}ms] ${msg}`, data !== undefined ? data : '');
     }
 
@@ -19,11 +49,11 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             const t2 = performance.now();
-            logDiag('[COMU WEBVIEW]', `T2: DOMContentLoaded in ${(t2 - tStartup).toFixed(1)}ms`);
+            logDiag('[COMU WEBVIEW]', `T2: DOMContentLoaded in ${(t2 - tBootOrigin).toFixed(1)}ms`);
         });
     } else {
         const t2 = performance.now();
-        logDiag('[COMU WEBVIEW]', `T2: DOMContentLoaded already complete (${(t2 - tStartup).toFixed(1)}ms)`);
+        logDiag('[COMU WEBVIEW]', `T2: DOMContentLoaded already complete (${(t2 - tBootOrigin).toFixed(1)}ms)`);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -151,7 +181,7 @@
     };
 
     const t4 = performance.now();
-    logDiag('[COMU STATE]', `T4: frontend state initialized in ${(t4 - tStartup).toFixed(1)}ms`);
+    logDiag('[COMU STATE]', `T4: frontend state initialized in ${(t4 - tBootOrigin).toFixed(1)}ms`);
 
     const normalizedEventsCache = new Map();
     let sessionUpdateThrottleTimer = null;
@@ -361,13 +391,17 @@
         switch (message.type) {
             case 'state_update': {
                 const t12 = performance.now();
-                logDiag('[COMU STATE]', `T12: session hydration received (${(t12 - tStartup).toFixed(1)}ms)`);
+                logDiag('[COMU STATE]', `T12: session hydration received (${(t12 - tBootOrigin).toFixed(1)}ms)`);
+                const diagHost = document.getElementById("diag-host");
+                if (diagHost) diagHost.textContent = "✓";
                 handleSessionStateUpdate(message.state);
                 break;
             }
             case 'providers_update': {
                 const t13 = performance.now();
-                logDiag('[COMU STARTUP]', `T13: provider/model metadata loaded (${(t13 - tStartup).toFixed(1)}ms)`);
+                logDiag('[COMU STARTUP]', `T13: provider/model metadata loaded (${(t13 - tBootOrigin).toFixed(1)}ms)`);
+                const diagHost = document.getElementById("diag-host");
+                if (diagHost) diagHost.textContent = "✓";
                 state.providers = message.providers || [];
                 renderProviders();
                 renderModels();
@@ -971,9 +1005,11 @@
         const isFailed = state.status === 'failed';
         const isWaiting = state.status === 'waiting_for_user';
         const isOffline = state.status === 'offline';
+        const isConnecting = state.status === 'connecting';
 
         statusDot.className = 'dot ' + (
             isOffline ? 'offline' :
+            isConnecting ? 'connecting' :
             isCancelled ? 'offline' :
             isCancelling ? 'waiting' :
             isWaiting ? 'waiting' :
@@ -984,6 +1020,7 @@
 
         statusLabel.innerText = (
             isOffline ? 'Offline' :
+            isConnecting ? 'Connecting…' :
             isCancelled ? 'Cancelled' :
             isCancelling ? 'Cancelling…' :
             isWaiting ? 'Waiting for User' :
@@ -991,6 +1028,11 @@
             isCompleted ? 'Completed' :
             isFailed ? 'Failed' : 'Ready'
         );
+
+        const diagRuntime = document.getElementById("diag-runtime");
+        if (diagRuntime) {
+            diagRuntime.textContent = isOffline ? '○ (offline)' : (isConnecting ? '◌ (connecting)' : (isRunning ? '● (running)' : '● (ready)'));
+        }
 
         if (state.taskId && state.prompt) {
             headerTaskSummary.style.display = 'flex';
@@ -1863,6 +1905,11 @@
     }
 
     function appendActivityError(msg) {
+        const startupError = document.getElementById('startup-error-banner');
+        if (startupError) {
+            startupError.style.display = 'block';
+            startupError.innerHTML = `⚠️ <span>${escapeHtml(msg)}</span>`;
+        }
         const banner = document.createElement('div');
         banner.className = 'comu-error-banner';
         banner.innerHTML = `⚠️ <span>${escapeHtml(msg)}</span>`;
@@ -1994,24 +2041,42 @@
     }, 1000);
 
     // ═══════════════════════════════════════════════════════════
-    // 15. INITIAL IMMEDIATE SHELL FIRST PAINT (Phase 2)
+    // 15. INITIAL IMMEDIATE SHELL FIRST PAINT (Phase 2, Phase 3)
     // ═══════════════════════════════════════════════════════════
+    console.log("[COMU_BOOT] before initial render");
+    const diagRender = document.getElementById("diag-render");
+    if (diagRender) diagRender.textContent = "rendering...";
+
     const t5 = performance.now();
-    logDiag('[COMU RENDER]', `T5: initial render begins (${(t5 - tStartup).toFixed(1)}ms)`);
+    logDiag('[COMU RENDER]', `T5: initial render begins (${(t5 - tBootOrigin).toFixed(1)}ms)`);
 
-    // Render fallback static models and providers immediately
-    renderProviders();
-    renderModels();
+    try {
+        // Render fallback static models and providers immediately
+        renderProviders();
+        renderModels();
 
-    // Render initial static workspace shell immediately (Header, Navigation, Composer, Hero)
-    renderWorkspace();
+        // Render initial static workspace shell immediately (Header, Navigation, Composer, Hero)
+        renderWorkspace();
 
-    const t6 = performance.now();
-    logDiag('[COMU RENDER]', `T6: first visible COMU shell painted (${(t6 - tStartup).toFixed(1)}ms)`);
-    postTelemetry('firstPaintMs', t6 - tStartup);
-    postTelemetry('interactiveMs', t6 - tStartup);
+        const t6 = performance.now();
+        logDiag('[COMU RENDER]', `T6: first visible COMU shell painted (${(t6 - tBootOrigin).toFixed(1)}ms)`);
+        console.log("[COMU_BOOT] after initial render");
+        if (diagRender) diagRender.textContent = "✓";
 
-    // Initial requests to extension host for background hydration
+        postTelemetry('firstPaintMs', Math.max(0, t6 - tBootOrigin));
+        postTelemetry('interactiveMs', Math.max(0, t6 - tBootOrigin));
+    } catch (err) {
+        console.error("[COMU_BOOT ERROR] Failure during initial render:", err);
+        if (diagRender) diagRender.textContent = "✕";
+        const diagError = document.getElementById("diag-error");
+        if (diagError) {
+            diagError.textContent = "RENDER_ERR: " + (err?.message || err);
+            diagError.style.color = "#f87171";
+        }
+    }
+
+    // Initial handshake requests to extension host for background hydration (Phase 13)
     vscode.postMessage({ type: 'request_providers' });
     vscode.postMessage({ type: 'ready' });
+    vscode.postMessage({ type: 'webview_ready' });
 })();

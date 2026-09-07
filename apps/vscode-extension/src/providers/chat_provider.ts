@@ -68,6 +68,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.onDidReceiveMessage(async (data: WebviewMessage) => {
             switch (data.type) {
                 case 'ready':
+                case 'webview_ready':
                     console.log('[COMU STARTUP] T7: Extension Host ready signal received from webview');
                     this.sendStateToWebview();
                     this.sendProvidersToWebview().catch(() => {});

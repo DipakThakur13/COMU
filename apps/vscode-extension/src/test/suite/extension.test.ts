@@ -40,6 +40,11 @@ suite('Extension Test Suite', () => {
         }
     });
 
+    test('Open Chat should resolve webview', async () => {
+        await vscode.commands.executeCommand('workbench.view.extension.comu-sidebar');
+        await new Promise(r => setTimeout(r, 2000));
+    });
+
     // Note: Deeper E2E tests for Webview messaging, ProviderManager, and TaskSessionStore
     // are better suited for unit tests since Extension Host headless testing limits Webview inspection.
 });

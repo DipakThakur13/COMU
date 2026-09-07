@@ -16,6 +16,17 @@
          APPLICATION SHELL — Engineering Workspace
          ═══════════════════════════════════════════════ -->
     <div id="app-shell">
+        <!-- Diagnostic Boot Status Bar (Phase 25) -->
+        <div id="startup-diagnostic-bar" style="background: #181825; color: #94a3b8; font-size: 11px; padding: 4px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; gap: 12px; align-items: center; z-index: 99999; font-family: monospace;">
+            <strong style="color: #e2e8f0;">COMU Boot:</strong>
+            <span>HTML <span style="color:#34d399;">✓</span></span>
+            <span>JS <span id="diag-js" style="color:#fbbf24;">...</span></span>
+            <span>DOM <span id="diag-dom" style="color:#fbbf24;">...</span></span>
+            <span>Render <span id="diag-render" style="color:#fbbf24;">...</span></span>
+            <span>Host <span id="diag-host" style="color:#fbbf24;">...</span></span>
+            <span>Runtime <span id="diag-runtime" style="color:#fbbf24;">...</span></span>
+            <span id="diag-error" style="color:#34d399; margin-left: auto;">OK</span>
+        </div>
 
         <!-- ── HEADER ── -->
         <header class="workspace-header" id="workspace-header">
@@ -94,6 +105,9 @@
                 <!-- 1. ACTIVITY TIMELINE (Signature Surface) -->
                 <section class="tab-view active" id="view-activity" role="tabpanel">
                     <div id="activity-container" class="activity-scroll-area">
+                        <!-- Global Activity Error Banner -->
+                        <div id="startup-error-banner" class="component-error-boundary" style="display: none; margin: var(--space-3) 0;"></div>
+
                         <!-- Empty State Hero -->
                         <div class="empty-state" id="empty-state-view">
                             <div class="empty-logo">✦</div>

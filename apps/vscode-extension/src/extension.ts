@@ -23,6 +23,7 @@ export function activate(context: vscode.ExtensionContext) {
   
   // Auto-start local Agent Runtime backend if not already running
   serverManager = new ServerProcessManager(context.extensionUri, runtimeClient);
+  sessionStore.setConnecting(true);
   serverManager.ensureServerRunning().catch(err => {
       console.warn('[COMU] Error during auto-start backend:', err);
   });

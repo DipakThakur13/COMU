@@ -3,8 +3,7 @@
    Complete UI/UX Redesign
    ============================================================ */
 
-/* ── Google Fonts Import ── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* ── Local System Typography (Zero Network Blocking) ── */
 
 /* ============================================================
    1. DESIGN TOKENS
@@ -268,7 +267,7 @@ body {
     animation: breathe 3s ease-in-out infinite;
 }
 
-.dot.starting {
+.dot.starting, .dot.connecting {
     background-color: var(--comu-warning);
     box-shadow: 0 0 6px var(--comu-warning);
     animation: pulse 1.5s ease-in-out infinite;
@@ -301,17 +300,17 @@ body {
     flex-direction: column;
     align-items: center;
     width: 100%;
-    animation: fadeIn var(--duration-slow) var(--ease-out);
+    opacity: 1;
 }
 
 .empty-logo {
     font-size: 44px;
     margin-bottom: var(--space-3);
+    color: #818cf8;
     background: var(--comu-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    animation: breathe 4s ease-in-out infinite;
     filter: drop-shadow(0 0 20px var(--comu-accent-glow));
 }
 
@@ -320,6 +319,7 @@ body {
     font-size: var(--text-xl);
     font-weight: 800;
     letter-spacing: -0.5px;
+    color: #f1f5f9;
     background: var(--comu-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -330,15 +330,14 @@ body {
     margin: var(--space-1) 0 var(--space-5) 0;
     font-size: var(--text-base);
     font-weight: 400;
-    opacity: 0.5;
+    opacity: 0.85;
+    color: var(--fg-color);
 }
 
-/* ── BYOK Onboarding Card (Glassmorphic) ── */
+/* ── BYOK Onboarding Card ── */
 .byok-onboarding-card {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--glass-border);
+    background: var(--surface-1);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: var(--space-5);
     margin-bottom: var(--space-5);
@@ -346,8 +345,7 @@ body {
     box-sizing: border-box;
     text-align: left;
     box-shadow: var(--shadow-md);
-    transition: all var(--duration-normal) var(--ease-out);
-    animation: slideUp var(--duration-slow) var(--ease-out) 0.1s both;
+    opacity: 1;
 }
 
 .byok-onboarding-card:hover {
@@ -2378,7 +2376,6 @@ textarea::placeholder {
     flex-direction: column;
     overflow-y: auto;
     position: relative;
-    contain: layout style;
 }
 
 .tab-view.active {
@@ -2394,14 +2391,12 @@ textarea::placeholder {
     flex-direction: column;
     gap: var(--space-3);
     scroll-behavior: smooth;
-    contain: layout style;
 }
 
 .timeline-list {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    contain: layout style;
 }
 
 .older-activity-banner {

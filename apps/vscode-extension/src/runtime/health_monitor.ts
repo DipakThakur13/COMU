@@ -3,6 +3,7 @@ import { RuntimeClient } from './runtime_client';
 
 export class HealthMonitor {
     private isConnected: boolean = false;
+    private initialChecked: boolean = false;
     private timer: NodeJS.Timeout | null = null;
     
     constructor(
@@ -27,7 +28,8 @@ export class HealthMonitor {
         const health = await this.client.health();
         const nowConnected = health.status === 'connected';
         
-        if (this.isConnected !== nowConnected) {
+        if (!this.initialChecked || this.isConnected !== nowConnected) {
+            this.initialChecked = true;
             this.isConnected = nowConnected;
             this.onStatusChanged(this.isConnected);
         }

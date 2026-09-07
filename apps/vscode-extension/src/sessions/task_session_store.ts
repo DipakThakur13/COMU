@@ -37,6 +37,14 @@ export class TaskSessionStore {
     }
   }
 
+  public setConnecting(connecting: boolean) {
+    if (connecting && (this.state.status === 'idle' || this.state.status === 'offline')) {
+      this.state.status = 'connecting';
+    } else if (!connecting && this.state.status === 'connecting') {
+      this.state.status = 'idle';
+    }
+  }
+
   public startNewTask(taskId: string, prompt: string, modelId: string, mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT") {
     const now = Date.now();
     this.state = {

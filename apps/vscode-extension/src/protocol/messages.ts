@@ -27,6 +27,7 @@ export interface SubagentSummaryUI {
 
 export type WebviewMessage =
   | { type: "ready" }
+  | { type: "webview_ready" }
   | { type: "submit_prompt"; prompt: string; modelId: string; mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT" }
   | { type: "cancel_task" }
   | { type: "request_diff"; path: string }
@@ -72,7 +73,7 @@ export interface ChatSessionStateUI {
   modelId?: string;
   interactionMode?: "CHAT" | "ASK" | "PLAN" | "AGENT" | "AMBIGUOUS";
   agentState?: string;
-  status: "idle" | "running" | "cancelling" | "waiting_for_user" | "completed" | "failed" | "cancelled" | "offline";
+  status: "idle" | "running" | "cancelling" | "waiting_for_user" | "completed" | "failed" | "cancelled" | "offline" | "connecting";
   events: AgentEvent[];
   changes: ChangeSummary[];
   finalResponse?: string;
