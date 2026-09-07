@@ -115,55 +115,81 @@ export class ProviderManager {
 
     private providerStatuses = new Map<string, ProviderStatus>();
     private providerEndpoints = new Map<string, string>();
+    private cachedProvidersState: ProviderConfig[] | null = null;
 
-    public async getProvidersState(): Promise<ProviderConfig[]> {
-        const secrets = SecretManager.getInstance();
-        const state: ProviderConfig[] = [];
+    public getCachedProvidersState(): ProviderConfig[] {
+        if (this.cachedProvidersState) {
+            return this.cachedProvidersState;
+        }
+        return ProviderManager.REGISTERED_PROVIDERS.map(p => ({
+            providerId: p.id,
+            displayName: p.displayName,
+            enabled: true,
+            endpoint: this.providerEndpoints.get(p.id) || p.defaultEndpoint,
+            selectedModel: p.models[0]?.name,
+            hasCredential: p.isLocal || false,
+            isLocal: p.isLocal || false,
+            status: p.isLocal ? 'CONNECTED' : (this.providerStatuses.get(p.id) || 'NOT_CONFIGURED'),
+            models: p.models,
+            environmentDetected: false,
+            description: p.description
+        }));
+    }
 
-        for (const p of ProviderManager.REGISTERED_PROVIDERS) {
-            let hasCredential = false;
-            let environmentDetected = false;
-
-            if (p.isLocal) {
-                hasCredential = true;
-            } else {
-                if (p.id === 'nvidia') {
-                    environmentDetected = NvidiaProvider.detectEnvironmentCredential();
-                } else if (p.id === 'experiential') {
-                    environmentDetected = OpenAICompatibleProvider.detectEnvironmentCredential('experiential');
-                } else if (p.id === 'openai') {
-                    environmentDetected = OpenAICompatibleProvider.detectEnvironmentCredential('openai');
-                }
-                const key = await secrets.getProviderKey(p.id);
-                hasCredential = !!key || environmentDetected;
-            }
-
-            let status: ProviderStatus = this.providerStatuses.get(p.id) || (hasCredential ? 'CONNECTED' : 'NOT_CONFIGURED');
-            if (!hasCredential) {
-                status = 'NOT_CONFIGURED';
-            }
-
-            const endpoint = this.providerEndpoints.get(p.id) || p.defaultEndpoint;
-
-            state.push({
-                providerId: p.id,
-                displayName: p.displayName,
-                enabled: true,
-                endpoint,
-                selectedModel: p.models[0]?.name,
-                hasCredential,
-                isLocal: p.isLocal || false,
-                status,
-                models: p.models,
-                environmentDetected,
-                description: p.description
-            });
+    public async getProvidersState(forceRefresh: boolean = false): Promise<ProviderConfig[]> {
+        if (!forceRefresh && this.cachedProvidersState) {
+            return this.cachedProvidersState;
         }
 
+        const secrets = SecretManager.getInstance();
+        const state: ProviderConfig[] = await Promise.all(
+            ProviderManager.REGISTERED_PROVIDERS.map(async (p) => {
+                let hasCredential = false;
+                let environmentDetected = false;
+
+                if (p.isLocal) {
+                    hasCredential = true;
+                } else {
+                    if (p.id === 'nvidia') {
+                        environmentDetected = NvidiaProvider.detectEnvironmentCredential();
+                    } else if (p.id === 'experiential') {
+                        environmentDetected = OpenAICompatibleProvider.detectEnvironmentCredential('experiential');
+                    } else if (p.id === 'openai') {
+                        environmentDetected = OpenAICompatibleProvider.detectEnvironmentCredential('openai');
+                    }
+                    const key = await secrets.getProviderKey(p.id);
+                    hasCredential = !!key || environmentDetected;
+                }
+
+                let status: ProviderStatus = this.providerStatuses.get(p.id) || (hasCredential ? 'CONNECTED' : 'NOT_CONFIGURED');
+                if (!hasCredential) {
+                    status = 'NOT_CONFIGURED';
+                }
+
+                const endpoint = this.providerEndpoints.get(p.id) || p.defaultEndpoint;
+
+                return {
+                    providerId: p.id,
+                    displayName: p.displayName,
+                    enabled: true,
+                    endpoint,
+                    selectedModel: p.models[0]?.name,
+                    hasCredential,
+                    isLocal: p.isLocal || false,
+                    status,
+                    models: p.models,
+                    environmentDetected,
+                    description: p.description
+                };
+            })
+        );
+
+        this.cachedProvidersState = state;
         return state;
     }
 
     public async setProviderKey(providerId: string, key: string): Promise<void> {
+        this.cachedProvidersState = null;
         const secrets = SecretManager.getInstance();
         if (!key || !key.trim()) {
             await secrets.clearProviderKey(providerId);
@@ -175,6 +201,7 @@ export class ProviderManager {
     }
 
     public async setProviderEndpoint(providerId: string, endpoint: string): Promise<void> {
+        this.cachedProvidersState = null;
         if (endpoint && endpoint.trim()) {
             const normalized = providerId === 'nvidia' 
                 ? NvidiaProvider.normalizeEndpoint(endpoint) 
@@ -186,6 +213,7 @@ export class ProviderManager {
     }
 
     public async testConnection(providerId: string, customKey?: string, customEndpoint?: string): Promise<ProviderTestResult> {
+        this.cachedProvidersState = null;
         this.providerStatuses.set(providerId, 'CONNECTING');
 
         const secrets = SecretManager.getInstance();

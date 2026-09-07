@@ -1,5 +1,5 @@
 /* ============================================================
-   COMU AI — Premium Design System v0.1.9
+   COMU AI — Premium Design System v0.2.0
    Complete UI/UX Redesign
    ============================================================ */
 
@@ -2378,6 +2378,7 @@ textarea::placeholder {
     flex-direction: column;
     overflow-y: auto;
     position: relative;
+    contain: layout style;
 }
 
 .tab-view.active {
@@ -2393,12 +2394,49 @@ textarea::placeholder {
     flex-direction: column;
     gap: var(--space-3);
     scroll-behavior: smooth;
+    contain: layout style;
 }
 
 .timeline-list {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    contain: layout style;
+}
+
+.older-activity-banner {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-2) 0;
+    margin-bottom: var(--space-2);
+}
+
+.btn-show-earlier-activity {
+    background: var(--surface-2);
+    border: 1px solid var(--border-color);
+    color: var(--comu-accent-light);
+    border-radius: var(--radius-full);
+    padding: 4px 14px;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--duration-fast);
+}
+
+.btn-show-earlier-activity:hover {
+    background: var(--surface-hover);
+    border-color: var(--comu-accent-glow);
+}
+
+.component-error-boundary {
+    padding: var(--space-4);
+    background: var(--surface-1);
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    border-radius: var(--radius-md);
+    color: var(--comu-error);
+    font-size: var(--text-sm);
+    margin: var(--space-4);
+    text-align: center;
 }
 
 /* Activity Item Card */

@@ -1,7 +1,33 @@
 // @ts-check
 (function () {
     // ═══════════════════════════════════════════════════════════
-    // 1. VS CODE API INITIALIZATION & SAFE SHIMS
+    // 1. TIMING INSTRUMENTATION & DIAGNOSTIC LOGGING (Phase 1)
+    // ═══════════════════════════════════════════════════════════
+    const tStartup = (typeof window !== 'undefined' && window.performance && window.performance.timing)
+        ? window.performance.timing.navigationStart
+        : performance.now();
+    const t3 = performance.now();
+
+    function logDiag(category, msg, data) {
+        const elapsed = (performance.now() - tStartup).toFixed(1);
+        console.log(`${category} [${elapsed}ms] ${msg}`, data !== undefined ? data : '');
+    }
+
+    logDiag('[COMU STARTUP]', 'T3: main.js loaded');
+
+    // DOMContentLoaded measurement (T2)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            const t2 = performance.now();
+            logDiag('[COMU WEBVIEW]', `T2: DOMContentLoaded in ${(t2 - tStartup).toFixed(1)}ms`);
+        });
+    } else {
+        const t2 = performance.now();
+        logDiag('[COMU WEBVIEW]', `T2: DOMContentLoaded already complete (${(t2 - tStartup).toFixed(1)}ms)`);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 2. VS CODE API INITIALIZATION & SAFE SHIMS
     // ═══════════════════════════════════════════════════════════
     // @ts-ignore
     const vscode = (typeof acquireVsCodeApi === 'function')
@@ -10,8 +36,71 @@
 
     const isLivePreview = typeof acquireVsCodeApi !== 'function';
 
+    function postTelemetry(name, value, details) {
+        try {
+            vscode.postMessage({ type: 'telemetry_metric', name, value: Math.round(value), details });
+        } catch {}
+    }
+
+    // Default static fallback models to eliminate loading delays
+    const DEFAULT_STATIC_PROVIDERS = [
+        {
+            providerId: 'nvidia',
+            displayName: 'NVIDIA Nemotron',
+            description: 'NVIDIA Nemotron high-performance engineering models.',
+            defaultEndpoint: 'https://integrate.api.nvidia.com/v1',
+            hasCredential: true,
+            isLocal: false,
+            status: 'CONNECTED',
+            models: [
+                { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', name: 'Nemotron 3.5 Lightning 30B-A3B' },
+                { id: 'deepseek-ai/deepseek-v4-pro-0813', name: 'DeepSeek V4 Pro 0813' },
+                { id: 'deepseek-ai/deepseek-v4-flash-0731', name: 'DeepSeek V4 Flash 0731' },
+                { id: 'moonshotai/kimi-k3', name: 'Kimi K3' },
+                { id: 'poolside/laguna-xs-2.1', name: 'Laguna XS 2.1' },
+                { id: 'meta/muse-glimmer-30b', name: 'Muse Glimmer 30B' }
+            ]
+        },
+        {
+            providerId: 'experiential',
+            displayName: 'GPT-6 Astra (Experiential Labs)',
+            description: 'Frontier reasoning and coding model with 1.05M context window.',
+            defaultEndpoint: 'https://api.experiential.com/v1',
+            hasCredential: false,
+            isLocal: false,
+            status: 'NOT_CONFIGURED',
+            models: [
+                { id: 'gpt-6-astra', name: 'GPT-6 Astra' }
+            ]
+        },
+        {
+            providerId: 'openai',
+            displayName: 'OpenAI-Compatible',
+            description: 'Connect any OpenAI-compatible API endpoint.',
+            defaultEndpoint: 'https://api.openai.com/v1',
+            hasCredential: false,
+            isLocal: false,
+            status: 'NOT_CONFIGURED',
+            models: [
+                { id: 'gpt-4o', name: 'GPT-4o' }
+            ]
+        },
+        {
+            providerId: 'ollama',
+            displayName: 'Ollama (Local)',
+            description: 'Local open-weights models with zero external network access.',
+            defaultEndpoint: 'http://localhost:11434',
+            hasCredential: true,
+            isLocal: true,
+            status: 'CONNECTED',
+            models: [
+                { id: 'ollama-llama-3', name: 'Llama 3 (Local)' }
+            ]
+        }
+    ];
+
     // ═══════════════════════════════════════════════════════════
-    // 2. CENTRAL VIEW STATE (Phase 2)
+    // 3. CENTRAL VIEW STATE (Phase 2)
     // ═══════════════════════════════════════════════════════════
     const state = {
         taskId: null,
@@ -19,12 +108,16 @@
         interactionMode: 'CHAT', // CHAT, ASK, PLAN, AGENT, AMBIGUOUS
         agentState: 'IDLE',      // IDLE, STARTING, CLASSIFYING, ANALYZING, PLANNING, THINKING, TOOL_CALLING, OBSERVING, VERIFYING, DIAGNOSING, REPAIRING, WAITING_FOR_USER, COMPLETED, FAILED, CANCELLED, LIMIT_REACHED
         status: 'idle',          // idle, running, cancelling, waiting_for_user, completed, failed, cancelled, offline
-        selectedModelId: '',
+        selectedModelId: 'nvidia/nemotron-3.5-lightning-30b-a3b',
         requestedMode: 'AUTO',   // AUTO, CHAT, ASK, PLAN, AGENT
         activeNavTab: 'activity',// activity, overview, plan, changes, verification, memory, workers
         events: [],
         rawEvents: [],
         activity: [],
+        fullActivity: [],
+        hasOlderActivity: false,
+        olderActivityCount: 0,
+        showAllActivity: false,
         changes: [],
         plan: null,
         verification: null,
@@ -40,7 +133,7 @@
         },
         memory: [],
         workers: [],
-        providers: [],
+        providers: DEFAULT_STATIC_PROVIDERS,
         pendingInteraction: null,
         gitCommitProposal: null,
         gitPushProposal: null,
@@ -57,6 +150,12 @@
         contextDrawerOpen: false
     };
 
+    const t4 = performance.now();
+    logDiag('[COMU STATE]', `T4: frontend state initialized in ${(t4 - tStartup).toFixed(1)}ms`);
+
+    const normalizedEventsCache = new Map();
+    let sessionUpdateThrottleTimer = null;
+    let pendingSessionState = null;
     let durationTimerInterval = null;
     let userScrolledUp = false;
 
@@ -260,14 +359,20 @@
         if (!message) return;
 
         switch (message.type) {
-            case 'state_update':
+            case 'state_update': {
+                const t12 = performance.now();
+                logDiag('[COMU STATE]', `T12: session hydration received (${(t12 - tStartup).toFixed(1)}ms)`);
                 handleSessionStateUpdate(message.state);
                 break;
-            case 'providers_update':
+            }
+            case 'providers_update': {
+                const t13 = performance.now();
+                logDiag('[COMU STARTUP]', `T13: provider/model metadata loaded (${(t13 - tStartup).toFixed(1)}ms)`);
                 state.providers = message.providers || [];
                 renderProviders();
                 renderModels();
                 break;
+            }
             case 'provider_test_result':
                 handleProviderTestResult(message.providerId, message.result);
                 break;
@@ -298,7 +403,14 @@
             }
         });
 
-        if (tabName === 'activity' && !userScrolledUp) {
+        // Progressive on-demand hydration of specific tab content
+        if (tabName === 'overview') safeRenderSection('overview', renderOverview);
+        else if (tabName === 'plan') safeRenderSection('plan', renderPlan);
+        else if (tabName === 'changes') safeRenderSection('changes', renderChanges);
+        else if (tabName === 'verification') safeRenderSection('verification', renderVerification);
+        else if (tabName === 'memory') safeRenderSection('memory', renderMemory);
+        else if (tabName === 'workers') safeRenderSection('workers', renderWorkers);
+        else if (tabName === 'activity' && !userScrolledUp) {
             activityContainer.scrollTop = activityContainer.scrollHeight;
         }
     }
@@ -705,9 +817,27 @@
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 8. STATE UPDATE REDUCER (Phase 2, 5)
+    // ═══════════════════════════════════════════════════════════
+    // 8. STATE UPDATE REDUCER (Phase 2, 4, 5)
     // ═══════════════════════════════════════════════════════════
     function handleSessionStateUpdate(newState) {
+        if (!newState) return;
+        pendingSessionState = newState;
+
+        // Throttle high-frequency event/token updates at ~40ms
+        if (!sessionUpdateThrottleTimer) {
+            sessionUpdateThrottleTimer = setTimeout(() => {
+                sessionUpdateThrottleTimer = null;
+                if (pendingSessionState) {
+                    const toApply = pendingSessionState;
+                    pendingSessionState = null;
+                    applySessionStateUpdate(toApply);
+                }
+            }, 40);
+        }
+    }
+
+    function applySessionStateUpdate(newState) {
         if (!newState) return;
 
         state.taskId = newState.taskId !== undefined ? newState.taskId : state.taskId;
@@ -735,19 +865,40 @@
             state.interactionMode = newState.interactionMode;
         }
 
-        // Deduplicate and normalize events
+        // Incremental normalization using normalizedEventsCache
         const seenIds = new Set();
         const normalized = [];
         if (newState.events && Array.isArray(newState.events)) {
             for (const ev of newState.events) {
-                const norm = normalizeRawEvent(ev);
+                const uniqueKey = ev.taskId ? `${ev.taskId}-${ev.eventId}-${ev.type}` : `${ev.eventId}-${ev.type}`;
+                let norm = normalizedEventsCache.get(uniqueKey);
+                if (!norm) {
+                    norm = normalizeRawEvent(ev);
+                    if (norm) {
+                        normalizedEventsCache.set(uniqueKey, norm);
+                    }
+                }
                 if (norm && !seenIds.has(norm.id)) {
                     seenIds.add(norm.id);
                     normalized.push(norm);
                 }
             }
         }
-        state.activity = groupEvents(normalized);
+
+        // Group activity items
+        const grouped = groupEvents(normalized);
+        state.fullActivity = grouped;
+
+        // Bounded visible history: show latest 50 items unless user explicitly expanded
+        if (!state.showAllActivity && grouped.length > 50) {
+            state.activity = grouped.slice(-50);
+            state.hasOlderActivity = true;
+            state.olderActivityCount = grouped.length - 50;
+        } else {
+            state.activity = grouped;
+            state.hasOlderActivity = false;
+            state.olderActivityCount = 0;
+        }
 
         // Update Cancellation State
         if (state.status === 'cancelling') {
@@ -756,23 +907,58 @@
             state.cancellation.acknowledged = true;
         }
 
-        renderWorkspace();
+        // Targeted render: header, badges, composer, and only the active tab
+        renderHeader();
+        renderNavBadges();
+        renderComposerControls();
+
+        if (state.activeNavTab === 'activity') {
+            renderActivityTimeline();
+        } else if (state.activeNavTab === 'overview') {
+            safeRenderSection('overview', renderOverview);
+        } else if (state.activeNavTab === 'plan') {
+            safeRenderSection('plan', renderPlan);
+        } else if (state.activeNavTab === 'changes') {
+            safeRenderSection('changes', renderChanges);
+        } else if (state.activeNavTab === 'verification') {
+            safeRenderSection('verification', renderVerification);
+        } else if (state.activeNavTab === 'memory') {
+            safeRenderSection('memory', renderMemory);
+        } else if (state.activeNavTab === 'workers') {
+            safeRenderSection('workers', renderWorkers);
+        }
+
+        if (state.contextDrawerOpen) {
+            safeRenderSection('context-drawer', renderContextDrawer);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 9. WORKSPACE RENDER ORCHESTRATION
+    // 9. WORKSPACE RENDER ORCHESTRATION & ERROR BOUNDARIES (Phase 7)
     // ═══════════════════════════════════════════════════════════
+    function safeRenderSection(sectionName, renderFn) {
+        try {
+            renderFn();
+        } catch (err) {
+            console.error(`[COMU RENDER] Error rendering ${sectionName}:`, err);
+            const view = tabViews[sectionName] || document.getElementById(`view-${sectionName}`);
+            if (view) {
+                view.innerHTML = `<div class="component-error-boundary" style="padding:16px; opacity:0.8;"><p>⚠️ Unable to load ${sectionName} section.</p></div>`;
+            }
+        }
+    }
+
     function renderWorkspace() {
         renderHeader();
         renderNavBadges();
         renderActivityTimeline();
-        renderOverview();
-        renderPlan();
-        renderChanges();
-        renderVerification();
-        renderMemory();
-        renderWorkers();
-        renderContextDrawer();
+        safeRenderSection('overview', renderOverview);
+        safeRenderSection('plan', renderPlan);
+        safeRenderSection('changes', renderChanges);
+        safeRenderSection('verification', renderVerification);
+        safeRenderSection('memory', renderMemory);
+        safeRenderSection('workers', renderWorkers);
+        safeRenderSection('context-drawer', renderContextDrawer);
         renderComposerControls();
     }
 
@@ -946,26 +1132,21 @@
             }
             card.innerHTML = html;
             timelineList.appendChild(card);
+        }
 
-            const btnApprove = card.querySelector('#btn-approve');
-            if (btnApprove) btnApprove.addEventListener('click', () => respondInteraction({ type: 'APPROVE' }));
-            const btnDeny = card.querySelector('#btn-deny');
-            if (btnDeny) btnDeny.addEventListener('click', () => respondInteraction({ type: 'DENY' }));
-            const btnChoice = card.querySelector('#btn-submit-choice');
-            if (btnChoice) {
-                btnChoice.addEventListener('click', () => {
-                    const radio = card.querySelector('input[name="opt_choice"]:checked');
-                    // @ts-ignore
-                    const val = radio ? radio.value : '';
-                    respondInteraction({ type: 'INPUT', value: val });
-                });
-            }
+        // Show banner for older collapsed activities if history was bounded
+        if (state.hasOlderActivity) {
+            const olderBanner = document.createElement('div');
+            olderBanner.className = 'older-activity-banner';
+            olderBanner.innerHTML = `<button class="btn-show-earlier-activity">↑ Show ${state.olderActivityCount} earlier activities</button>`;
+            timelineList.appendChild(olderBanner);
         }
 
         // 3. Render Timeline Items & Groups
         state.activity.forEach(entry => {
             const card = document.createElement('div');
             card.className = 'activity-card';
+            card.setAttribute('data-card-id', entry.id);
 
             const statusIcon = getStatusIcon(entry.status);
             const toolTagClass = entry.toolCategory ? `tool-tag-${entry.toolCategory.toLowerCase()}` : '';
@@ -1004,19 +1185,6 @@
                 </div>
                 ${detailsHtml}
             `;
-
-            // Expand/collapse details on click
-            if (entry.isGroup || entry.details) {
-                const header = card.querySelector('.activity-header');
-                const panel = card.querySelector('.activity-details-panel');
-                if (header && panel) {
-                    header.addEventListener('click', () => {
-                        card.classList.toggle('expanded');
-                        // @ts-ignore
-                        panel.style.display = card.classList.contains('expanded') ? 'flex' : 'none';
-                    });
-                }
-            }
 
             timelineList.appendChild(card);
         });
@@ -1770,6 +1938,53 @@
         }
     });
 
+    // Delegated click handler on timelineList (prevents per-card listener leaks)
+    timelineList.addEventListener('click', (e) => {
+        // @ts-ignore
+        const target = e.target;
+        if (!target) return;
+
+        // Interactive approval / deny buttons
+        if (target.closest('#btn-approve')) {
+            respondInteraction({ type: 'APPROVE' });
+            return;
+        }
+        if (target.closest('#btn-deny')) {
+            respondInteraction({ type: 'DENY' });
+            return;
+        }
+        if (target.closest('#btn-submit-choice')) {
+            const radio = timelineList.querySelector('input[name="opt_choice"]:checked');
+            // @ts-ignore
+            const val = radio ? radio.value : '';
+            respondInteraction({ type: 'INPUT', value: val });
+            return;
+        }
+
+        // Show earlier activity button
+        if (target.closest('.btn-show-earlier-activity')) {
+            state.showAllActivity = true;
+            state.activity = state.fullActivity || state.activity;
+            state.hasOlderActivity = false;
+            renderActivityTimeline();
+            return;
+        }
+
+        // Expand/collapse activity card details
+        const header = target.closest('.activity-header');
+        if (header) {
+            const card = header.closest('.activity-card');
+            if (card) {
+                const panel = card.querySelector('.activity-details-panel');
+                if (panel) {
+                    card.classList.toggle('expanded');
+                    // @ts-ignore
+                    panel.style.display = card.classList.contains('expanded') ? 'flex' : 'none';
+                }
+            }
+        }
+    });
+
     // Duration timer ticker
     if (durationTimerInterval) clearInterval(durationTimerInterval);
     durationTimerInterval = setInterval(() => {
@@ -1778,52 +1993,25 @@
         }
     }, 1000);
 
-    // Initial Requests
+    // ═══════════════════════════════════════════════════════════
+    // 15. INITIAL IMMEDIATE SHELL FIRST PAINT (Phase 2)
+    // ═══════════════════════════════════════════════════════════
+    const t5 = performance.now();
+    logDiag('[COMU RENDER]', `T5: initial render begins (${(t5 - tStartup).toFixed(1)}ms)`);
+
+    // Render fallback static models and providers immediately
+    renderProviders();
+    renderModels();
+
+    // Render initial static workspace shell immediately (Header, Navigation, Composer, Hero)
+    renderWorkspace();
+
+    const t6 = performance.now();
+    logDiag('[COMU RENDER]', `T6: first visible COMU shell painted (${(t6 - tStartup).toFixed(1)}ms)`);
+    postTelemetry('firstPaintMs', t6 - tStartup);
+    postTelemetry('interactiveMs', t6 - tStartup);
+
+    // Initial requests to extension host for background hydration
     vscode.postMessage({ type: 'request_providers' });
     vscode.postMessage({ type: 'ready' });
-
-    // Live Preview Mock Data
-    if (isLivePreview) {
-        state.providers = [
-            {
-                providerId: 'nvidia',
-                displayName: 'NVIDIA Nemotron',
-                description: 'NVIDIA Nemotron high-performance engineering models.',
-                defaultEndpoint: 'https://integrate.api.nvidia.com/v1',
-                hasCredential: true,
-                isLocal: false,
-                status: 'CONNECTED',
-                models: [
-                    { id: 'nvidia-nemotron-3-ultra', name: 'Nemotron 3.5 Lightning' },
-                    { id: 'nvidia-deepseek-v4-pro', name: 'DeepSeek V4 Pro' }
-                ]
-            },
-            {
-                providerId: 'experiential',
-                displayName: 'Experiential Labs (GPT-6 Astra)',
-                description: 'Frontier AI software engineering gateway.',
-                defaultEndpoint: 'https://api.experiential.com/v1',
-                hasCredential: false,
-                isLocal: false,
-                status: 'NOT_CONFIGURED',
-                models: [
-                    { id: 'gpt-6-astra', name: 'GPT-6 Astra' }
-                ]
-            },
-            {
-                providerId: 'ollama',
-                displayName: 'Ollama (Local)',
-                description: 'Local open-weights models with zero telemetry.',
-                defaultEndpoint: 'http://localhost:11434',
-                hasCredential: true,
-                isLocal: true,
-                status: 'CONNECTED',
-                models: [
-                    { id: 'ollama-llama-3', name: 'Llama 3' }
-                ]
-            }
-        ];
-        renderProviders();
-        renderModels();
-    }
 })();

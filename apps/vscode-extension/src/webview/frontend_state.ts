@@ -529,6 +529,19 @@ export function groupActivityItems(items: UIActivityItem[]): ActivityEntry[] {
 }
 
 /**
+ * Bounds visible activity items to the latest N items for rendering performance.
+ */
+export function boundActivityHistory(items: ActivityEntry[], maxItems: number = 50): { visible: ActivityEntry[]; olderCount: number } {
+  if (!items || items.length <= maxItems) {
+    return { visible: items || [], olderCount: 0 };
+  }
+  return {
+    visible: items.slice(-maxItems),
+    olderCount: items.length - maxItems
+  };
+}
+
+/**
  * Pure state reducer for the view state.
  */
 export function reduceViewState(state: ComuViewState, action: { type: string; payload?: any }): ComuViewState {
@@ -604,6 +617,7 @@ export function reduceViewState(state: ComuViewState, action: { type: string; pa
     }
 
     case "SELECT_TAB":
+    case "SET_ACTIVE_TAB":
       return {
         ...state,
         activeNavTab: action.payload
@@ -622,10 +636,10 @@ export function reduceViewState(state: ComuViewState, action: { type: string; pa
       };
 
     case "REQUEST_CANCEL":
+    case "REQUEST_CANCELLATION":
       return {
         ...state,
         status: "cancelling",
-        agentState: "CANCELLED",
         cancellation: {
           requested: true,
           acknowledged: false

@@ -30,13 +30,23 @@ export class RuntimeClient {
     }
 
     public async health(): Promise<HealthStatus> {
+        const t8 = Date.now();
+        console.log('[COMU RUNTIME] T8: runtime health request started');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1500);
         try {
-            const res = await fetch(`${this.baseUrl}/v1/health`);
+            const res = await fetch(`${this.baseUrl}/v1/health`, { signal: controller.signal });
+            clearTimeout(timeout);
+            const t9 = Date.now();
+            console.log(`[COMU RUNTIME] T9: runtime health response in ${t9 - t8}ms (${res.ok ? 'connected' : 'disconnected'})`);
             if (res.ok) {
                 return { status: 'connected' };
             }
             return { status: 'disconnected', details: `Status ${res.status}` };
         } catch (error: any) {
+            clearTimeout(timeout);
+            const t9 = Date.now();
+            console.log(`[COMU RUNTIME] T9: runtime health response in ${t9 - t8}ms (error: ${error.message})`);
             return { status: 'disconnected', details: error.message };
         }
     }

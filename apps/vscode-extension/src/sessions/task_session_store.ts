@@ -62,6 +62,10 @@ export class TaskSessionStore {
   }
 
   public addEvent(event: AgentEvent) {
+    if (this.state.status === 'cancelled' && event.type !== 'task.cancelled' && event.type !== 'task.failed') {
+      return false; // Prevent post-cancel activity flood
+    }
+
     const uniqueId = `${event.taskId}-${event.eventId}`;
     if (this.seenEvents.has(uniqueId)) {
       return false; // Deduplicated

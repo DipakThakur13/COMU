@@ -10,6 +10,10 @@ export class SSEClient {
         this.disconnect();
         this.abortController = new AbortController();
 
+        const t10 = Date.now();
+        console.log('[COMU SSE] T10: SSE connection started');
+        let firstEventReceived = false;
+
         try {
             const response = await fetch(url, {
                 headers,
@@ -28,6 +32,11 @@ export class SSEClient {
                 onEvent: (event: EventSourceMessage) => {
                     try {
                         const parsedData = JSON.parse(event.data) as AgentEvent;
+                        if (!firstEventReceived) {
+                            firstEventReceived = true;
+                            const t11 = Date.now();
+                            console.log(`[COMU SSE] T11: SSE first event received in ${t11 - t10}ms`);
+                        }
                         this.onEvent(parsedData);
                     } catch (err) {
                         console.error('Failed to parse SSE event data', err);

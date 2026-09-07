@@ -27,7 +27,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken
     ) {
+        const t0 = Date.now();
+        console.log('[COMU STARTUP] T0: WebView constructor/provider created');
         this._view = webviewView;
+
+        webviewView.onDidDispose(() => {
+            console.log('[COMU WEBVIEW] Webview disposed, cleaning up references');
+            this._view = undefined;
+        });
 
         try {
             webviewView.webview.options = {
@@ -39,6 +46,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
 
             webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+            const t1 = Date.now();
+            console.log(`[COMU WEBVIEW] T1: HTML returned in ${t1 - t0}ms`);
         } catch (err: any) {
             console.error('[COMU ChatViewProvider] Error initializing webview HTML:', err);
             webviewView.webview.html = `<!DOCTYPE html>
@@ -59,8 +68,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.onDidReceiveMessage(async (data: WebviewMessage) => {
             switch (data.type) {
                 case 'ready':
+                    console.log('[COMU STARTUP] T7: Extension Host ready signal received from webview');
                     this.sendStateToWebview();
-                    await this.sendProvidersToWebview();
+                    this.sendProvidersToWebview().catch(() => {});
+                    break;
+                case 'telemetry_metric':
+                    console.log(`[COMU WEBVIEW] Telemetry metric: ${data.name} = ${data.value}ms ${data.details ? '(' + data.details + ')' : ''}`);
                     break;
                 case 'submit_prompt':
                     await this.handleSubmitPrompt(data.prompt, data.modelId, data.mode);
@@ -134,11 +147,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    public async sendProvidersToWebview() {
+    public async sendProvidersToWebview(forceRefresh: boolean = false) {
         if (this._view) {
-            const providers = await this.providerManager.getProvidersState();
-            const msg: ExtensionMessage = { type: 'providers_update', providers };
-            this._view.webview.postMessage(msg);
+            // Fast-path: immediately send cached provider catalog for zero-delay UI rendering
+            const cached = this.providerManager.getCachedProvidersState();
+            if (cached && cached.length > 0) {
+                this._view.webview.postMessage({ type: 'providers_update', providers: cached });
+            }
+            // Asynchronously resolve credentials without blocking first paint
+            const providers = await this.providerManager.getProvidersState(forceRefresh);
+            if (this._view) {
+                const msg: ExtensionMessage = { type: 'providers_update', providers };
+                this._view.webview.postMessage(msg);
+            }
         }
     }
 

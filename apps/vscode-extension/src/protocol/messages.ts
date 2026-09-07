@@ -44,7 +44,8 @@ export type WebviewMessage =
   | { type: "deny_push"; taskId: string }
   | { type: "request_memory"; workspaceId?: string }
   | { type: "create_convention"; workspaceId: string; content: string }
-  | { type: "invalidate_memory"; memoryId: string; workspaceId: string };
+  | { type: "invalidate_memory"; memoryId: string; workspaceId: string }
+  | { type: "telemetry_metric"; name: string; value: number; details?: string };
 
 export type ExtensionMessage =
   | { type: "state_update"; state: ChatSessionStateUI }
