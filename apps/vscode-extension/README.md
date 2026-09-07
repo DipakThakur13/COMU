@@ -6,7 +6,7 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/Version-v0.2.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-v0.2.1-blue.svg)](package.json)
 [![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.85.0-007ACC.svg)](https://code.visualstudio.com/)
 [![Tests Passing](https://img.shields.io/badge/Tests-65%20Passed-brightgreen)](tests/)
 [![BYOK](https://img.shields.io/badge/BYOK-Encrypted%20Storage-purple)](#-bring-your-own-key-byok-security)
@@ -66,7 +66,7 @@ Connect directly to frontier AI models with your own API keys:
 ### 1. Installation
 Install the VSIX package into VS Code:
 ```bash
-code --install-extension comu-ai-0.2.0.vsix
+code --install-extension comu-ai-0.2.1.vsix
 ```
 
 ### 2. Open COMU

@@ -1,6 +1,6 @@
 {
   "name": "ai-coding-agent",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Multi-Model AI Coding Agent for VS Code",
   "scripts": {
