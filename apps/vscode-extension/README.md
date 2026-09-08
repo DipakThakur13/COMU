@@ -6,7 +6,7 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/Version-v0.2.2-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-v0.2.4-blue.svg)](package.json)
 [![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.85.0-007ACC.svg)](https://code.visualstudio.com/)
 [![Tests Passing](https://img.shields.io/badge/Tests-65%20Passed-brightgreen)](tests/)
 [![BYOK](https://img.shields.io/badge/BYOK-Encrypted%20Storage-purple)](#-bring-your-own-key-byok-security)

@@ -119,6 +119,7 @@ export class AgentKernel {
     }
 
     if (classification.mode === "CHAT") {
+      const finalText = "Hi! I'm COMU, your AI software engineer. What are we working on?";
       input.onEvent({
         type: "agent.status",
         eventId: `evt-${Date.now()}`,
@@ -126,11 +127,21 @@ export class AgentKernel {
         timestamp: new Date().toISOString(),
         status: "COMPLETED"
       });
+      // CHAT bypasses the engineering orchestrator, so it must publish its own
+      // terminal event. The VS Code session and webview receive final responses
+      // exclusively through task.completed.finalText.
+      input.onEvent({
+        type: "task.completed",
+        eventId: `evt-${Date.now()}-completed`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString(),
+        finalText
+      });
       return {
         status: "completed",
         steps: 0,
-        // Since we are not doing a secondary LLM call right now, provide a deterministic chat fallback
-        finalText: "Hi! I'm COMU, your AI software engineer. What are we working on?"
+        // Since we are not doing a secondary LLM call right now, provide a deterministic chat fallback.
+        finalText
       };
     }
 

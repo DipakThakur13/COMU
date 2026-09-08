@@ -1,5 +1,5 @@
 /* ============================================================
-   COMU AI — Premium Design System v0.2.2
+   COMU AI — Premium Design System v0.2.4
    Complete UI/UX Redesign
    ============================================================ */
 
@@ -630,6 +630,12 @@ body {
 
 .change-item:hover {
     background: var(--surface-hover);
+}
+
+.change-item-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
 }
 
 .change-op {
@@ -2061,6 +2067,27 @@ textarea::placeholder {
     opacity: 0.8;
 }
 
+.rich-code-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.rich-code-save {
+    border: 1px solid rgba(129, 140, 248, 0.38);
+    border-radius: var(--radius-sm);
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--comu-accent-light);
+    padding: 2px var(--space-2);
+    font: 600 var(--text-xs) var(--font-sans);
+    cursor: pointer;
+}
+
+.rich-code-save:hover {
+    background: rgba(99, 102, 241, 0.22);
+    border-color: rgba(129, 140, 248, 0.7);
+}
+
 .rich-code-lang {
     font-weight: 700;
     letter-spacing: 0.5px;
@@ -2450,6 +2477,102 @@ textarea::placeholder {
 .activity-card:hover {
     border-color: rgba(255, 255, 255, 0.12);
     background: var(--surface-hover);
+}
+
+.final-response-card {
+    border-color: rgba(74, 222, 128, 0.3);
+    background: linear-gradient(150deg, rgba(16, 185, 129, 0.08), var(--surface-1) 42%);
+}
+
+.saved-files-panel {
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid rgba(52, 211, 153, 0.26);
+    border-radius: var(--radius-md);
+    background: rgba(6, 78, 59, 0.18);
+}
+
+.saved-files-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.saved-files-heading strong {
+    display: block;
+    font-size: var(--text-sm);
+    margin-top: 2px;
+}
+
+.saved-files-kicker, .saved-file-operation {
+    font: 700 10px var(--font-mono);
+    letter-spacing: 0.06em;
+    color: var(--comu-success);
+}
+
+.saved-files-status {
+    color: var(--comu-success);
+    font-size: var(--text-xs);
+    font-weight: 700;
+}
+
+.saved-files-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.saved-file-button {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--fg-color);
+    text-align: left;
+    cursor: pointer;
+}
+
+.saved-file-button:hover {
+    border-color: rgba(52, 211, 153, 0.45);
+    background: var(--surface-hover);
+}
+
+.saved-file-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: 500 var(--text-xs) var(--font-mono);
+}
+
+.saved-file-open {
+    color: var(--comu-accent-light);
+    font-size: var(--text-xs);
+}
+
+.saved-files-actions {
+    display: flex;
+    margin-top: var(--space-2);
+}
+
+.saved-files-review {
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--comu-success);
+    padding: var(--space-1) var(--space-2);
+    font: 600 var(--text-xs) var(--font-sans);
+    cursor: pointer;
+}
+
+.saved-files-review:hover {
+    background: rgba(52, 211, 153, 0.12);
 }
 
 .activity-header {

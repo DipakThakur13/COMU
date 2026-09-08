@@ -88,6 +88,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'open_file':
                     await this.handleOpenFile(data.path, data.line);
                     break;
+                case 'save_code':
+                    await this.handleSaveCode(data.content, data.suggestedPath);
+                    break;
                 case 'request_providers':
                     await this.sendProvidersToWebview();
                     break;
@@ -234,6 +237,51 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
         } catch (e: any) {
             console.error('[COMU ChatViewProvider] Failed to open file:', e);
+        }
+    }
+
+    private async handleSaveCode(content: string, suggestedPath?: string) {
+        const workspaceCtx = await getWorkspaceContext();
+        if (!workspaceCtx?.rootPath) {
+            vscode.window.showErrorMessage('Open a workspace folder before saving code.');
+            return;
+        }
+
+        const filePath = await vscode.window.showInputBox({
+            title: 'Save COMU code to workspace',
+            prompt: 'Relative file path',
+            value: suggestedPath || 'snippet.txt',
+            validateInput: (value) => {
+                const trimmed = value.trim();
+                if (!trimmed) return 'Enter a file path.';
+                if (path.isAbsolute(trimmed)) return 'Use a path relative to the open workspace.';
+                const root = path.resolve(workspaceCtx.rootPath);
+                const target = path.resolve(root, trimmed);
+                const relative = path.relative(root, target);
+                return relative.startsWith('..') || path.isAbsolute(relative)
+                    ? 'The file must stay inside the open workspace.'
+                    : undefined;
+            }
+        });
+
+        if (!filePath) return;
+
+        const root = path.resolve(workspaceCtx.rootPath);
+        const target = path.resolve(root, filePath.trim());
+        const relative = path.relative(root, target);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
+            vscode.window.showErrorMessage('COMU can only save code inside the open workspace.');
+            return;
+        }
+
+        try {
+            await fs.promises.mkdir(path.dirname(target), { recursive: true });
+            await fs.promises.writeFile(target, content, 'utf8');
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
+            await vscode.window.showTextDocument(doc, { preview: false });
+            vscode.window.showInformationMessage(`Saved COMU code to ${relative}.`);
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`Unable to save COMU code: ${e.message}`);
         }
     }
 

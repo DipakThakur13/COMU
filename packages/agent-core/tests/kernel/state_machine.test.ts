@@ -54,13 +54,19 @@ describe("Agent Kernel & State Machine (Batch 2)", () => {
 
     it("should return immediately on CHAT", async () => {
       const kernel = new AgentKernel(orchestrator);
+      const onEvent = vi.fn();
       const res = await kernel.handle({
         taskId: "test", runId: "test",
-        systemPrompt: "sys", userPrompt: "Hi",
-        workspaceRoot: "/", limits: {} as any, onEvent: vi.fn()
+        systemPrompt: "sys", userPrompt: "Hi", workspaceRoot: "/",
+        limits: {} as any, onEvent
       });
       expect(res.status).toBe("completed");
       expect(res.finalText).toContain("Hi! I'm COMU");
+      expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
+        type: "task.completed",
+        taskId: "test",
+        finalText: res.finalText
+      }));
     });
   });
 });

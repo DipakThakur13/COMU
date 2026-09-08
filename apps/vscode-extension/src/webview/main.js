@@ -188,6 +188,7 @@
     let pendingSessionState = null;
     let durationTimerInterval = null;
     let userScrolledUp = false;
+    let scrollToLatestTaskContent = false;
 
     // ═══════════════════════════════════════════════════════════
     // 3. DOM ELEMENTS
@@ -366,6 +367,7 @@
     btnScrollBottom.addEventListener('click', () => {
         activityContainer.scrollTop = activityContainer.scrollHeight;
         userScrolledUp = false;
+        scrollToLatestTaskContent = false;
         btnScrollBottom.style.display = 'none';
     });
 
@@ -378,7 +380,7 @@
     if (btnOvOpenFiles) {
         btnOvOpenFiles.addEventListener('click', () => {
             if (state.changes && state.changes.length > 0) {
-                vscode.postMessage({ type: 'open_file', path: state.changes[0].path });
+                state.changes.forEach(change => vscode.postMessage({ type: 'open_file', path: change.path }));
             }
         });
     }
@@ -500,6 +502,13 @@
 
         promptInput.value = '';
         promptInput.style.height = 'auto';
+
+        // A submitted prompt starts a new task. Do not inherit a manual scroll
+        // position from the previous task: the next state update should land on
+        // the new prompt and its latest activity at the bottom of the timeline.
+        userScrolledUp = false;
+        scrollToLatestTaskContent = true;
+        btnScrollBottom.style.display = 'none';
 
         // Auto-switch to Activity view on task start
         selectNavTab('activity');
@@ -874,6 +883,16 @@
     function applySessionStateUpdate(newState) {
         if (!newState) return;
 
+        const isNewTask = Boolean(newState.taskId && newState.taskId !== state.taskId);
+        if (isNewTask) {
+            // The extension replaces task state for a new submission. Reset the
+            // visual anchor as well so stale, expanded activity cannot pin the view.
+            userScrolledUp = false;
+            scrollToLatestTaskContent = true;
+            state.showAllActivity = false;
+            btnScrollBottom.style.display = 'none';
+        }
+
         state.taskId = newState.taskId !== undefined ? newState.taskId : state.taskId;
         state.prompt = newState.prompt !== undefined ? newState.prompt : state.prompt;
         state.status = newState.status || state.status;
@@ -1246,13 +1265,16 @@
                 <div class="final-response-body" style="padding-top: var(--space-2); font-size: var(--text-sm); line-height: 1.5;">
                     ${renderRichText(state.finalResponse)}
                 </div>
+                ${renderSavedFilesPanel()}
             `;
             timelineList.appendChild(finalCard);
         }
 
-        // Auto-scroll if user has not scrolled up
-        if (!userScrolledUp) {
+        // A new task always owns the viewport. During an existing task, preserve
+        // an intentional review position and surface the jump-to-latest control.
+        if (scrollToLatestTaskContent || !userScrolledUp) {
             activityContainer.scrollTop = activityContainer.scrollHeight;
+            scrollToLatestTaskContent = false;
         }
     }
 
@@ -1264,6 +1286,35 @@
             case 'failed': return '✕';
             default: return '○';
         }
+    }
+
+    function renderSavedFilesPanel() {
+        if (!state.changes || state.changes.length === 0) return '';
+
+        const fileLabel = state.changes.length === 1 ? 'file' : 'files';
+        const files = state.changes.map(change => `
+            <button class="saved-file-button" data-comu-action="open-file" data-path="${escapeHtml(change.path)}" title="Open ${escapeHtml(change.path)}">
+                <span class="saved-file-operation">${change.operation === 'CREATE' ? 'NEW' : 'EDITED'}</span>
+                <span class="saved-file-path">${escapeHtml(change.path)}</span>
+                <span class="saved-file-open">Open ↗</span>
+            </button>
+        `).join('');
+
+        return `
+            <section class="saved-files-panel" aria-label="Saved workspace files">
+                <div class="saved-files-heading">
+                    <div>
+                        <span class="saved-files-kicker">SAVED TO WORKSPACE</span>
+                        <strong>${state.changes.length} ${fileLabel} ready</strong>
+                    </div>
+                    <span class="saved-files-status">✓ Saved</span>
+                </div>
+                <div class="saved-files-list">${files}</div>
+                <div class="saved-files-actions">
+                    <button class="saved-files-review" data-comu-action="review-changes">Review all changes</button>
+                </div>
+            </section>
+        `;
     }
 
     function formatTimestamp(isoStr) {
@@ -1311,6 +1362,11 @@
         if (state.status === 'completed') {
             completionBanner.style.display = 'flex';
             completionSummaryText.innerText = `${state.changes?.length || 0} files changed. All automated verification checks passed.`;
+            if (btnOvOpenFiles) {
+                btnOvOpenFiles.innerText = state.changes?.length === 1
+                    ? `Open ${state.changes[0].path}`
+                    : `Open ${state.changes?.length || 0} Modified Files`;
+            }
         } else {
             completionBanner.style.display = 'none';
         }
@@ -1398,10 +1454,18 @@
                     <span class="change-op op-${c.operation}">${opTag}</span>
                     <span style="font-family: var(--font-mono); font-size: var(--text-xs);">${escapeHtml(c.path)}</span>
                 </div>
-                <button class="byok-action-btn secondary" style="padding: 2px var(--space-2); font-size: 10px;">Diff →</button>
+                <div class="change-item-actions">
+                    <button class="byok-action-btn secondary change-open-btn" style="padding: 2px var(--space-2); font-size: 10px;">Open</button>
+                    <button class="byok-action-btn secondary change-diff-btn" style="padding: 2px var(--space-2); font-size: 10px;">Review diff</button>
+                </div>
             `;
 
-            row.addEventListener('click', () => {
+            row.querySelector('.change-open-btn').addEventListener('click', (event) => {
+                event.stopPropagation();
+                vscode.postMessage({ type: 'open_file', path: c.path });
+            });
+            row.querySelector('.change-diff-btn').addEventListener('click', (event) => {
+                event.stopPropagation();
                 vscode.postMessage({ type: 'request_diff', path: c.path });
             });
 
@@ -1937,10 +2001,14 @@
         safe = safe.replace(/```([a-zA-Z0-9_\-\+]*)\n?([\s\S]*?)```/g, (match, lang, code) => {
             const langLabel = lang ? lang.toUpperCase() : 'CODE';
             const encodedCode = code.replace(/"/g, '&quot;');
+            const suggestedPath = getSuggestedCodePath(lang);
             return `<div class="rich-code-block">
                 <div class="rich-code-header">
                     <span class="rich-code-lang">${langLabel}</span>
-                    <button class="rich-code-copy" data-clipboard="${encodedCode}">Copy</button>
+                    <div class="rich-code-actions">
+                        <button class="rich-code-save" data-suggested-path="${suggestedPath}">Save as…</button>
+                        <button class="rich-code-copy" data-clipboard="${encodedCode}">Copy</button>
+                    </div>
                 </div>
                 <pre><code>${code.trim()}</code></pre>
             </div>`;
@@ -1957,6 +2025,14 @@
         safe = parts.map((part, i) => i % 2 === 1 ? part : part.replace(/\n/g, '<br/>')).join('');
 
         return safe;
+    }
+
+    function getSuggestedCodePath(language) {
+        const extensions = {
+            html: 'html', css: 'css', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
+            python: 'py', py: 'py', json: 'json', markdown: 'md', md: 'md', bash: 'sh', shell: 'sh'
+        };
+        return `snippet.${extensions[(language || '').toLowerCase()] || 'txt'}`;
     }
 
     // Attach copy button handler
@@ -1983,6 +2059,19 @@
                 console.error('Copy failed', err);
             }
         }
+        // @ts-ignore
+        if (e.target && e.target.classList && e.target.classList.contains('rich-code-save')) {
+            // @ts-ignore
+            const btn = e.target;
+            const code = btn.closest('.rich-code-block')?.querySelector('pre code')?.textContent || '';
+            if (code) {
+                vscode.postMessage({
+                    type: 'save_code',
+                    content: code,
+                    suggestedPath: btn.getAttribute('data-suggested-path') || 'snippet.txt'
+                });
+            }
+        }
     });
 
     // Delegated click handler on timelineList (prevents per-card listener leaks)
@@ -1990,6 +2079,19 @@
         // @ts-ignore
         const target = e.target;
         if (!target) return;
+
+        const action = target.closest('[data-comu-action]');
+        if (action) {
+            const actionName = action.getAttribute('data-comu-action');
+            if (actionName === 'open-file') {
+                vscode.postMessage({ type: 'open_file', path: action.getAttribute('data-path') || '' });
+                return;
+            }
+            if (actionName === 'review-changes') {
+                selectNavTab('changes');
+                return;
+            }
+        }
 
         // Interactive approval / deny buttons
         if (target.closest('#btn-approve')) {

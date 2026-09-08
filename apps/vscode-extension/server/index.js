@@ -28075,6 +28075,7 @@ var require_dist15 = __commonJS({
               };
             }
             if (classification.mode === "CHAT") {
+              const finalText = "Hi! I'm COMU, your AI software engineer. What are we working on?";
               input.onEvent({
                 type: "agent.status",
                 eventId: `evt-${Date.now()}`,
@@ -28082,11 +28083,18 @@ var require_dist15 = __commonJS({
                 timestamp: (/* @__PURE__ */ new Date()).toISOString(),
                 status: "COMPLETED"
               });
+              input.onEvent({
+                type: "task.completed",
+                eventId: `evt-${Date.now()}-completed`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                finalText
+              });
               return {
                 status: "completed",
                 steps: 0,
-                // Since we are not doing a secondary LLM call right now, provide a deterministic chat fallback
-                finalText: "Hi! I'm COMU, your AI software engineer. What are we working on?"
+                // Since we are not doing a secondary LLM call right now, provide a deterministic chat fallback.
+                finalText
               };
             }
             const taskContract = this.createContract(input, classification);

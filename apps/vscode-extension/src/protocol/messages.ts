@@ -32,6 +32,7 @@ export type WebviewMessage =
   | { type: "cancel_task" }
   | { type: "request_diff"; path: string }
   | { type: "open_file"; path: string; line?: number }
+  | { type: "save_code"; content: string; suggestedPath?: string }
   | { type: "select_model"; modelId: string }
   | { type: "save_provider_key"; providerId: string; key: string; endpoint?: string }
   | { type: "remove_provider_key"; providerId: string }
@@ -94,4 +95,3 @@ export interface ChatSessionStateUI {
   durationMs?: number;
   estimatedTokens?: number;
 }
-
