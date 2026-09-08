@@ -10,10 +10,10 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/Version-v0.2.1-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-v0.2.2-blue.svg)](package.json)
 [![Open Source](https://img.shields.io/badge/Open%20Source-Community%20Driven-brightgreen)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue)](https://www.typescriptlang.org/)
-[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.2.1-007ACC)](https://code.visualstudio.com/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.2.2-007ACC)](https://code.visualstudio.com/)
 [![Tests Passing](https://img.shields.io/badge/Tests-311%20Passed%20(100%25)-brightgreen)](tests/)
 [![Model Agnostic](https://img.shields.io/badge/AI-Model%20Agnostic%20%7C%20BYOK-purple)](#-bring-your-own-ai-provider-byok)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -22,18 +22,18 @@
 
 ---
 
-## 📌 Release & Specification Summary (v0.2.1)
+## 📌 Release & Specification Summary (v0.2.2)
 
 | Component | Specification | Status |
 | :--- | :--- | :--- |
-| **Release Version** | `v0.2.1` | Production Hardened |
+| **Release Version** | `v0.2.2` | Production Hardened |
 | **Interface Architecture** | **Phase 9 AI Engineering Workspace** | ✅ 7 Navigation Tabs + Context Drawer |
 | **Startup Performance** | **Instant First Paint (<20ms)** | ✅ Non-blocking Async Hydration |
 | **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI, Ollama |
 | **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
 | **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck & Build |
 | **Automated Test Suite** | **32 Test Files · 311 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
-| **VS Code Package** | `comu-ai-0.2.1.vsix` | Built & Ready to Install |
+| **VS Code Package** | `comu-ai-0.2.2.vsix` | Built & Ready to Install |
 
 ---
 
@@ -180,7 +180,7 @@ d:\COMU/
 ### 1. Install the VS Code Extension
 Install the packaged extension directly into VS Code:
 ```bash
-code --install-extension apps/vscode-extension/comu-ai-0.2.1.vsix
+code --install-extension apps/vscode-extension/comu-ai-0.2.2.vsix
 ```
 
 ### 2. Launch COMU
