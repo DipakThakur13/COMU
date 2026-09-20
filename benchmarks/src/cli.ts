@@ -7,7 +7,7 @@ import { createRuntimeApp } from "../../apps/agent-runtime/src/server.js";
 import { fixturesRoot, loadFixtures } from "./fixture.js";
 import { executeFixture } from "./execute.js";
 import { summarise } from "./metrics.js";
-import { appendRecord, readJournal, writeRun } from "./report.js";
+import { acquireRunLock, appendRecord, readJournal, writeRun } from "./report.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
 import { assertNoSecretInArgv, loadLocalEnv } from "./secrets.js";
@@ -143,6 +143,16 @@ async function main(): Promise<void> {
    * A full benchmark takes hours, so a crash, a dropped connection or a closed laptop must not
    * throw away the provider time already spent. Re-running the same label resumes where it stopped.
    */
+  /*
+   * One runner per label.
+   *
+   * Taken before the journal is read, because the damage a second runner does is invisible: it
+   * shares the journal, multiplies the provider load, and overwrites the result file with its own
+   * partial set of records.
+   */
+  const releaseLock = args.selftest ? () => {} : acquireRunLock(args.outDir, args.label);
+  process.on("exit", releaseLock);
+
   const previous = args.selftest ? [] : readJournal(args.outDir, args.label);
   const done = new Set(previous.map(r => `${r.fixtureId}#${r.rep}`));
   if (previous.length > 0) {
@@ -277,6 +287,7 @@ async function main(): Promise<void> {
   const written = writeRun(run, args.outDir);
   console.log(`\nWrote ${written.jsonPath}`);
   console.log(`Wrote ${written.markdownPath}`);
+  releaseLock();
 }
 
 /** The window the pinned model advertises, used to report peak prompt size as a share of it. */

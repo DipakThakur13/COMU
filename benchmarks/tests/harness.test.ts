@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,9 +17,8 @@ import { executeFixture } from "../src/execute.js";
 import { gradeRubric, parseJUnit, resetBaselineCache } from "../src/graders.js";
 import { SecretLeakError, assertNoSecret, assertNoSecretInArgv } from "../src/secrets.js";
 import { classifyFailure, summarise } from "../src/metrics.js";
-import { createCounters, fold } from "../src/runner.js";
-import { renderMarkdown } from "../src/report.js";
-import { configureProvider, startRuntime, type TaskOutcome } from "../src/runner.js";
+import { acquireRunLock, renderMarkdown } from "../src/report.js";
+import { configureProvider, createCounters, fold, startRuntime, type TaskOutcome } from "../src/runner.js";
 import { SelfTestModel } from "../src/selftest_model.js";
 import type { GraderVerdict, RunRecord } from "../src/types.js";
 
@@ -396,6 +395,70 @@ describe("Summarising", () => {
     });
     expect(markdown).toContain("concurrency 4");
     expect(markdown).toContain("upper bound");
+  });
+
+  it("names the cause of each false failure, not just the count", () => {
+    // A count says the agent disagreed with the workspace. It does not say whether that was a
+    // budget set too low, a provider timeout the concurrency caused, or a gate misfiring on work
+    // already done, and only one of those is COMU's.
+    const markdown = renderMarkdown({
+      label: "causes",
+      startedAt: "2026-09-20T00:00:00.000Z",
+      finishedAt: "2026-09-20T00:10:00.000Z",
+      model: { id: "m", provider: "p" },
+      gitCommit: "abc1234",
+      reps: 1,
+      concurrency: 4,
+      records: [
+        record({
+          fixtureId: "t3-py-rename",
+          falseFailure: true,
+          comuStatus: "failed",
+          comuError: "LIMIT_REACHED: The task stopped early: an execution limit was reached.",
+          providerFailures: { timeouts: 1, rateLimits: 0, gateway: 0, other: 0 }
+        })
+      ]
+    });
+    expect(markdown).toContain("False failures, with causes");
+    expect(markdown).toContain("LIMIT_REACHED");
+    expect(markdown).toContain("1/0/0/0");
+  });
+});
+
+describe("The run lock", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "comu-lock-"));
+  });
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses a second runner under the same label", () => {
+    /*
+     * The regression this exists for.
+     *
+     * Three runners were once alive at once against one journal. They tripled the provider load,
+     * duplicated work, and would each have written the result file from their own partial records.
+     * Nothing in the output showed it; the runs were merely slow.
+     */
+    const release = acquireRunLock(dir, "B0");
+    expect(() => acquireRunLock(dir, "B0")).toThrow(/already going/);
+    release();
+    expect(() => acquireRunLock(dir, "B0")()).not.toThrow();
+  });
+
+  it("takes over a lock whose holder is gone", () => {
+    // A killed run must not leave a lock that needs deleting by hand, or the next person deletes
+    // it reflexively and the guard stops meaning anything.
+    fs.writeFileSync(path.join(dir, "B0.lock"), "999999999", "utf8");
+    expect(() => acquireRunLock(dir, "B0")()).not.toThrow();
+  });
+
+  it("does not block a different label", () => {
+    const release = acquireRunLock(dir, "B0");
+    expect(() => acquireRunLock(dir, "B1")()).not.toThrow();
+    release();
   });
 });
 

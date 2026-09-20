@@ -49,6 +49,49 @@ function journalStem(label: string): string {
   return `${label}.journal`;
 }
 
+/**
+ * Refuses to start a second run under the same label.
+ *
+ * Three runners were once alive at once against one journal, each believing it had the label to
+ * itself. They tripled the load on the provider, duplicated work, and would each have written the
+ * final result file from its own partial set of records. None of that is visible in the output: the
+ * journal looked healthy, the runs were merely slow.
+ *
+ * The lock holds the pid, so a lock left behind by a killed process is detected rather than
+ * requiring a manual delete. The only state trusted here is whether that pid is alive.
+ */
+export function acquireRunLock(outDir: string, label: string): () => void {
+  fs.mkdirSync(outDir, { recursive: true });
+  const file = path.join(outDir, `${label}.lock`);
+
+  if (fs.existsSync(file)) {
+    const holder = Number(fs.readFileSync(file, "utf8").trim());
+    if (Number.isInteger(holder) && holder > 0 && isAlive(holder)) {
+      throw new Error(
+        `Another run of '${label}' is already going (pid ${holder}). Two runners share one journal, ` +
+          "triple the provider load and each write the result file from their own partial records. " +
+          `Stop that process, or use a different --label. If you are sure it is gone, delete ${file}.`
+      );
+    }
+    // Stale: the holder is not running. A killed run must not need a manual cleanup step.
+    fs.rmSync(file, { force: true });
+  }
+
+  fs.writeFileSync(file, String(process.pid), "utf8");
+  return () => fs.rmSync(file, { force: true });
+}
+
+/** Whether a pid is running. Signal 0 checks for existence without delivering anything. */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means it exists and belongs to someone else, which still counts as alive.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 export function writeRun(run: BenchmarkRun, outDir: string): { jsonPath: string; markdownPath: string } {
   fs.mkdirSync(outDir, { recursive: true });
   const stem = `${run.startedAt.slice(0, 10)}-${run.label}`;
