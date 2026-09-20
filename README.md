@@ -29,7 +29,7 @@
 | **Release Version** | `v0.2.4` | Production Hardened |
 | **Interface Architecture** | **Phase 9 AI Engineering Workspace** | ✅ 7 Navigation Tabs + Context Drawer |
 | **Startup Performance** | **Instant First Paint (<20ms)** | ✅ Non-blocking Async Hydration |
-| **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI, Ollama |
+| **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI-compatible, Ollama (local, keyless) |
 | **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
 | **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck & Build |
 | **Automated Test Suite** | **32 Test Files · 311 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
@@ -118,7 +118,7 @@ Bring Your Own Key directly to VS Code. COMU does not resell inference credits o
 - **Generic OpenAI-Compatible Gateway**:
   - Connect any OpenAI-compatible API endpoint with your own API key (e.g. OpenAI `gpt-4o`, custom vLLM, OpenRouter).
 - **Ollama (Local & Offline)**:
-  - Run open-weights models (`llama3`, `deepseek-coder`, `qwen2.5-coder`) on your local machine with **zero external telemetry or network calls**.
+  - Run any model you have pulled (`llama3.1`, `qwen2.5-coder`, `deepseek-coder-v2`, ...) through Ollama's OpenAI-compatible endpoint. No API key is sent, inference never leaves your machine, and COMU lists the models actually installed on the daemon. Reachability is probed for real; an unreachable daemon is reported instead of silently falling back to a cloud provider.
 - **Hardware-Backed Secret Storage**:
   - All API keys are encrypted in VS Code `SecretStorage` (Windows DPAPI, macOS Keychain, Linux Secret Service). Keys are never logged, exposed to the webview DOM, or committed to Git.
 
@@ -199,7 +199,7 @@ code --install-extension apps/vscode-extension/comu-ai-0.2.4.vsix
    - **NVIDIA**: Paste your API key from [build.nvidia.com](https://build.nvidia.com/).
    - **Experiential Labs (GPT-6 Astra)**: Connect via your Experiential Labs endpoint.
    - **OpenAI**: Enter any OpenAI-compatible API key and endpoint.
-   - **Ollama**: Connect to `http://localhost:11434` for 100% local, offline execution.
+   - **Ollama**: Start `ollama serve`, pull a model, and pick it from the Model dropdown. The default daemon address is `http://127.0.0.1:11434` (override with the `comu.ollama.endpoint` setting or `OLLAMA_HOST`).
 3. Click **Test Connection** to verify endpoint reachability and latency.
 
 ### 4. Build Software

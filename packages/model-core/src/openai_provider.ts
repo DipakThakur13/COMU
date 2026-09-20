@@ -69,11 +69,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
       this.displayName = "GPT-6 Astra (Experiential Labs)";
     }
 
-    const resolvedKey = apiKey || process.env.OPENAI_API_KEY || (this.profile.id === "gpt-6-astra" ? process.env.EXPERIENTIAL_API_KEY : undefined);
-    if (!resolvedKey) {
+    const requiresKey = this.profile.requiresApiKey !== false;
+    const resolvedKey = apiKey || (requiresKey
+      ? (process.env.OPENAI_API_KEY || (this.profile.id === "gpt-6-astra" ? process.env.EXPERIENTIAL_API_KEY : undefined))
+      : undefined);
+    if (!resolvedKey && requiresKey) {
       throw new ProviderError(`${this.displayName} API Key is required`);
     }
-    this.apiKey = resolvedKey;
+    this.apiKey = resolvedKey || "";
 
     const baseEndpoint = endpoint || this.profile.defaultEndpoint || "https://api.openai.com/v1";
     this.endpoint = OpenAICompatibleProvider.normalizeEndpoint(baseEndpoint, this.profile.defaultEndpoint);
@@ -107,7 +110,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
       activeProfile.defaultEndpoint
     );
 
-    if (!apiKey || !apiKey.trim()) {
+    if ((!apiKey || !apiKey.trim()) && activeProfile.requiresApiKey !== false) {
       return {
         provider: providerName,
         status: "NOT_CONFIGURED",
@@ -133,7 +136,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey.trim()}`,
+        ...(apiKey && apiKey.trim() ? { "Authorization": `Bearer ${apiKey.trim()}` } : {}),
         ...(activeProfile.customHeaders || {})
       };
 
@@ -314,7 +317,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.apiKey}`,
+        ...(this.apiKey ? { "Authorization": `Bearer ${this.apiKey}` } : {}),
         ...(this.profile.customHeaders || {})
       };
 
@@ -332,7 +335,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
-        const sanitizedText = errorText.slice(0, 200).replace(this.apiKey, "[REDACTED]");
+        const sanitizedText = this.redactKey(errorText.slice(0, 200));
         const message = `${this.displayName} API Error: ${response.status} - ${sanitizedText}`;
 
         if (response.status === 401 || response.status === 403) {
@@ -396,9 +399,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
       if (err.name === "AbortError" || context?.signal?.aborted) {
         throw err;
       }
-      const safeMessage = (err.message || String(err)).replace(this.apiKey, "[REDACTED]");
+      const safeMessage = this.redactKey(err.message || String(err));
       throw new ProviderError(`${this.displayName} request failed: ${safeMessage}`);
     }
+  }
+
+  private redactKey(text: string): string {
+    if (!this.apiKey) return text;
+    return text.split(this.apiKey).join("[REDACTED]");
   }
 
   private async parseStream(streamBody: any, context?: ModelRequestContext): Promise<ModelResponse> {

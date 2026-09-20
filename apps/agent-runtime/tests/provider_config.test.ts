@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import app from "../src/server";
 import { Server } from "http";
 import os from "node:os";
+import { startFakeOllama } from "./helpers/fake_ollama";
+import { collectTaskEvents } from "./helpers/sse";
 
 describe("Runtime BYOK Provider Configuration & Task-Start Guard", () => {
   let server: Server;
@@ -76,22 +78,34 @@ describe("Runtime BYOK Provider Configuration & Task-Start Guard", () => {
     expect(errData.message).toContain("NVIDIA");
   });
 
-  it("Task-Start Guard: permits task launch for local models (Ollama)", async () => {
-    const res = await fetch(`${baseUrl}/v1/tasks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taskId: `task-local-${Date.now()}`,
-        prompt: "Run local analysis",
-        modelId: "ollama-llama-3",
-        workspace: { rootPath: os.tmpdir() }
-      })
-    });
+  it("Task-Start Guard: permits task launch for local models (Ollama) when the daemon is reachable", async () => {
+    const ollama = await startFakeOllama();
+    try {
+      await fetch(`${baseUrl}/v1/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: { ollama: { endpoint: ollama.baseUrl } } })
+      });
 
-    // Should NOT be rejected with 400 PROVIDER_NOT_CONFIGURED
-    expect(res.status).toBe(201);
-    const data = await res.json() as any;
-    expect(data.taskId).toBeDefined();
+      const res = await fetch(`${baseUrl}/v1/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId: `task-local-${Date.now()}`,
+          prompt: "Explain the local analysis",
+          modelId: "ollama-llama-3",
+          workspace: { rootPath: os.tmpdir() }
+        })
+      });
+
+      // Should NOT be rejected with 400 PROVIDER_NOT_CONFIGURED
+      expect(res.status).toBe(201);
+      const data = await res.json() as any;
+      expect(data.taskId).toBeDefined();
+      await collectTaskEvents(baseUrl, data.taskId);
+    } finally {
+      await ollama.close();
+    }
   });
 
   it("POST /v1/config/providers/nvidia/test returns NOT_CONFIGURED when no key provided", async () => {

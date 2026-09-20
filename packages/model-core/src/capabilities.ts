@@ -17,6 +17,8 @@ export interface ProviderCapabilityProfile {
   supportsVision: boolean;
   maxContextTokens: number;
   maxOutputTokens: number;
+  /** Defaults to true. Local providers such as Ollama set this to false and send no Authorization header. */
+  requiresApiKey?: boolean;
   customHeaders?: Record<string, string>;
   defaultEndpoint?: string;
   allowedModels?: string[];

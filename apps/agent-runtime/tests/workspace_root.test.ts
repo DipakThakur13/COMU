@@ -56,6 +56,13 @@ describe("Runtime task workspace root (Phase 0.1)", () => {
         resolve();
       });
     });
+
+    // Satisfy the task-start credential guard for the injected provider so the workspace guard is exercised.
+    await fetch(`${baseUrl}/v1/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: { "scripted-test-model": { apiKey: "test-only" } } })
+    });
   });
 
   afterAll(async () => {
@@ -83,7 +90,7 @@ describe("Runtime task workspace root (Phase 0.1)", () => {
     const res = await fetch(`${baseUrl}/v1/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Add a note", modelId: "ollama-local" })
+      body: JSON.stringify({ prompt: "Add a note", modelId: "scripted-test-model" })
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as any;
@@ -94,7 +101,7 @@ describe("Runtime task workspace root (Phase 0.1)", () => {
     const res = await fetch(`${baseUrl}/v1/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "Add a note", modelId: "ollama-local", workspace: { rootPath: "some/relative/path" } })
+      body: JSON.stringify({ prompt: "Add a note", modelId: "scripted-test-model", workspace: { rootPath: "some/relative/path" } })
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as any;
@@ -111,7 +118,7 @@ describe("Runtime task workspace root (Phase 0.1)", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: "Add a note file describing the workspace",
-        modelId: "ollama-local",
+        modelId: "scripted-test-model",
         workspace: { rootPath: fixtureRoot, workspaceId: "fixture-ws" }
       })
     });

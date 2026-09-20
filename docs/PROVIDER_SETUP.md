@@ -49,16 +49,20 @@ Choose one of the following methods:
 
 ### 2. Ollama (Local Models)
 
-Run open-weights models (e.g. Llama 3) locally on your own workstation with **zero external network requests**.
+Run open-weights models locally on your own workstation with **zero external network requests**. COMU talks to Ollama's OpenAI-compatible endpoint (`/v1/chat/completions`) and discovers installed models through `/api/tags`.
 
 #### Setup:
-1. Install [Ollama](https://ollama.ai/).
-2. Pull your model:
+1. Install [Ollama](https://ollama.com/) and make sure the daemon is running (`ollama serve`).
+2. Pull a model that supports tool calling, for example:
    ```bash
-   ollama run llama3
+   ollama pull llama3.1
+   ollama pull qwen2.5-coder
    ```
-3. In COMU, select **Llama 3 (Local)** from the Model dropdown.
-4. Ollama requires no API key. You can click **Test Connection** in Provider Settings to verify that Ollama is responding on `http://localhost:11434`.
+3. In COMU, open the Model dropdown. Every installed model appears as `<name> (Local)` (model ids are `ollama:<name>`, e.g. `ollama:qwen2.5-coder:7b`).
+4. Ollama requires no API key and none is sent. **Test Connection** in Provider Settings probes the daemon and reports the installed models.
+5. The daemon address defaults to `http://127.0.0.1:11434`. Override it with the `comu.ollama.endpoint` setting or the `OLLAMA_HOST` environment variable.
+
+If the daemon is not reachable, COMU refuses to start the task and says so; it never falls back to a cloud provider for a local model.
 
 ---
 

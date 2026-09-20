@@ -19,7 +19,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   const runtimeClient = new RuntimeClient();
   const sessionStore = new TaskSessionStore();
-  const providerManager = new ProviderManager();
+  const providerManager = new ProviderManager({
+      get: <T>(key: string) => vscode.workspace.getConfiguration('comu').get<T>(key)
+  });
   
   // Auto-start local Agent Runtime backend if not already running
   serverManager = new ServerProcessManager(context.extensionUri, runtimeClient);

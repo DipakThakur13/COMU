@@ -20,7 +20,8 @@ import { MemoryEngine, MemoryStorage, MemorySanitizer } from '@comu/memory-engin
 import { NvidiaProvider } from '@comu/provider-nvidia';
 import { 
   ModelProvider, 
-  OpenAICompatibleProvider, 
+  OpenAICompatibleProvider,
+  OllamaProvider,
   ASTRA_CAPABILITY_PROFILE, 
   DEFAULT_OPENAI_CAPABILITY_PROFILE 
 } from '@comu/model-core';
@@ -114,6 +115,9 @@ export interface ProviderSelection {
 
 export function selectProvider(modelId: string): ProviderSelection {
   const lower = (modelId || '').toLowerCase();
+  if (OllamaProvider.isOllamaModelId(lower)) {
+    return { modelId, providerId: 'ollama' };
+  }
   if (lower.includes('nvidia') || lower.includes('nemotron') || lower.includes('deepseek')) {
     return { modelId, providerId: 'nvidia' };
   }
@@ -122,9 +126,6 @@ export function selectProvider(modelId: string): ProviderSelection {
   }
   if (lower.includes('openai') || lower.includes('gpt-4')) {
     return { modelId, providerId: 'openai' };
-  }
-  if (lower.includes('ollama') || lower.includes('local')) {
-    return { modelId, providerId: 'ollama' };
   }
   return { modelId, providerId: 'unknown' };
 }
@@ -161,6 +162,10 @@ export function resolveWorkspaceRoot(workspace: unknown): WorkspaceResolution {
 
 export function defaultProviderFactory(selection: ProviderSelection, providers: Record<string, any>): ModelProvider {
   const { modelId, providerId } = selection;
+  if (providerId === 'ollama') {
+    // Local inference. No API key, no cloud endpoint, never falls through to NVIDIA.
+    return new OllamaProvider(providers?.['ollama']?.endpoint, modelId);
+  }
   if (providerId === 'experiential') {
     const key = providers?.['experiential']?.apiKey || process.env.EXPERIENTIAL_API_KEY;
     const endpoint = providers?.['experiential']?.endpoint;
@@ -252,8 +257,48 @@ app.post(['/v1/config/providers', '/v1/config'], (req, res) => {
   }
 });
 
+const OLLAMA_SUGGESTED_MODELS = [
+  { id: 'ollama:llama3.1', name: 'Llama 3.1 (Local)', description: 'Run `ollama pull llama3.1`' },
+  { id: 'ollama:qwen2.5-coder', name: 'Qwen 2.5 Coder (Local)', description: 'Run `ollama pull qwen2.5-coder`' },
+  { id: 'ollama:deepseek-coder-v2', name: 'DeepSeek Coder V2 (Local)', description: 'Run `ollama pull deepseek-coder-v2`' }
+];
+
+async function describeOllama(): Promise<ProviderConfig> {
+  const endpoint = OllamaProvider.normalizeBaseUrl(runtimeConfig.providers?.['ollama']?.endpoint);
+  const probe = await OllamaProvider.probe(endpoint, 1500);
+  let models = OLLAMA_SUGGESTED_MODELS;
+  if (probe.status === 'CONNECTED') {
+    try {
+      const installed = await OllamaProvider.listModels(endpoint, 1500);
+      if (installed.length > 0) {
+        models = installed.map(m => ({
+          id: m.id,
+          name: `${m.name} (Local)`,
+          description: [m.family, m.parameterSize].filter(Boolean).join(' · ') || 'Installed Ollama model'
+        }));
+      }
+    } catch {
+      // keep suggestions
+    }
+  }
+  return {
+    providerId: 'ollama',
+    displayName: 'Ollama (Local)',
+    enabled: true,
+    endpoint,
+    selectedModel: models[0]?.name,
+    hasCredential: true,
+    isLocal: true,
+    status: probe.status,
+    models,
+    description: probe.status === 'CONNECTED'
+      ? 'Local on-device inference through Ollama. No API key, no external network calls.'
+      : (probe.message || 'Ollama is not reachable.')
+  };
+}
+
 // Safe Provider Configuration List (No API Keys returned)
-app.get('/v1/config/providers', (req, res) => {
+app.get('/v1/config/providers', async (req, res) => {
   const envNvidia = NvidiaProvider.detectEnvironmentCredential();
   const hasNvidiaKey = !!(runtimeConfig.providers?.['nvidia']?.apiKey || envNvidia);
 
@@ -309,25 +354,13 @@ app.get('/v1/config/providers', (req, res) => {
       ],
       description: 'Connect any OpenAI-compatible API endpoint with your own API key'
     },
-    {
-      providerId: 'ollama',
-      displayName: 'Ollama (Local)',
-      enabled: true,
-      selectedModel: 'Llama 3 (Local)',
-      hasCredential: true,
-      isLocal: true,
-      status: 'CONNECTED',
-      models: [
-        { id: 'ollama-llama-3', name: 'Llama 3 (Local)', description: 'Local offline execution' }
-      ],
-      description: 'Local on-device inference with zero external network calls'
-    }
+    await describeOllama()
   ];
   res.status(200).json({ providers });
 });
 
 // Safe Single Provider Status (No API Key returned)
-app.get('/v1/config/providers/:providerId/status', (req, res) => {
+app.get('/v1/config/providers/:providerId/status', async (req, res) => {
   const { providerId } = req.params;
   if (providerId === 'nvidia') {
     const envNvidia = NvidiaProvider.detectEnvironmentCredential();
@@ -360,11 +393,14 @@ app.get('/v1/config/providers/:providerId/status', (req, res) => {
       selectedModel: 'gpt-4o'
     });
   } else if (providerId === 'ollama') {
+    const described = await describeOllama();
     return res.status(200).json({
       providerId: 'ollama',
       hasCredential: true,
-      status: 'CONNECTED',
-      selectedModel: 'Llama 3 (Local)'
+      status: described.status,
+      endpoint: described.endpoint,
+      selectedModel: described.selectedModel,
+      message: described.description
     });
   }
   res.status(404).json({ error: `Provider '${providerId}' not found` });
@@ -409,6 +445,10 @@ app.post('/v1/config/providers/:providerId/test', async (req, res) => {
     }
     const testResult = await OpenAICompatibleProvider.testConnection(key, endpoint, undefined, req.body?.model || 'gpt-4o');
     return res.status(200).json(testResult);
+  } else if (providerId === 'ollama') {
+    const endpoint = req.body?.endpoint || runtimeConfig.providers?.['ollama']?.endpoint;
+    const testResult = await OllamaProvider.probe(endpoint);
+    return res.status(200).json(testResult);
   }
   res.status(404).json({ error: `Provider '${providerId}' not testable` });
 });
@@ -452,6 +492,17 @@ app.post('/v1/tasks', async (req, res) => {
         code: 'PROVIDER_NOT_CONFIGURED',
         providerId: 'openai',
         message: 'Connect your OpenAI API key before starting this task.'
+      });
+    }
+  } else if (selection.providerId === 'ollama') {
+    const endpoint = OllamaProvider.normalizeBaseUrl(runtimeConfig.providers?.['ollama']?.endpoint);
+    const probe = await OllamaProvider.probe(endpoint, 2000);
+    if (probe.status !== 'CONNECTED') {
+      return res.status(400).json({
+        error: 'PROVIDER_NOT_REACHABLE',
+        code: 'PROVIDER_NOT_REACHABLE',
+        providerId: 'ollama',
+        message: probe.message || `Ollama is not reachable at ${endpoint}.`
       });
     }
   } else if (selection.providerId === 'unknown' && !runtimeConfig.providers?.[modelId]?.apiKey) {

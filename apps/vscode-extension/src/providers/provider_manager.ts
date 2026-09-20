@@ -1,8 +1,7 @@
-import * as vscode from 'vscode';
 import { SecretManager } from '../security/secrets';
 import { ProviderConfig, ProviderTestResult, ProviderStatus, ProviderModel } from '@comu/protocol';
 import { NvidiaProvider } from '@comu/provider-nvidia';
-import { OpenAICompatibleProvider, ASTRA_CAPABILITY_PROFILE } from '@comu/model-core';
+import { OpenAICompatibleProvider, OllamaProvider, ASTRA_CAPABILITY_PROFILE } from '@comu/model-core';
 
 export interface ProviderDefinition {
     id: string;
@@ -13,7 +12,14 @@ export interface ProviderDefinition {
     models: ProviderModel[];
 }
 
+/** Minimal settings accessor so this module never depends on the vscode API directly (keeps it unit-testable). */
+export interface ProviderSettingsReader {
+    get<T>(key: string): T | undefined;
+}
+
 export class ProviderManager {
+    constructor(private readonly settings: ProviderSettingsReader = { get: () => undefined }) {}
+
     private static readonly REGISTERED_PROVIDERS: ProviderDefinition[] = [
         {
             id: 'nvidia',
@@ -91,15 +97,13 @@ export class ProviderManager {
         {
             id: 'ollama',
             displayName: 'Ollama (Local)',
-            description: 'Run open-weights models locally on your machine with zero external network access.',
+            description: 'Run open-weights models locally through Ollama. No API key; nothing leaves your machine.',
             isLocal: true,
+            defaultEndpoint: OllamaProvider.DEFAULT_BASE_URL,
             models: [
-                {
-                    id: 'ollama-llama-3',
-                    name: 'Llama 3 (Local)',
-                    description: 'Local on-device execution',
-                    contextTokens: 8192
-                }
+                { id: 'ollama:llama3.1', name: 'Llama 3.1 (Local)', description: 'Run `ollama pull llama3.1`', contextTokens: 8192 },
+                { id: 'ollama:qwen2.5-coder', name: 'Qwen 2.5 Coder (Local)', description: 'Run `ollama pull qwen2.5-coder`', contextTokens: 8192 },
+                { id: 'ollama:deepseek-coder-v2', name: 'DeepSeek Coder V2 (Local)', description: 'Run `ollama pull deepseek-coder-v2`', contextTokens: 8192 }
             ]
         },
         {
@@ -149,6 +153,9 @@ export class ProviderManager {
 
                 if (p.isLocal) {
                     hasCredential = true;
+                    if (p.id === 'ollama') {
+                        return await this.describeOllama(p);
+                    }
                 } else {
                     if (p.id === 'nvidia') {
                         environmentDetected = NvidiaProvider.detectEnvironmentCredential();
@@ -315,13 +322,12 @@ export class ProviderManager {
         }
 
         if (providerId === 'ollama') {
-            const res: ProviderTestResult = {
-                provider: 'ollama',
-                status: 'CONNECTED',
-                model: 'Llama 3 (Local)',
-                latencyMs: 12
-            };
-            this.providerStatuses.set(providerId, 'CONNECTED');
+            const endpoint = customEndpoint?.trim() || this.getOllamaEndpoint();
+            const res = await OllamaProvider.probe(endpoint);
+            this.providerStatuses.set(providerId, res.status);
+            if (res.status === 'CONNECTED' && customEndpoint !== undefined && customEndpoint.trim()) {
+                await this.setProviderEndpoint('ollama', customEndpoint);
+            }
             return res;
         }
 
@@ -338,8 +344,14 @@ export class ProviderManager {
     public async isProviderConfigured(modelId: string): Promise<{ configured: boolean; providerId: string; message?: string }> {
         const idLower = (modelId || '').toLowerCase();
         
-        if (idLower.includes('ollama') || idLower.includes('local')) {
-            return { configured: true, providerId: 'ollama' };
+        if (OllamaProvider.isOllamaModelId(idLower)) {
+            const probe = await OllamaProvider.probe(this.getOllamaEndpoint(), 1500);
+            const configured = probe.status === 'CONNECTED';
+            return {
+                configured,
+                providerId: 'ollama',
+                message: configured ? undefined : (probe.message || 'Ollama is not reachable.')
+            };
         }
 
         if (idLower.includes('nvidia') || idLower.includes('nemotron') || !modelId) {
@@ -388,6 +400,49 @@ export class ProviderManager {
         };
     }
 
+    /** Ollama endpoint precedence: saved endpoint, then the comu.ollama.endpoint setting, then OLLAMA_HOST, then the default. */
+    public getOllamaEndpoint(): string {
+        const saved = this.providerEndpoints.get('ollama');
+        if (saved) return OllamaProvider.normalizeBaseUrl(saved);
+        const configured = this.settings.get<string>('ollama.endpoint');
+        return OllamaProvider.normalizeBaseUrl(configured && configured.trim() ? configured : undefined);
+    }
+
+    private async describeOllama(p: ProviderDefinition): Promise<ProviderConfig> {
+        const endpoint = this.getOllamaEndpoint();
+        const probe = await OllamaProvider.probe(endpoint, 1500);
+        let models: ProviderModel[] = p.models;
+        if (probe.status === 'CONNECTED') {
+            try {
+                const installed = await OllamaProvider.listModels(endpoint, 1500);
+                if (installed.length > 0) {
+                    models = installed.map(m => ({
+                        id: m.id,
+                        name: `${m.name} (Local)`,
+                        description: [m.family, m.parameterSize].filter(Boolean).join(' - ') || 'Installed Ollama model',
+                        contextTokens: 8192
+                    }));
+                }
+            } catch {
+                // keep suggested models
+            }
+        }
+        this.providerStatuses.set('ollama', probe.status);
+        return {
+            providerId: p.id,
+            displayName: p.displayName,
+            enabled: true,
+            endpoint,
+            selectedModel: models[0]?.name,
+            hasCredential: true,
+            isLocal: true,
+            status: probe.status,
+            models,
+            environmentDetected: !!(process.env.OLLAMA_HOST && process.env.OLLAMA_HOST.trim()),
+            description: probe.status === 'CONNECTED' ? p.description : (probe.message || p.description)
+        };
+    }
+
     public async getRawConfig(): Promise<Record<string, any>> {
         const secrets = SecretManager.getInstance();
         const config: Record<string, any> = {};
@@ -408,6 +463,8 @@ export class ProviderManager {
                         endpoint: this.providerEndpoints.get(p.id) || p.defaultEndpoint
                     };
                 }
+            } else if (p.id === 'ollama') {
+                config[p.id] = { endpoint: this.getOllamaEndpoint() };
             } else {
                 config[p.id] = {};
             }

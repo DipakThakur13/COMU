@@ -86,6 +86,11 @@
           "default": "http://127.0.0.1:3456",
           "description": "Base URL of the COMU Agent Runtime. The runtime binds to the loopback interface only and requires the per-session token the extension generates."
         },
+        "comu.ollama.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Base URL of the local Ollama daemon used for local models (OLLAMA_HOST is honoured when this is left at the default)."
+        },
         "comu.defaultModel": {
           "type": "string",
           "default": "nvidia-nemotron-3-ultra",

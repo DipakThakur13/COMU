@@ -118,13 +118,13 @@
         {
             providerId: 'ollama',
             displayName: 'Ollama (Local)',
-            description: 'Local open-weights models with zero external network access.',
-            defaultEndpoint: 'http://localhost:11434',
+            description: 'Local open-weights models through Ollama. Status is confirmed once the runtime probes the daemon.',
+            defaultEndpoint: 'http://127.0.0.1:11434',
             hasCredential: true,
             isLocal: true,
-            status: 'CONNECTED',
+            status: 'CONNECTING',
             models: [
-                { id: 'ollama-llama-3', name: 'Llama 3 (Local)' }
+                { id: 'ollama:llama3.1', name: 'Llama 3.1 (Local)' }
             ]
         }
     ];
@@ -1833,7 +1833,7 @@
                     <div class="provider-form">
                         <div class="form-group">
                             <label>Local Endpoint</label>
-                            <input type="text" value="${escapeHtml(p.endpoint || 'http://localhost:11434')}" readonly style="opacity: 0.6;">
+                            <input type="text" value="${escapeHtml(p.endpoint || 'http://127.0.0.1:11434')}" readonly style="opacity: 0.6;">
                         </div>
                         <div class="test-result-container" id="test-result-${p.providerId}" style="display: none;"></div>
                         <div class="provider-card-actions">
