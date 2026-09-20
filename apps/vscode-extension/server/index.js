@@ -25570,38 +25570,8 @@ ${decoded.trim()}
   }
 });
 
-// ../../packages/protocol/dist/index.js
-var require_dist9 = __commonJS({
-  "../../packages/protocol/dist/index.js"(exports2, module2) {
-    "use strict";
-    var __defProp2 = Object.defineProperty;
-    var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
-    var __getOwnPropNames2 = Object.getOwnPropertyNames;
-    var __hasOwnProp2 = Object.prototype.hasOwnProperty;
-    var __export2 = (target, all) => {
-      for (var name in all)
-        __defProp2(target, name, { get: all[name], enumerable: true });
-    };
-    var __copyProps2 = (to, from, except, desc) => {
-      if (from && typeof from === "object" || typeof from === "function") {
-        for (let key of __getOwnPropNames2(from))
-          if (!__hasOwnProp2.call(to, key) && key !== except)
-            __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
-      }
-      return to;
-    };
-    var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
-    var index_exports = {};
-    __export2(index_exports, {
-      TASK_MODES: () => TASK_MODES2
-    });
-    module2.exports = __toCommonJS2(index_exports);
-    var TASK_MODES2 = ["AUTO", "CHAT", "ASK", "PLAN", "AGENT"];
-  }
-});
-
 // ../../packages/model-core/dist/index.js
-var require_dist10 = __commonJS({
+var require_dist9 = __commonJS({
   "../../packages/model-core/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -26500,6 +26470,36 @@ ${joinedThoughts}` : joinedThoughts;
         return _OllamaProvider.probe(this.baseUrl);
       }
     };
+  }
+});
+
+// ../../packages/protocol/dist/index.js
+var require_dist10 = __commonJS({
+  "../../packages/protocol/dist/index.js"(exports2, module2) {
+    "use strict";
+    var __defProp2 = Object.defineProperty;
+    var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+    var __getOwnPropNames2 = Object.getOwnPropertyNames;
+    var __hasOwnProp2 = Object.prototype.hasOwnProperty;
+    var __export2 = (target, all) => {
+      for (var name in all)
+        __defProp2(target, name, { get: all[name], enumerable: true });
+    };
+    var __copyProps2 = (to, from, except, desc) => {
+      if (from && typeof from === "object" || typeof from === "function") {
+        for (let key of __getOwnPropNames2(from))
+          if (!__hasOwnProp2.call(to, key) && key !== except)
+            __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+      }
+      return to;
+    };
+    var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    var index_exports = {};
+    __export2(index_exports, {
+      TASK_MODES: () => TASK_MODES2
+    });
+    module2.exports = __toCommonJS2(index_exports);
+    var TASK_MODES2 = ["AUTO", "CHAT", "ASK", "PLAN", "AGENT"];
   }
 });
 
@@ -28004,18 +28004,30 @@ var require_dist16 = __commonJS({
       return to;
     };
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    function stripPoliteness(message) {
+      let text = message.trim();
+      for (let i = 0; i < 4; i++) {
+        const next = text.replace(POLITENESS_PREFIX, "");
+        if (next === text) break;
+        text = next.trim();
+      }
+      return text;
+    }
+    var POLITENESS_PREFIX;
     var IntentRouter;
     var init_intent_router = __esm({
       "src/interaction/intent_router.ts"() {
         "use strict";
+        POLITENESS_PREFIX = /^(?:(?:hey|hi|hello|ok|okay)[,!]?\s+)?(?:comu[,:]?\s+)?(?:please|kindly|can you|could you|would you|will you|would you mind|i need you to|i want you to|i'd like you to|i would like you to|i need to|i want to|i'd like to|i would like to|let's|lets|go ahead and|just)\s+/i;
         IntentRouter = class {
           /**
            * Deterministic fast classification based on regex and keywords.
            */
           checkDeterministic(message) {
-            const text = message.trim().toLowerCase();
+            const original = message.trim().toLowerCase();
+            const text = stripPoliteness(original);
             const chatRegex = /^(hi|hello|hey|how are you|good morning|thanks|thank you)\b/i;
-            if (chatRegex.test(text)) {
+            if (text === original && chatRegex.test(original)) {
               return {
                 mode: "CHAT",
                 confidence: 1,
@@ -28105,7 +28117,7 @@ var require_dist16 = __commonJS({
             return null;
           }
           /**
-           * Main entrypoint for routing an intent.
+           * Synchronous routing: context, then deterministic rules, then AMBIGUOUS.
            */
           route(message, context) {
             const ctx = this.checkContext(message, context);
@@ -28120,19 +28132,57 @@ var require_dist16 = __commonJS({
               requiresClarification: true
             };
           }
+          /**
+           * Routing with a model fallback. The deterministic fast path decides obvious cases for free;
+           * only messages it cannot place are sent to the classifier. A deterministic AMBIGUOUS (a bare
+           * pointer such as "take a look at this") is kept as-is because no classifier can resolve a
+           * missing target. AMBIGUOUS is therefore reserved for genuine uncertainty.
+           */
+          async routeWithFallback(message, context, classifier, ids, signal) {
+            const ctx = this.checkContext(message, context);
+            if (ctx) return ctx;
+            const det = this.checkDeterministic(message);
+            if (det) return det;
+            if (classifier) {
+              return classifier.classify(message, ids.taskId, ids.runId, signal);
+            }
+            return {
+              mode: "AMBIGUOUS",
+              confidence: 0,
+              source: "fallback",
+              reasons: ["insufficient execution intent and no classifier available"],
+              requiresClarification: true
+            };
+          }
         };
       }
     });
+    var CLARIFICATION_OPTIONS;
     var ClarificationHandler;
     var init_clarification_handler = __esm({
       "src/interaction/clarification_handler.ts"() {
         "use strict";
+        CLARIFICATION_OPTIONS = [
+          { label: "Explain it", mode: "ASK" },
+          { label: "Review it", mode: "ASK" },
+          { label: "Plan changes", mode: "PLAN" },
+          { label: "Make changes", mode: "AGENT" }
+        ];
         ClarificationHandler = class {
           /**
            * Generates a user-facing clarification message for an ambiguous request.
            */
           generateClarificationRequest(message) {
             return "What would you like me to do with it \u2014 explain it, review it, plan changes, or make changes?";
+          }
+          getOptions() {
+            return CLARIFICATION_OPTIONS.map((o) => o.label);
+          }
+          /** Maps a chosen option back to a mode; free-text answers return undefined and are re-routed. */
+          mapAnswerToMode(answer) {
+            const normalized = (answer || "").trim().toLowerCase();
+            if (!normalized) return void 0;
+            return CLARIFICATION_OPTIONS.find((o) => o.label.toLowerCase() === normalized)?.mode;
           }
           /**
            * Validates if the current state safely allows entering clarification.
@@ -28146,13 +28196,119 @@ var require_dist16 = __commonJS({
         };
       }
     });
+    var import_model_core2;
+    var VALID_MODES;
+    var INTENT_CLASSIFIER_SYSTEM_PROMPT;
+    var ModelIntentClassifier;
+    var init_model_intent_classifier = __esm({
+      "src/interaction/model_intent_classifier.ts"() {
+        "use strict";
+        import_model_core2 = require_dist9();
+        VALID_MODES = ["CHAT", "ASK", "PLAN", "AGENT", "AMBIGUOUS"];
+        INTENT_CLASSIFIER_SYSTEM_PROMPT = [
+          "You classify a developer's message to an AI software engineer inside VS Code into exactly one interaction mode.",
+          "Modes:",
+          "- CHAT: greetings, small talk, thanks, or general conversation with no request about the codebase.",
+          "- ASK: the user wants information, explanation, review, or investigation. Nothing should be modified.",
+          "- PLAN: the user wants a plan, design, proposal, or approach, but not the changes themselves yet.",
+          "- AGENT: the user wants code, files, tests, configuration, or the repository changed, fixed, built, run, or created.",
+          "- AMBIGUOUS: only when the message genuinely cannot be assigned (for example a bare pointer like 'this one' with no request).",
+          "Politeness prefixes such as 'please', 'could you', 'I need you to' carry no meaning; classify the underlying request.",
+          'Reply with a single JSON object and nothing else: {"mode": "CHAT|ASK|PLAN|AGENT|AMBIGUOUS", "confidence": 0.0-1.0, "reason": "short"}'
+        ].join("\n");
+        ModelIntentClassifier = class _ModelIntentClassifier {
+          constructor(model, onEvent, options = {}) {
+            this.model = model;
+            this.minConfidence = options.minConfidence ?? 0.6;
+            this.requestManager = new import_model_core2.ModelRequestManager(model, onEvent, {
+              modelRequestTimeoutMs: options.timeoutMs ?? 3e4,
+              maxAttempts: options.maxAttempts ?? 2,
+              maxRetryTimeMs: 15e3
+            });
+          }
+          model;
+          minConfidence;
+          requestManager;
+          static parseReply(text) {
+            if (!text) return null;
+            const cleaned = text.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
+            const start = cleaned.indexOf("{");
+            const end = cleaned.lastIndexOf("}");
+            if (start === -1 || end === -1 || end <= start) return null;
+            try {
+              const parsed = JSON.parse(cleaned.slice(start, end + 1));
+              const mode = String(parsed.mode || "").toUpperCase();
+              if (!VALID_MODES.includes(mode)) return null;
+              const confidenceRaw = Number(parsed.confidence);
+              const confidence = Number.isFinite(confidenceRaw) ? Math.min(1, Math.max(0, confidenceRaw)) : 0;
+              return { mode, confidence, reason: typeof parsed.reason === "string" ? parsed.reason : void 0 };
+            } catch {
+              return null;
+            }
+          }
+          async classify(message, taskId, runId, signal) {
+            if (!this.model || typeof this.model.generate !== "function") {
+              return this.ambiguous("no model provider available for classification");
+            }
+            let text;
+            try {
+              const response = await this.requestManager.execute(
+                taskId,
+                runId,
+                {
+                  prompt: message,
+                  systemPrompt: INTENT_CLASSIFIER_SYSTEM_PROMPT,
+                  messages: [{ role: "user", content: message }],
+                  temperature: 0,
+                  maxTokens: 120
+                },
+                signal
+              );
+              text = response.text;
+            } catch (err) {
+              if (signal?.aborted) throw err;
+              return this.ambiguous(`model classification failed: ${err?.message || String(err)}`);
+            }
+            const parsed = _ModelIntentClassifier.parseReply(text);
+            if (!parsed) {
+              return this.ambiguous("model classification reply was not parseable");
+            }
+            if (parsed.mode === "AMBIGUOUS" || parsed.confidence < this.minConfidence) {
+              return {
+                mode: "AMBIGUOUS",
+                confidence: parsed.confidence,
+                source: "model",
+                reasons: [parsed.reason || `model confidence ${parsed.confidence.toFixed(2)} below ${this.minConfidence}`],
+                requiresClarification: true
+              };
+            }
+            return {
+              mode: parsed.mode,
+              confidence: parsed.confidence,
+              source: "model",
+              reasons: [parsed.reason || "model classification"],
+              requiresClarification: false
+            };
+          }
+          ambiguous(reason) {
+            return {
+              mode: "AMBIGUOUS",
+              confidence: 0,
+              source: "fallback",
+              reasons: [reason],
+              requiresClarification: true
+            };
+          }
+        };
+      }
+    });
     var agent_kernel_exports = {};
     __export2(agent_kernel_exports, {
       AgentKernel: () => AgentKernel,
       CHAT_SYSTEM_PROMPT: () => CHAT_SYSTEM_PROMPT
     });
     var import_protocol2;
-    var import_model_core2;
+    var import_model_core22;
     var import_shared;
     var import_path2;
     var CHAT_SYSTEM_PROMPT;
@@ -28162,8 +28318,9 @@ var require_dist16 = __commonJS({
         "use strict";
         init_intent_router();
         init_clarification_handler();
-        import_protocol2 = require_dist9();
-        import_model_core2 = require_dist10();
+        init_model_intent_classifier();
+        import_protocol2 = require_dist10();
+        import_model_core22 = require_dist9();
         import_shared = require_dist();
         import_path2 = require("path");
         CHAT_SYSTEM_PROMPT = "You are COMU, an AI software engineer working inside VS Code. This is a conversational turn: answer directly, concisely and helpfully. You have no tools in this turn and cannot read or change files or run commands; if the user wants work done in the repository, say what you would do and suggest switching to Agent, Plan or Ask mode. Do not invent details about the workspace you cannot see.";
@@ -28225,36 +28382,19 @@ var require_dist16 = __commonJS({
                 steps: 0
               };
             }
-            const classification = this.resolveClassification(input);
-            input.onEvent({
-              type: "task.mode_resolved",
-              eventId: `evt-${Date.now()}-mode`,
-              taskId: input.taskId,
-              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-              mode: classification.mode,
-              source: classification.source,
-              confidence: classification.confidence,
-              reasons: classification.reasons
-            });
+            let classification;
+            try {
+              classification = await this.resolveClassification(input);
+            } catch (err) {
+              if (input.abortSignal?.aborted) {
+                return this.cancelled(input);
+              }
+              throw err;
+            }
+            this.emitModeResolved(input, classification);
             if (classification.mode === "AMBIGUOUS") {
               if (input.abortSignal?.aborted) {
-                input.onEvent({
-                  type: "agent.status",
-                  eventId: `evt-${Date.now()}`,
-                  taskId: input.taskId,
-                  timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-                  status: "CANCELLED"
-                });
-                input.onEvent({
-                  type: "task.cancelled",
-                  eventId: `evt-${Date.now()}`,
-                  taskId: input.taskId,
-                  timestamp: (/* @__PURE__ */ new Date()).toISOString()
-                });
-                return {
-                  status: "cancelled",
-                  steps: 0
-                };
+                return this.cancelled(input);
               }
               input.onEvent({
                 type: "agent.status",
@@ -28263,11 +28403,21 @@ var require_dist16 = __commonJS({
                 timestamp: (/* @__PURE__ */ new Date()).toISOString(),
                 status: "WAITING_FOR_USER"
               });
-              return {
-                status: "waiting_for_user",
-                steps: 0,
-                finalText: this.clarificationHandler.generateClarificationRequest(input.userPrompt)
-              };
+              const interactionManager = this.orchestrator.getInteractionManager();
+              if (!interactionManager) {
+                return {
+                  status: "waiting_for_user",
+                  steps: 0,
+                  finalText: this.clarificationHandler.generateClarificationRequest(input.userPrompt)
+                };
+              }
+              const clarified = await this.askForClarification(input, interactionManager);
+              if ("result" in clarified) {
+                return clarified.result;
+              }
+              classification = clarified.classification;
+              input = { ...input, userPrompt: clarified.userPrompt };
+              this.emitModeResolved(input, classification);
             }
             if (classification.mode === "CHAT") {
               return this.handleChat(input);
@@ -28305,7 +28455,7 @@ var require_dist16 = __commonJS({
               return { status: "failed", steps: 0, error };
             }
             const workspaceHint = input.workspaceRoot ? ` The user's open workspace folder is named "${(0, import_path2.basename)(input.workspaceRoot)}".` : "";
-            const requestManager = new import_model_core2.ModelRequestManager(model, input.onEvent);
+            const requestManager = new import_model_core22.ModelRequestManager(model, input.onEvent);
             try {
               const response = await requestManager.execute(
                 input.taskId,
@@ -28354,9 +28504,10 @@ var require_dist16 = __commonJS({
           }
           /**
            * An explicit mode from the user is authoritative: no regex, no model, no clarification.
-           * Only AUTO (or an absent mode) goes through the IntentRouter.
+           * Only AUTO (or an absent mode) goes through the IntentRouter, whose deterministic fast path
+           * falls back to a cheap model classification before ever reporting AMBIGUOUS.
            */
-          resolveClassification(input) {
+          async resolveClassification(input) {
             const requested = input.mode;
             if (requested && requested !== "AUTO") {
               if (!import_protocol2.TASK_MODES.includes(requested)) {
@@ -28370,7 +28521,123 @@ var require_dist16 = __commonJS({
                 requiresClarification: false
               };
             }
-            return this.router.route(input.userPrompt, { activeTaskId: input.taskId });
+            return this.router.routeWithFallback(
+              input.userPrompt,
+              { activeTaskId: input.taskId },
+              this.buildClassifier(input),
+              { taskId: input.taskId, runId: input.runId },
+              input.abortSignal
+            );
+          }
+          buildClassifier(input) {
+            const model = this.orchestrator.getModel();
+            if (!model || typeof model.generate !== "function") return void 0;
+            return new ModelIntentClassifier(model, input.onEvent);
+          }
+          emitModeResolved(input, classification) {
+            input.onEvent({
+              type: "task.mode_resolved",
+              eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-mode`,
+              taskId: input.taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              mode: classification.mode,
+              source: classification.source,
+              confidence: classification.confidence,
+              reasons: classification.reasons
+            });
+          }
+          cancelled(input) {
+            input.onEvent({
+              type: "agent.status",
+              eventId: `evt-${Date.now()}`,
+              taskId: input.taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              status: "CANCELLED"
+            });
+            input.onEvent({
+              type: "task.cancelled",
+              eventId: `evt-${Date.now()}`,
+              taskId: input.taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString()
+            });
+            return { status: "cancelled", steps: 0 };
+          }
+          /**
+           * One clarification round through the InteractionManager (an INPUT interaction the webview
+           * already renders with option buttons). A chosen option maps straight to a mode; free text is
+           * re-routed together with the original prompt. If it is still ambiguous after that, the task
+           * proceeds in read-only ASK mode rather than asking again.
+           */
+          async askForClarification(input, interactionManager) {
+            let answer;
+            try {
+              answer = await interactionManager.requestInput(
+                input.taskId,
+                "Clarification needed",
+                this.clarificationHandler.generateClarificationRequest(input.userPrompt),
+                this.clarificationHandler.getOptions(),
+                void 0,
+                input.onEvent,
+                input.abortSignal
+              );
+            } catch (err) {
+              if (input.abortSignal?.aborted || /cancelled/i.test(err?.message || "")) {
+                return { result: this.cancelled(input) };
+              }
+              const error = /USER_INPUT_TIMEOUT/.test(err?.message || "") ? "No clarification was received before the interaction expired." : err?.message || String(err);
+              input.onEvent({
+                type: "agent.status",
+                eventId: `evt-${Date.now()}`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                status: "FAILED"
+              });
+              input.onEvent({
+                type: "task.failed",
+                eventId: `evt-${Date.now()}-failed`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                error,
+                payload: { code: "CLARIFICATION_TIMEOUT", message: error }
+              });
+              return { result: { status: "failed", steps: 0, error } };
+            }
+            const chosen = this.clarificationHandler.mapAnswerToMode(answer);
+            const userPrompt = `${input.userPrompt}
+
+[User clarification]: ${answer}`;
+            if (chosen) {
+              return {
+                classification: {
+                  mode: chosen,
+                  confidence: 1,
+                  source: "explicit",
+                  reasons: [`user chose "${answer}" when asked to clarify`],
+                  requiresClarification: false
+                },
+                userPrompt
+              };
+            }
+            const rerouted = await this.router.routeWithFallback(
+              userPrompt,
+              { activeTaskId: input.taskId },
+              this.buildClassifier(input),
+              { taskId: input.taskId, runId: input.runId },
+              input.abortSignal
+            );
+            if (rerouted.mode !== "AMBIGUOUS") {
+              return { classification: rerouted, userPrompt };
+            }
+            return {
+              classification: {
+                mode: "ASK",
+                confidence: 0.5,
+                source: "fallback",
+                reasons: ["still ambiguous after clarification; proceeding read-only (ASK) rather than asking again"],
+                requiresClarification: false
+              },
+              userPrompt
+            };
           }
           createContract(input, classification) {
             let allowedCapabilities = [];
@@ -28406,15 +28673,19 @@ var require_dist16 = __commonJS({
       AgentKernel: () => AgentKernel,
       AgentOrchestrator: () => AgentOrchestrator2,
       CHAT_SYSTEM_PROMPT: () => CHAT_SYSTEM_PROMPT,
+      CLARIFICATION_OPTIONS: () => CLARIFICATION_OPTIONS,
       ClarificationHandler: () => ClarificationHandler,
+      INTENT_CLASSIFIER_SYSTEM_PROMPT: () => INTENT_CLASSIFIER_SYSTEM_PROMPT,
       IntentRouter: () => IntentRouter,
       InteractionManager: () => InteractionManager2,
+      ModelIntentClassifier: () => ModelIntentClassifier,
       SubagentManager: () => SubagentManager2,
       formatStepSummary: () => formatStepSummary,
+      stripPoliteness: () => stripPoliteness,
       validateTaskContract: () => validateTaskContract
     });
     module2.exports = __toCommonJS2(index_exports);
-    var import_model_core22 = require_dist10();
+    var import_model_core3 = require_dist9();
     var import_shared2 = require_dist();
     var import_planning_engine2 = require_dist11();
     var import_verification_engine2 = require_dist12();
@@ -28727,6 +28998,10 @@ var require_dist16 = __commonJS({
       /** The provider this orchestrator was constructed with. Used by the kernel for tool-free CHAT turns. */
       getModel() {
         return this.model;
+      }
+      /** The interaction manager, when the host wired one. The kernel uses it to ask for clarification. */
+      getInteractionManager() {
+        return this.interactionManager;
       }
       getWorkingSetManager() {
         return this.workingSetManager;
@@ -29200,7 +29475,7 @@ Please implement targeted fixes to resolve this failure.`
           this.transition(ctx, "THINKING", "Thinking...");
           steps++;
           if (!this.requestManager) {
-            this.requestManager = new import_model_core22.ModelRequestManager(this.model, ctx.onEvent);
+            this.requestManager = new import_model_core3.ModelRequestManager(this.model, ctx.onEvent);
           }
           let response;
           try {
@@ -29973,6 +30248,7 @@ Please implement targeted fixes to resolve this failure.`
     }
     init_intent_router();
     init_clarification_handler();
+    init_model_intent_classifier();
     init_agent_kernel();
   }
 });
@@ -33247,8 +33523,8 @@ var import_repair_engine = __toESM(require_dist14());
 var import_diff_engine = __toESM(require_dist17());
 var import_memory_engine = __toESM(require_dist18());
 var import_provider_nvidia = __toESM(require_dist19());
-var import_model_core = __toESM(require_dist10());
-var import_protocol = __toESM(require_dist9());
+var import_model_core = __toESM(require_dist9());
+var import_protocol = __toESM(require_dist10());
 
 // src/event_store.ts
 var InMemoryTaskEventStore = class {
