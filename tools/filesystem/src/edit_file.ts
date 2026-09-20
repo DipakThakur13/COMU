@@ -1,4 +1,4 @@
-import { AgentTool } from "@comu/tool-core";
+import { AgentTool, throwIfAborted } from "@comu/tool-core";
 import { resolveAndVerifyPath } from "./security.js";
 import { ToolError } from "@comu/shared";
 import * as fs from "fs/promises";
@@ -37,6 +37,7 @@ export const EditFileTool: AgentTool<EditFileInput, { success: boolean; hash: st
     required: ["path", "edits"]
   },
   execute: async (args, context) => {
+    throwIfAborted(context.abortSignal, "edit_file");
     try {
       const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
       let content = "";

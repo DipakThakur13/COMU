@@ -1,6 +1,7 @@
 import { AgentTool, ToolCapability, ToolContext, ToolApprovalRequirement } from "@comu/tool-core";
-import { ProcessManager, CommandPlan } from "@comu/terminal";
 import { GitPushResult } from "@comu/protocol";
+import { GitRunner } from "./git_runner.js";
+import type { CommandPlan } from "@comu/terminal";
 
 /**
  * Pushing is the one action that leaves the machine, so it is gated by a human in every autonomy
@@ -20,8 +21,6 @@ export class GitPushTool implements AgentTool<any, GitPushResult> {
     },
     required: []
   };
-
-  private processManager = new ProcessManager();
 
   async execute(
     args: { remote?: string; branch?: string },
@@ -47,10 +46,10 @@ export class GitPushTool implements AgentTool<any, GitPushResult> {
         executable: "git",
         args: ["branch", "--show-current"],
         cwd,
-        source: "AGENT",
+        source: "GIT",
         category: "SAFE_DEVELOPMENT"
       };
-      const branchRes = await this.processManager.start(branchPlan, { timeoutMs: 5000 });
+      const branchRes = await GitRunner.run(branchPlan.args, context, { timeoutMs: 5000 });
       branch = branchRes.stdout.trim();
     }
 
@@ -69,10 +68,10 @@ export class GitPushTool implements AgentTool<any, GitPushResult> {
       executable: "git",
       args: ["rev-parse", "HEAD"],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const revRes = await this.processManager.start(revPlan, { timeoutMs: 5000 });
+    const revRes = await GitRunner.run(revPlan.args, context, { timeoutMs: 5000 });
     const commitHash = revRes.stdout.trim();
 
     // Execute git push <remote> <branch>
@@ -80,10 +79,10 @@ export class GitPushTool implements AgentTool<any, GitPushResult> {
       executable: "git",
       args: ["push", remote, branch],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const pushRes = await this.processManager.start(pushPlan, { timeoutMs: 30000 });
+    const pushRes = await GitRunner.run(pushPlan.args, context, { timeoutMs: 30000 });
     if (pushRes.exitCode !== 0) {
       return {
         success: false,

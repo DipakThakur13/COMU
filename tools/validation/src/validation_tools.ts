@@ -1,4 +1,4 @@
-import { AgentTool, ToolCapability, ToolContext } from '@comu/tool-core';
+import { AgentTool, ToolCapability, ToolContext, throwIfAborted } from "@comu/tool-core";
 import { CommandPolicy, ProcessManager, OutputSanitizer } from '@comu/terminal';
 import { ValidationResult, ValidationContext } from './types';
 import { CommandResolver } from './command_resolver';
@@ -20,6 +20,7 @@ class BaseValidationTool implements AgentTool<any, ValidationResult> {
   }
 
   async execute(args: any, context: ToolContext): Promise<ValidationResult> {
+    throwIfAborted(context.abortSignal, this.name);
     const cwd = context.workspace.rootPath;
     const vContext: ValidationContext = { cwd, target: this.target };
 
@@ -43,20 +44,12 @@ class BaseValidationTool implements AgentTool<any, ValidationResult> {
        throw new Error(`COMMAND_DENIED: Validation command denied by policy. Reason: ${decision.reason}`);
     }
 
-    const abortController = new AbortController();
-    if (context.cancellation) {
-      if (context.cancellation.isCancelled) {
-        return this.createResult(null, "CANCELLED", 0, false);
-      }
-      context.cancellation.onCancel(() => abortController.abort());
-    }
-
     const result = await this.processManager.start(plan, {
       timeoutMs: context.limits.maxCommandTimeoutMs || 60000,
       maxStdoutBytes: context.limits.maxStdoutBytes || 512 * 1024,
       maxStderrBytes: context.limits.maxStderrBytes || 512 * 1024,
       maxCombinedOutputBytes: context.limits.maxCombinedOutputBytes || 1024 * 1024,
-      abortSignal: abortController.signal
+      abortSignal: context.abortSignal
     });
 
     const sanitized = OutputSanitizer.sanitizeResult(result);

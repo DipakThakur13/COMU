@@ -4,7 +4,7 @@ import { SubagentType, TaskAutonomy } from "@comu/protocol";
 import { ApprovalGate } from "./approval/approval_gate.js";
 import { ModelProvider, ModelMessage, ToolDefinition, ModelRequestManager, RequestManagerConfig } from "@comu/model-core";
 import { ProviderCancelledError } from "@comu/shared";
-import { ToolExecutor, ToolRegistry, ToolContext, ToolCapability } from "@comu/tool-core";
+import { ToolExecutor, ToolRegistry, ToolContext, ToolCapability, neverAborted } from "@comu/tool-core";
 import { DiffEngine, ChangeSet } from "@comu/diff-engine";
 import { TaskPlanner, PlanStateManager } from "@comu/planning-engine";
 import { VerificationEngine, WorkspaceIntegrityVerifier } from "@comu/verification-engine";
@@ -188,17 +188,9 @@ export class AgentOrchestrator {
       workspace: { rootPath: ctx.workspaceRoot },
       limits: { maxResults: 100, maxBytes: 1000000 },
       permissions: permissionsFromContract(contract),
-      abortSignal: ctx.abortSignal,
-      cancellation: ctx.abortSignal ? {
-        get isCancelled() { return ctx.abortSignal?.aborted ?? false; },
-        onCancel: (cb: () => void) => {
-          if (ctx.abortSignal?.aborted) {
-            cb();
-          } else {
-            ctx.abortSignal?.addEventListener("abort", cb, { once: true });
-          }
-        }
-      } : undefined
+      // One cancellation mechanism, always present: an orchestrator context without a signal gets
+      // one that never aborts rather than a tool silently losing the ability to stop.
+      abortSignal: ctx.abortSignal ?? neverAborted()
     };
 
     // Verification, workspace-integrity checks and git governance are runtime-authoritative:

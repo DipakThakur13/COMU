@@ -1,6 +1,6 @@
 import { CompiledContext, ContextBudget, FileContext, WorkingSet } from "./interfaces.js";
 import { TaskRequest } from "@comu/protocol";
-import { ToolExecutor, ToolContext } from "@comu/tool-core";
+import { ToolExecutor, ToolContext, neverAborted } from "@comu/tool-core";
 
 export class ContextEngine {
   constructor(private executor: ToolExecutor) {}
@@ -66,13 +66,16 @@ export class ContextEngine {
     };
 
     // 3. Generate repository map (Low priority, optionally if requested/budget allows)
-    const dummyToolContext: ToolContext = {
+    const treeToolContext: ToolContext = {
       taskId: request.taskId,
       workspace: request.workspace,
-      limits: { maxResults: 1000, maxBytes: budget.maxFileChars }
+      limits: { maxResults: 1000, maxBytes: budget.maxFileChars },
+      // Compilation has nothing of its own to cancel; the caller's signal belongs here once
+      // ContextEngine is on the execution path (Phase 2.1).
+      abortSignal: neverAborted()
     };
     try {
-      const treeResult = await this.executor.execute<{dir?: string, maxDepth?: number}, any>("get_workspace_tree", { maxDepth: budget.maxTreeDepth }, dummyToolContext);
+      const treeResult = await this.executor.execute<{dir?: string, maxDepth?: number}, any>("get_workspace_tree", { maxDepth: budget.maxTreeDepth }, treeToolContext);
       compiled.repositoryMap = {
         tree: treeResult.tree,
         isTruncated: treeResult.truncated

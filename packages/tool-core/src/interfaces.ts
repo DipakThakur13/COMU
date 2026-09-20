@@ -6,11 +6,6 @@ export interface ToolPermissions {
   capabilities: Record<ToolCapability, PermissionDecision>;
 }
 
-export interface CancellationSignal {
-  isCancelled: boolean;
-  onCancel: (callback: () => void) => void;
-}
-
 export interface ToolContext {
   taskId: string;
   runId?: string;
@@ -18,8 +13,12 @@ export interface ToolContext {
   workspace: {
     rootPath: string;
   };
-  abortSignal?: AbortSignal;
-  cancellation?: CancellationSignal;
+  /**
+   * Required, and the only cancellation mechanism. It used to be optional alongside a second
+   * `CancellationSignal`, and two optional ways to say the same thing is why tools drifted apart
+   * on whether Stop worked. Callers with nothing to cancel pass `neverAborted()`.
+   */
+  abortSignal: AbortSignal;
   limits: {
     maxResults?: number;
     maxBytes?: number;

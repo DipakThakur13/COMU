@@ -1,4 +1,4 @@
-import { AgentTool } from "@comu/tool-core";
+import { AgentTool, throwIfAborted } from "@comu/tool-core";
 import { resolveAndVerifyPath } from "./security.js";
 import { ToolError } from "@comu/shared";
 import * as fs from "fs/promises";
@@ -28,6 +28,7 @@ export const GetWorkspaceTreeTool: AgentTool<GetWorkspaceTreeArgs, WorkspaceTree
     }
   },
   execute: async (args, context) => {
+    throwIfAborted(context.abortSignal, "get_workspace_tree");
     const rootPath = args.dir ? resolveAndVerifyPath(args.dir, context.workspace.rootPath) : context.workspace.rootPath;
     const maxDepth = args.maxDepth ?? 3;
     const maxEntries = args.maxEntries ?? context.limits.maxResults ?? 1000;
@@ -37,6 +38,8 @@ export const GetWorkspaceTreeTool: AgentTool<GetWorkspaceTreeArgs, WorkspaceTree
     const ignoreList = new Set([".git", "node_modules", "dist", "build", ".next", "out", "coverage"]);
 
     async function walk(currentPath: string, depth: number, prefix: string): Promise<string> {
+      // Checked per directory so a large tree stops promptly rather than walking to the end.
+      throwIfAborted(context.abortSignal, "get_workspace_tree");
       if (depth > maxDepth) return "";
       if (entriesCount >= maxEntries) {
         isTruncated = true;

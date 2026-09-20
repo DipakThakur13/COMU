@@ -11,6 +11,20 @@ import { resolve } from "node:path";
 export default defineConfig({
   plugins: [react()],
   root: __dirname,
+  resolve: {
+    /**
+     * Resolve the workspace packages to their source, not their built `dist`.
+     *
+     * Without this the harness consumes whatever was last built, so a stale build silently changes
+     * what the visual baselines capture. That happened once already: a set of baselines was
+     * generated against an out-of-date reducer and recorded a header with no metrics row.
+     */
+    alias: {
+      "@comu/ui-state": resolve(__dirname, "../../packages/ui-state/src/index.ts"),
+      "@comu/protocol": resolve(__dirname, "../../packages/protocol/src/index.ts"),
+      "@comu/shared": resolve(__dirname, "../../packages/shared/src/index.ts")
+    }
+  },
   build: {
     outDir: resolve(__dirname, "../vscode-extension/dist/webview"),
     emptyOutDir: true,

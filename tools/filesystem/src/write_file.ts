@@ -1,4 +1,4 @@
-import { AgentTool } from "@comu/tool-core";
+import { AgentTool, throwIfAborted } from "@comu/tool-core";
 import { resolveAndVerifyPath } from "./security.js";
 import { ToolError } from "@comu/shared";
 import * as fs from "fs/promises";
@@ -23,6 +23,7 @@ export const CreateFileTool: AgentTool<CreateFileArgs, { success: boolean; hash:
     required: ["path", "content"]
   },
   execute: async (args, context) => {
+    throwIfAborted(context.abortSignal, "create_file");
     try {
       const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
       
@@ -65,6 +66,7 @@ export const WriteFileTool: AgentTool<WriteFileArgs, { success: boolean; hash: s
     required: ["path", "content"]
   },
   execute: async (args, context) => {
+    throwIfAborted(context.abortSignal, "write_file");
     try {
       const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
 

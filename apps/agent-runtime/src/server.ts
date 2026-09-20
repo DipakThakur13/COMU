@@ -207,6 +207,42 @@ export function defaultProviderFactory(selection: ProviderSelection, providers: 
   return new NvidiaProvider(nvidiaKey, nvidiaEndpoint);
 }
 
+/**
+ * The tool registry the runtime ships. Exported so the conformance suite covers exactly the tools
+ * a task can actually call, rather than a list that has to be kept in step by hand.
+ */
+export function createToolRegistry(): ToolRegistry {
+  const registry = new ToolRegistry();
+  registry.register(ReadFileTool);
+  registry.register(ListDirectoryTool);
+  registry.register(GetWorkspaceTreeTool);
+  registry.register(CreateFileTool);
+  registry.register(WriteFileTool);
+  registry.register(EditFileTool);
+  registry.register(new TerminalTool());
+  registry.register(new GitStatusTool());
+  registry.register(new GitDiffTool());
+  registry.register(new GitCreateBranchTool());
+  registry.register(new GitStageFilesTool());
+  registry.register(new GitCommitTool());
+  registry.register(new GitPushTool());
+  registry.register(new RunTestsTool());
+  registry.register(new RunBuildTool());
+  registry.register(new RunLinterTool());
+  registry.register(new RunTypecheckTool());
+  registry.register(new WebDocsTool());
+
+  // Register search tool with backend
+  const searchBackend = new NodeRecursiveSearchBackend();
+  registry.register({
+    ...SearchTextTool,
+    execute: async (args, ctx) => SearchTextTool.execute(args, { ...ctx, searchBackend } as any)
+  });
+  return registry;
+}
+
+
+
 export function createRuntimeApp(options: RuntimeServerOptions = {}): Express {
 const providerFactory: ProviderFactory = options.providerFactory || defaultProviderFactory;
 const approvalTimeoutMs = options.approvalTimeoutMs
@@ -230,33 +266,7 @@ if (options.authToken) {
 }
 app.use(express.json());
 
-// Setup tools
-const registry = new ToolRegistry();
-registry.register(ReadFileTool);
-registry.register(ListDirectoryTool);
-registry.register(GetWorkspaceTreeTool);
-registry.register(CreateFileTool);
-registry.register(WriteFileTool);
-registry.register(EditFileTool);
-registry.register(new TerminalTool());
-registry.register(new GitStatusTool());
-registry.register(new GitDiffTool());
-registry.register(new GitCreateBranchTool());
-registry.register(new GitStageFilesTool());
-registry.register(new GitCommitTool());
-registry.register(new GitPushTool());
-registry.register(new RunTestsTool());
-registry.register(new RunBuildTool());
-registry.register(new RunLinterTool());
-registry.register(new RunTypecheckTool());
-registry.register(new WebDocsTool());
-
-// Register search tool with backend
-const searchBackend = new NodeRecursiveSearchBackend();
-registry.register({
-  ...SearchTextTool,
-  execute: async (args, ctx) => SearchTextTool.execute(args, { ...ctx, searchBackend } as any)
-});
+const registry = createToolRegistry();
 
 const executor = new ToolExecutor(registry);
 const diffEngine = new ComuDiffEngine();

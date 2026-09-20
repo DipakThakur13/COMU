@@ -1,4 +1,4 @@
-import { AgentTool } from "@comu/tool-core";
+import { AgentTool, throwIfAborted } from "@comu/tool-core";
 import { resolveAndVerifyPath } from "./security.js";
 import { ToolError } from "@comu/shared";
 import * as fs from "fs/promises";
@@ -26,6 +26,7 @@ export const ListDirectoryTool: AgentTool<ListDirectoryArgs, DirectoryEntry[]> =
     required: ["path"]
   },
   execute: async (args, context) => {
+    throwIfAborted(context.abortSignal, "list_directory");
     try {
       const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
       const entries = await fs.readdir(targetPath, { withFileTypes: true });

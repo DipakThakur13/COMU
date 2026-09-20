@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { CommandPlan, CommandResult } from './command_plan';
 import { EnvSanitizer } from './env_sanitizer';
+import { buildSpawnTarget } from './executable_resolver';
 
 export interface ProcessManagerOptions {
   timeoutMs?: number;
@@ -34,20 +35,18 @@ export class ProcessManager {
 
       const env = EnvSanitizer.sanitize(process.env);
 
-      // On Windows, some commands (like npm, pnpm) are actually .cmd scripts
-      // But we are explicitly bypassing shell interpolation for security. 
-      // Node's spawn with shell: false might fail on Windows for .cmd files if not explicitly appended,
-      // but for cross-platform compatibility without shell interpolation, `shell: process.platform === 'win32'` 
-      // might be needed. However, since we explicitly filter shell characters in policy, 
-      // passing `shell: true` on Windows *could* be risky. Node 18+ handles some of this better, 
-      // or we can use cross-spawn. For this milestone, we'll try shell: false and rely on proper 
-      // executable resolution (which might require `.cmd` on Windows for global npm scripts).
-      // Let's use standard spawn.
-      
-      const child: ChildProcess = spawn(plan.executable, plan.args, {
+      // Never `shell: true`. The executable is resolved on PATH ourselves, so a real executable is
+      // spawned directly with no interpreter. A Windows batch shim (npm, pnpm, tsc, …) cannot be
+      // started by CreateProcess, so it goes through `cmd.exe /d /s /c` with the arguments still
+      // passed as an argv array for Node to quote; `/d` skips AutoRun, and the policy rejects the
+      // `%` and `^` that cmd would otherwise expand or escape.
+      const target = buildSpawnTarget(plan.executable, plan.args, env);
+
+      const child: ChildProcess = spawn(target.command, target.args, {
         cwd: plan.cwd,
         env,
-        shell: process.platform === 'win32',
+        shell: false,
+        windowsVerbatimArguments: target.verbatim,
         windowsHide: true,
         detached: process.platform !== 'win32' // Useful for killing process trees on POSIX
       });
@@ -89,10 +88,16 @@ export class ProcessManager {
       };
 
       if (abortSignal) {
-        abortSignal.addEventListener('abort', () => {
+        if (abortSignal.aborted) {
+          // Already cancelled before the process could start: stop it immediately.
           isCancelled = true;
           killProcessTree();
-        });
+        } else {
+          abortSignal.addEventListener('abort', () => {
+            isCancelled = true;
+            killProcessTree();
+          }, { once: true });
+        }
       }
 
       if (timeoutMs > 0) {

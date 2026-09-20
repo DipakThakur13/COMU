@@ -1,8 +1,8 @@
 # Cancellation propagation audit
 
 **Date:** 2026-09-20. **Scope:** every path that should observe task cancellation.
-**Status:** findings only. Nothing here is fixed; this document exists so the fixes can be
-scheduled deliberately rather than discovered one at a time.
+**Status: findings 1 to 5 are fixed.** See "What was done" at the end. Findings 6 to 8 remain open
+and are listed there with what is left.
 
 ## Why this audit exists
 
@@ -99,21 +99,36 @@ cancel either, so the stream is only torn down when the runtime closes it.
 The cancel route returns 404 once the controller has been removed, and the extension surfaces that
 as `Cancel failed: …`. Cancelling something that already finished is not an error worth showing.
 
-## What the shape of the fix looks like
+## What was done
 
-Not done in this phase, recorded so the intent is not lost:
+1. **One mechanism.** `CancellationSignal` is deleted. `ToolContext.abortSignal` is now **required**,
+   so a context cannot be constructed without deciding what cancels it; a caller with nothing to
+   cancel passes `neverAborted()` and says so. `tool-core` exports `throwIfAborted`, `raceAbort` and
+   `abortPromise` so observing the signal is a one-line call rather than a pattern each tool
+   reinvents.
+2. **Observation is now a contract.** `apps/agent-runtime/tests/tool_conformance.test.ts` iterates
+   `registry.getAll()` and asserts every registered tool refuses an already-aborted signal promptly,
+   and that none writes to the workspace when cancelled. A tool added later is covered without
+   anyone remembering. **Before the fix, 18 of 19 registered tools failed it.**
+3. **Git routed through the policy.** All six git tools go through `GitRunner`, which evaluates
+   `CommandPolicy` and passes the task's abort signal into `ProcessManager`. The policy understands
+   git by subcommand: read-only subcommands are open to anyone, the mutating ones are reserved for
+   the governed git tools (so a model cannot commit or push by shelling out past the approval gate),
+   and history rewriting, force pushes, hard resets and `clean -f` are refused from every source.
+   Cancelling during a push now kills the process tree.
+4. **Filesystem, search and web-docs** observe the signal: the filesystem tools refuse at entry,
+   `get_workspace_tree` checks per directory, the search walk checks per directory and per file, and
+   `web_docs` links the task signal to its own fetch controller instead of waiting out its timeout.
+5. **Verification** no longer mixes mechanisms, because there is only one.
 
-1. **Collapse to one mechanism.** `AbortSignal` is the standard, already used by
-   `ModelRequestContext`, and composes with `AbortSignal.any()`. Keep `CancellationSignal` as a thin
-   derived view for existing callers, or remove it.
-2. **Make observation a contract, not a convention.** Options: have `ToolExecutor` reject a tool that
-   declares long-running work without declaring cancellation support, or supply tools with a
-   pre-wired helper (`ctx.throwIfCancelled()`, `ctx.fetch()`, `ctx.runProcess()`) so the correct
-   behaviour is the default rather than something each tool must remember.
-3. **Route git through the command policy** (already on the Phase 1 list as task 5a). Doing that
-   fixes finding 1 as a side effect, because the terminal path is the one that handles abort
-   correctly.
-4. **A test per tool package** asserting that a call cancelled mid-flight rejects promptly. The
-   absence of such a test is why six packages drifted.
-5. **Extension**: bound the `cancelling` state with a timeout and a way out, and treat a 404 from
-   the cancel route as already-finished rather than an error.
+### Still open
+
+- **Finding 6, memory writes outlive cancellation.** `recordEpisode` on the completion path still
+  takes no signal. Low severity: a local file write, after the decision to stop.
+- **Finding 7, the panel can stick on "cancelling".** No timeout and no way out if the runtime is
+  unreachable; `sseClient.disconnect()` is still not called on cancel.
+- **Finding 8, cancelling a finished task reports a failure.** The runtime's 404 is surfaced to the
+  user as an error.
+
+Both extension-side items belong with the interface rebuild rather than the engine, and are noted
+for that work.

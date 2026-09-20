@@ -1,9 +1,9 @@
-import { AgentTool, ToolCapability, ToolContext } from '@comu/tool-core';
+import { AgentTool, ToolCapability, ToolContext, isInsideWorkspace, throwIfAborted } from '@comu/tool-core';
 import { CommandPlan, CommandResult } from './command_plan';
 import { CommandPolicy } from './policy';
 import { ProcessManager } from './process_manager';
 import { OutputSanitizer } from './output_sanitizer';
-import { resolve, isAbsolute, normalize } from 'path';
+import { resolve, isAbsolute } from 'path';
 
 export interface ExecuteCommandArgs {
   executable: string;
@@ -40,15 +40,19 @@ export class TerminalTool implements AgentTool<ExecuteCommandArgs, CommandResult
   private processManager = new ProcessManager();
 
   async execute(args: ExecuteCommandArgs, context: ToolContext): Promise<CommandResult> {
+    throwIfAborted(context.abortSignal, "execute_command");
+
     const rootPath = context.workspace.rootPath;
     let targetCwd = rootPath;
 
     if (args.cwd) {
       targetCwd = isAbsolute(args.cwd) ? args.cwd : resolve(rootPath, args.cwd);
     }
-    
-    // Workspace boundary check
-    if (!normalize(targetCwd).startsWith(normalize(rootPath))) {
+
+    // The shared workspace boundary. A startsWith check used to live here, which let a sibling
+    // directory with a matching name prefix through; there is now one implementation for every
+    // caller.
+    if (!isInsideWorkspace(targetCwd, rootPath)) {
       throw new Error(`WORKSPACE_BOUNDARY_VIOLATION: Cannot execute command outside of workspace root: ${rootPath}`);
     }
 
@@ -64,28 +68,12 @@ export class TerminalTool implements AgentTool<ExecuteCommandArgs, CommandResult
       throw new Error(`COMMAND_DENIED: ${decision.reason} (Category: ${decision.category})`);
     }
 
-    // Set up AbortSignal from context cancellation or abortSignal
-    const abortController = new AbortController();
-    if (context.abortSignal?.aborted || context.cancellation?.isCancelled) {
-      throw new Error("COMMAND_CANCELLED: Task was cancelled before command execution.");
-    }
-    if (context.abortSignal) {
-      context.abortSignal.addEventListener("abort", () => {
-        abortController.abort();
-      }, { once: true });
-    }
-    if (context.cancellation) {
-      context.cancellation.onCancel(() => {
-        abortController.abort();
-      });
-    }
-
     const result = await this.processManager.start(plan, {
       timeoutMs: context.limits.maxCommandTimeoutMs || 30000, // 30 seconds default
       maxStdoutBytes: context.limits.maxStdoutBytes || 1024 * 1024,
       maxStderrBytes: context.limits.maxStderrBytes || 1024 * 1024,
       maxCombinedOutputBytes: context.limits.maxCombinedOutputBytes || 2 * 1024 * 1024,
-      abortSignal: abortController.signal
+      abortSignal: context.abortSignal
     });
 
     if (result.timedOut) {

@@ -1,7 +1,8 @@
 import path from "node:path";
 import { AgentTool, ToolCapability, ToolContext } from "@comu/tool-core";
-import { ProcessManager, CommandPlan } from "@comu/terminal";
 import { GitStageResult } from "@comu/protocol";
+import { GitRunner } from "./git_runner.js";
+import type { CommandPlan } from "@comu/terminal";
 
 export class GitStageFilesTool implements AgentTool<any, GitStageResult> {
   name = "git_stage_files";
@@ -23,8 +24,6 @@ export class GitStageFilesTool implements AgentTool<any, GitStageResult> {
     },
     required: ["files"]
   };
-
-  private processManager = new ProcessManager();
 
   async execute(
     args: { files: string[]; authorizedFiles?: string[] },
@@ -79,11 +78,11 @@ export class GitStageFilesTool implements AgentTool<any, GitStageResult> {
       executable: "git",
       args: ["add", "--", ...normalizedRequested],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
 
-    const addRes = await this.processManager.start(addPlan, { timeoutMs: 10000 });
+    const addRes = await GitRunner.run(addPlan.args, context, { timeoutMs: 10000 });
     if (addRes.exitCode !== 0) {
       return {
         success: false,
@@ -99,10 +98,10 @@ export class GitStageFilesTool implements AgentTool<any, GitStageResult> {
       executable: "git",
       args: ["diff", "--cached", "--name-only"],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const nameOnlyRes = await this.processManager.start(nameOnlyPlan, { timeoutMs: 5000 });
+    const nameOnlyRes = await GitRunner.run(nameOnlyPlan.args, context, { timeoutMs: 5000 });
     const stagedFiles = nameOnlyRes.stdout
       .split("\n")
       .map(s => s.trim().replace(/\\/g, "/"))
@@ -113,10 +112,10 @@ export class GitStageFilesTool implements AgentTool<any, GitStageResult> {
       executable: "git",
       args: ["diff", "--cached"],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const diffRes = await this.processManager.start(diffPlan, { timeoutMs: 5000 });
+    const diffRes = await GitRunner.run(diffPlan.args, context, { timeoutMs: 5000 });
     const cachedDiff = diffRes.stdout.slice(0, 50000); // Bounded cached diff
 
     // Check if staged files match authorized files

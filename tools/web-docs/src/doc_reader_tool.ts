@@ -1,4 +1,4 @@
-import { AgentTool, ToolCapability, ToolContext } from "@comu/tool-core";
+import { AgentTool, ToolCapability, ToolContext, throwIfAborted } from "@comu/tool-core";
 import { WebDocResult } from "@comu/protocol";
 import { DomainPolicy } from "./domain_policy.js";
 
@@ -75,6 +75,7 @@ export class WebDocsTool implements AgentTool<any, WebDocResult> {
   }
 
   async execute(args: { url: string; maxBytes?: number }, context?: ToolContext): Promise<WebDocResult> {
+    throwIfAborted(context?.abortSignal, "web_docs");
     const rawUrl = args.url;
     const maxBytes = Math.min(100000, Math.max(1000, args.maxBytes || 50000));
 
@@ -108,6 +109,8 @@ export class WebDocsTool implements AgentTool<any, WebDocResult> {
     while (redirectCount <= maxRedirects) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
+      // The task's own cancellation aborts the fetch too, instead of waiting out the timeout.
+      context?.abortSignal?.addEventListener("abort", () => controller.abort(), { once: true });
 
       try {
         response = await fetch(finalUrl.toString(), {

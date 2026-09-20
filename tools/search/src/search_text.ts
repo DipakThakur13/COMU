@@ -1,4 +1,4 @@
-import { AgentTool } from "@comu/tool-core";
+import { AgentTool, throwIfAborted } from "@comu/tool-core";
 import { SearchBackend, SearchTextResult } from "./interfaces.js";
 import { NodeRecursiveSearchBackend } from "./backends/node_recursive.js";
 import { ToolError } from "@comu/shared";
@@ -26,6 +26,7 @@ export const SearchTextTool: AgentTool<SearchTextArgs, SearchTextResult> = {
     required: ["query"]
   },
   execute: async (args, context) => {
+    throwIfAborted(context.abortSignal, "search_text");
     try {
       return await defaultBackend.search(args, context);
     } catch (e: any) {

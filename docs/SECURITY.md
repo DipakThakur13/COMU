@@ -36,13 +36,19 @@ Filesystem tools (`read_file`, `write_file`, `edit_file`, `list_directory`, `get
 ## 4. Terminal & Command Execution Security
 
 All terminal actions are governed by `CommandPolicy` and managed by `ProcessManager`:
+- **One command path**: every command, from the terminal tool, the validation tools and the git tools alike, is evaluated by `CommandPolicy` and executed by `ProcessManager`. The git tools used to call `ProcessManager` directly, which meant they were neither policy-checked nor cancellable.
+- **No shell**: `ProcessManager` never spawns with `shell: true`. The executable is resolved on `PATH` (honouring `PATHEXT`, preferring a real executable over a batch shim) and spawned directly. A Windows `.cmd` shim, which `CreateProcess` cannot run, goes through `cmd.exe /d /s /c` with the whole command line quoted by COMU and passed verbatim; `%` and `^` are rejected by the policy, so the expansion and escaping cmd would otherwise perform cannot be reached.
+- **One workspace boundary**: `resolveAndVerifyPath` and `isInsideWorkspace` in `@comu/tool-core` are used by the filesystem tools and the terminal tool alike. The terminal previously used a `startsWith` prefix test, which admitted a sibling directory sharing a name prefix.
+- **Cancellation is required, not optional**: `ToolContext.abortSignal` is mandatory and is the only cancellation mechanism. A conformance suite asserts over the whole registry that every tool refuses an aborted signal and writes nothing when cancelled.
 - **Allowed Categories**: Only commands classified as `SAFE_DEVELOPMENT` or `OBSERVABILITY` are permitted without elevation.
 - **Forbidden Categories**:
   - `FORBIDDEN_DESTRUCTIVE`: Arbitrary deletion or formatting (e.g. `rm -rf /`, `del /f /s /q`).
   - `FORBIDDEN_REMOTE_EXECUTION`: Unrestricted remote scripts (e.g. `curl | bash`).
   - `FORBIDDEN_PERSISTENCE`: System services, startup modifications.
-- **Disallowed in Milestone 6**:
-  - `git commit`, `git push`, `git reset --hard`, `git clean -fd`.
+- **Git by subcommand**:
+  - Read-only (`status`, `diff`, `log`, `show`, `rev-parse`, `ls-files`, `blame`, …) is allowed to any caller.
+  - Mutating (`add`, `commit`, `push`, `checkout`, `switch`, `branch`, `restore`, `stash`) is allowed **only** to COMU's governed git tools, which apply staging limits, commit-message validation and human approval. A model-originated terminal call is refused, so the approval gate cannot be side-stepped by shelling out.
+  - Permanently forbidden from every source: `reset --hard`, `clean -f/-d/-x`, `checkout --force`, force/delete/mirror pushes, branch and tag deletion or rename, `rebase`, `filter-branch`, `reflog`, `gc`, `update-ref`, `config`, `pull`, `merge`, `cherry-pick`, `submodule`, `worktree`.
 - **Environment Sanitization**: Sensitive environment variables (`AWS_SECRET_ACCESS_KEY`, `OPENAI_API_KEY`, etc.) are stripped from sub-process environments.
 - **Output Bounds**: Process standard output and standard error are capped to prevent memory exhaustion and buffer overflows.
 - **Timeout & Cleanup**: Commands enforce strict execution timeouts and propagate process tree termination upon cancellation.

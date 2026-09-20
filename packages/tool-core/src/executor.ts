@@ -77,10 +77,10 @@ export class ToolExecutor {
    * Internal execution logic (bypasses model-specific parsing, assumes safe internal caller).
    *
    * Timeout semantics: when `context.limits.timeoutMs` elapses the call rejects with TimeoutError
-   * AND the tool is told to stop through a derived AbortSignal / CancellationSignal on the context
-   * it received. Tools that honour cancellation (terminal, validation) terminate their work;
-   * a tool that ignores the signal cannot be stopped from outside, and its eventual settlement is
-   * observed and discarded so it can never surface as an unhandled rejection.
+   * AND the tool is told to stop through a derived AbortSignal on the context it received. Every
+   * registered tool observes that signal (asserted by the conformance suite); a tool's eventual
+   * settlement is observed and discarded either way, so it can never surface as an unhandled
+   * rejection.
    */
   async execute<TArgs, TResult>(
     toolName: string,
@@ -90,7 +90,7 @@ export class ToolExecutor {
     const tool = this.registry.get(toolName);
     if (!tool) throw new Error(`Unknown tool: ${toolName}`);
 
-    if (context.cancellation?.isCancelled || context.abortSignal?.aborted) {
+    if (context.abortSignal?.aborted) {
       throw new TaskCancelledError(`Execution of tool ${toolName} cancelled before start`);
     }
 
@@ -116,24 +116,8 @@ export class ToolExecutor {
     const scope = new AbortController();
     const abortScope = () => scope.abort();
     context.abortSignal?.addEventListener("abort", abortScope, { once: true });
-    context.cancellation?.onCancel(abortScope);
 
-    const scopedContext: ToolContext = {
-      ...context,
-      abortSignal: scope.signal,
-      cancellation: {
-        get isCancelled() {
-          return scope.signal.aborted;
-        },
-        onCancel: (cb: () => void) => {
-          if (scope.signal.aborted) {
-            cb();
-          } else {
-            scope.signal.addEventListener("abort", cb, { once: true });
-          }
-        }
-      }
-    };
+    const scopedContext: ToolContext = { ...context, abortSignal: scope.signal };
 
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {

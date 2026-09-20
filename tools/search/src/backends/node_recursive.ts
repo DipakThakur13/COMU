@@ -1,5 +1,5 @@
 import { SearchBackend, SearchQuery, SearchResult, SearchTextResult } from "../interfaces.js";
-import { ToolContext } from "@comu/tool-core";
+import { ToolContext, throwIfAborted } from "@comu/tool-core";
 import { resolveAndVerifyPath } from "@comu/tool-filesystem";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -31,7 +31,8 @@ export class NodeRecursiveSearchBackend implements SearchBackend {
     let isTruncated = false;
 
     const walk = async (currentPath: string) => {
-      if (context.cancellation?.isCancelled) return;
+      // Per directory, and per file below, so a large directory stops promptly too.
+      throwIfAborted(context.abortSignal, "search_text");
       if (matches.length >= maxResults) {
         isTruncated = true;
         return;

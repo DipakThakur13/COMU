@@ -1,5 +1,6 @@
 import { AgentTool, ToolCapability, ToolContext } from '@comu/tool-core';
-import { ProcessManager, CommandPlan } from '@comu/terminal';
+import { GitRunner } from "./git_runner.js";
+import type { CommandPlan } from "@comu/terminal";
 
 export interface GitDiffArgs {
   staged?: boolean;
@@ -29,8 +30,6 @@ export class GitDiffTool implements AgentTool<GitDiffArgs, GitDiffResult> {
     }
   };
 
-  private processManager = new ProcessManager();
-
   async execute(args: GitDiffArgs, context: ToolContext): Promise<GitDiffResult> {
     const cwd = context.workspace.rootPath;
 
@@ -50,11 +49,11 @@ export class GitDiffTool implements AgentTool<GitDiffArgs, GitDiffResult> {
       executable: 'git',
       args: cmdArgs,
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
 
-    const result = await this.processManager.start(diffPlan, {
+    const result = await GitRunner.run(diffPlan.args, context, {
       timeoutMs: 10000,
       maxStdoutBytes: context.limits.maxBytes || 500 * 1024 // default 500KB diff
     });

@@ -23065,9 +23065,11 @@ var require_dist = __commonJS({
 var require_dist2 = __commonJS({
   "../../packages/tool-core/dist/index.js"(exports2, module2) {
     "use strict";
+    var __create2 = Object.create;
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
     var __getOwnPropNames2 = Object.getOwnPropertyNames;
+    var __getProtoOf2 = Object.getPrototypeOf;
     var __hasOwnProp2 = Object.prototype.hasOwnProperty;
     var __export2 = (target, all) => {
       for (var name in all)
@@ -23081,27 +23083,100 @@ var require_dist2 = __commonJS({
       }
       return to;
     };
+    var __toESM2 = (mod, isNodeMode, target) => (target = mod != null ? __create2(__getProtoOf2(mod)) : {}, __copyProps2(
+      // If the importer is in node compatibility mode or this is not an ESM
+      // file that has been converted to a CommonJS file using a Babel-
+      // compatible transform (i.e. "__esModule" has not been set), then set
+      // "default" to the CommonJS "module.exports" for node compatibility.
+      isNodeMode || !mod || !mod.__esModule ? __defProp2(target, "default", { value: mod, enumerable: true }) : target,
+      mod
+    ));
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
     var index_exports = {};
     __export2(index_exports, {
       CanonicalToolCallParser: () => CanonicalToolCallParser,
       ToolExecutor: () => ToolExecutor2,
-      ToolRegistry: () => ToolRegistry2
+      ToolRegistry: () => ToolRegistry2,
+      abortPromise: () => abortPromise,
+      isInsideWorkspace: () => isInsideWorkspace,
+      neverAborted: () => neverAborted,
+      raceAbort: () => raceAbort,
+      resolveAndVerifyPath: () => resolveAndVerifyPath,
+      throwIfAborted: () => throwIfAborted
     });
     module2.exports = __toCommonJS2(index_exports);
     var import_shared = require_dist();
+    function throwIfAborted(signal, toolName) {
+      if (signal?.aborted) {
+        throw new import_shared.TaskCancelledError(`${toolName} was cancelled before it started`);
+      }
+    }
+    function abortPromise(signal, toolName) {
+      return new Promise((_resolve, reject) => {
+        if (signal.aborted) {
+          reject(new import_shared.TaskCancelledError(`${toolName} was cancelled`));
+          return;
+        }
+        signal.addEventListener(
+          "abort",
+          () => reject(new import_shared.TaskCancelledError(`${toolName} was cancelled`)),
+          { once: true }
+        );
+      });
+    }
+    async function raceAbort(signal, toolName, work) {
+      throwIfAborted(signal, toolName);
+      work.catch(() => void 0);
+      return Promise.race([work, abortPromise(signal, toolName)]);
+    }
+    function neverAborted() {
+      return new AbortController().signal;
+    }
+    var path = __toESM2(require("path"));
+    var fs = __toESM2(require("fs"));
+    var import_shared2 = require_dist();
+    function isInsideWorkspace(target, root) {
+      const resolvedRoot = path.resolve(root);
+      const resolvedTarget = path.resolve(target);
+      if (resolvedTarget === resolvedRoot) return true;
+      const relative2 = path.relative(resolvedRoot, resolvedTarget);
+      return relative2 !== "" && !relative2.startsWith("..") && !path.isAbsolute(relative2);
+    }
+    function resolveAndVerifyPath(requestPath, workspaceRoot) {
+      const root = path.resolve(workspaceRoot);
+      const targetPath = path.normalize(
+        path.isAbsolute(requestPath) ? path.resolve(requestPath) : path.resolve(root, requestPath)
+      );
+      if (!isInsideWorkspace(targetPath, root)) {
+        throw new import_shared2.PermissionError(`Access denied: Path ${requestPath} resolves outside workspace boundary`);
+      }
+      try {
+        if (fs.existsSync(targetPath)) {
+          const realPath = fs.realpathSync(targetPath);
+          const realRoot = fs.realpathSync(root);
+          if (!isInsideWorkspace(realPath, realRoot)) {
+            throw new import_shared2.PermissionError("Access denied: Symlink resolves outside workspace boundary");
+          }
+        }
+      } catch (e) {
+        if (e instanceof import_shared2.PermissionError) throw e;
+        throw new import_shared2.PermissionError(`Failed to verify path security: ${e.message}`);
+      }
+      return targetPath;
+    }
+    var import_shared3 = require_dist();
     var ToolRegistry2 = class {
       tools = /* @__PURE__ */ new Map();
       register(tool) {
         if (this.tools.has(tool.name)) {
-          throw new import_shared.ToolError(`Tool ${tool.name} is already registered`);
+          throw new import_shared3.ToolError(`Tool ${tool.name} is already registered`);
         }
         this.tools.set(tool.name, tool);
       }
       get(name) {
         const tool = this.tools.get(name);
         if (!tool) {
-          throw new import_shared.ToolError(`Tool ${name} not found`);
+          throw new import_shared3.ToolError(`Tool ${name} not found`);
         }
         return tool;
       }
@@ -23109,7 +23184,7 @@ var require_dist2 = __commonJS({
         return Array.from(this.tools.values());
       }
     };
-    var import_shared2 = require_dist();
+    var import_shared4 = require_dist();
     var CanonicalToolCallParser = class {
       /**
        * Parses and validates a potential tool call.
@@ -23210,22 +23285,22 @@ var require_dist2 = __commonJS({
        * Internal execution logic (bypasses model-specific parsing, assumes safe internal caller).
        *
        * Timeout semantics: when `context.limits.timeoutMs` elapses the call rejects with TimeoutError
-       * AND the tool is told to stop through a derived AbortSignal / CancellationSignal on the context
-       * it received. Tools that honour cancellation (terminal, validation) terminate their work;
-       * a tool that ignores the signal cannot be stopped from outside, and its eventual settlement is
-       * observed and discarded so it can never surface as an unhandled rejection.
+       * AND the tool is told to stop through a derived AbortSignal on the context it received. Every
+       * registered tool observes that signal (asserted by the conformance suite); a tool's eventual
+       * settlement is observed and discarded either way, so it can never surface as an unhandled
+       * rejection.
        */
       async execute(toolName, args, context) {
         const tool = this.registry.get(toolName);
         if (!tool) throw new Error(`Unknown tool: ${toolName}`);
-        if (context.cancellation?.isCancelled || context.abortSignal?.aborted) {
-          throw new import_shared2.TaskCancelledError(`Execution of tool ${toolName} cancelled before start`);
+        if (context.abortSignal?.aborted) {
+          throw new import_shared4.TaskCancelledError(`Execution of tool ${toolName} cancelled before start`);
         }
         if (context.permissions) {
           for (const capability of tool.capabilities) {
             const decision = context.permissions.capabilities[capability] || "DENY";
             if (decision !== "ALLOW") {
-              throw new import_shared2.PermissionError(`Tool ${toolName} requires capability '${capability}', but permission is ${decision}`);
+              throw new import_shared4.PermissionError(`Tool ${toolName} requires capability '${capability}', but permission is ${decision}`);
             }
           }
         }
@@ -23240,28 +23315,12 @@ var require_dist2 = __commonJS({
         const scope = new AbortController();
         const abortScope = () => scope.abort();
         context.abortSignal?.addEventListener("abort", abortScope, { once: true });
-        context.cancellation?.onCancel(abortScope);
-        const scopedContext = {
-          ...context,
-          abortSignal: scope.signal,
-          cancellation: {
-            get isCancelled() {
-              return scope.signal.aborted;
-            },
-            onCancel: (cb) => {
-              if (scope.signal.aborted) {
-                cb();
-              } else {
-                scope.signal.addEventListener("abort", cb, { once: true });
-              }
-            }
-          }
-        };
+        const scopedContext = { ...context, abortSignal: scope.signal };
         let timer;
         const timeout = new Promise((_, reject) => {
           timer = setTimeout(() => {
             scope.abort();
-            reject(new import_shared2.TimeoutError(`Tool ${toolName} execution timed out after ${timeoutMs}ms`));
+            reject(new import_shared4.TimeoutError(`Tool ${toolName} execution timed out after ${timeoutMs}ms`));
           }, timeoutMs);
         });
         const work = Promise.resolve().then(() => tool.execute(args, scopedContext));
@@ -23278,7 +23337,7 @@ var require_dist2 = __commonJS({
       }
       static normalizeError(error) {
         if (error instanceof Error) return error;
-        return new import_shared2.ToolError(String(error));
+        return new import_shared4.ToolError(String(error));
       }
     };
   }
@@ -23356,6 +23415,7 @@ var require_dist3 = __commonJS({
       }
       return targetPath;
     }
+    var import_tool_core2 = require_dist2();
     var import_shared2 = require_dist();
     var fs2 = __toESM2(require("fs/promises"));
     var ReadFileTool2 = {
@@ -23372,6 +23432,7 @@ var require_dist3 = __commonJS({
         required: ["path"]
       },
       execute: async (args, context) => {
+        (0, import_tool_core2.throwIfAborted)(context.abortSignal, "read_file");
         try {
           const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
           const stats = await fs2.stat(targetPath);
@@ -23414,6 +23475,7 @@ var require_dist3 = __commonJS({
         }
       }
     };
+    var import_tool_core22 = require_dist2();
     var import_shared3 = require_dist();
     var fs3 = __toESM2(require("fs/promises"));
     var ListDirectoryTool2 = {
@@ -23428,6 +23490,7 @@ var require_dist3 = __commonJS({
         required: ["path"]
       },
       execute: async (args, context) => {
+        (0, import_tool_core22.throwIfAborted)(context.abortSignal, "list_directory");
         try {
           const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
           const entries = await fs3.readdir(targetPath, { withFileTypes: true });
@@ -23447,6 +23510,7 @@ var require_dist3 = __commonJS({
         }
       }
     };
+    var import_tool_core3 = require_dist2();
     var import_shared4 = require_dist();
     var fs4 = __toESM2(require("fs/promises"));
     var path2 = __toESM2(require("path"));
@@ -23463,6 +23527,7 @@ var require_dist3 = __commonJS({
         }
       },
       execute: async (args, context) => {
+        (0, import_tool_core3.throwIfAborted)(context.abortSignal, "get_workspace_tree");
         const rootPath = args.dir ? resolveAndVerifyPath(args.dir, context.workspace.rootPath) : context.workspace.rootPath;
         const maxDepth = args.maxDepth ?? 3;
         const maxEntries = args.maxEntries ?? context.limits.maxResults ?? 1e3;
@@ -23470,6 +23535,7 @@ var require_dist3 = __commonJS({
         let isTruncated = false;
         const ignoreList = /* @__PURE__ */ new Set([".git", "node_modules", "dist", "build", ".next", "out", "coverage"]);
         async function walk(currentPath, depth, prefix) {
+          (0, import_tool_core3.throwIfAborted)(context.abortSignal, "get_workspace_tree");
           if (depth > maxDepth) return "";
           if (entriesCount >= maxEntries) {
             isTruncated = true;
@@ -23521,6 +23587,7 @@ var require_dist3 = __commonJS({
         }
       }
     };
+    var import_tool_core4 = require_dist2();
     var import_shared5 = require_dist();
     var fs5 = __toESM2(require("fs/promises"));
     var crypto = __toESM2(require("crypto"));
@@ -23538,6 +23605,7 @@ var require_dist3 = __commonJS({
         required: ["path", "content"]
       },
       execute: async (args, context) => {
+        (0, import_tool_core4.throwIfAborted)(context.abortSignal, "create_file");
         try {
           const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
           try {
@@ -23570,6 +23638,7 @@ var require_dist3 = __commonJS({
         required: ["path", "content"]
       },
       execute: async (args, context) => {
+        (0, import_tool_core4.throwIfAborted)(context.abortSignal, "write_file");
         try {
           const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
           if (args.expectedHash) {
@@ -23597,6 +23666,7 @@ var require_dist3 = __commonJS({
         }
       }
     };
+    var import_tool_core5 = require_dist2();
     var import_shared6 = require_dist();
     var fs6 = __toESM2(require("fs/promises"));
     var crypto2 = __toESM2(require("crypto"));
@@ -23624,6 +23694,7 @@ var require_dist3 = __commonJS({
         required: ["path", "edits"]
       },
       execute: async (args, context) => {
+        (0, import_tool_core5.throwIfAborted)(context.abortSignal, "edit_file");
         try {
           const targetPath = resolveAndVerifyPath(args.path, context.workspace.rootPath);
           let content = "";
@@ -23695,6 +23766,8 @@ var require_dist4 = __commonJS({
       SearchTextTool: () => SearchTextTool2
     });
     module2.exports = __toCommonJS2(index_exports);
+    var import_tool_core2 = require_dist2();
+    var import_tool_core3 = require_dist2();
     var import_tool_filesystem2 = require_dist3();
     var fs = __toESM2(require("fs/promises"));
     var path = __toESM2(require("path"));
@@ -23720,7 +23793,7 @@ var require_dist4 = __commonJS({
         const matches = [];
         let isTruncated = false;
         const walk = async (currentPath) => {
-          if (context.cancellation?.isCancelled) return;
+          (0, import_tool_core3.throwIfAborted)(context.abortSignal, "search_text");
           if (matches.length >= maxResults) {
             isTruncated = true;
             return;
@@ -23802,6 +23875,7 @@ var require_dist4 = __commonJS({
         required: ["query"]
       },
       execute: async (args, context) => {
+        (0, import_tool_core2.throwIfAborted)(context.abortSignal, "search_text");
         try {
           return await defaultBackend.search(args, context);
         } catch (e) {
@@ -23817,6 +23891,109 @@ var require_command_plan = __commonJS({
   "../../tools/terminal/dist/command_plan.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
+  }
+});
+
+// ../../tools/terminal/dist/executable_resolver.js
+var require_executable_resolver = __commonJS({
+  "../../tools/terminal/dist/executable_resolver.js"(exports2) {
+    "use strict";
+    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __setModuleDefault = exports2 && exports2.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports2 && exports2.__importStar || /* @__PURE__ */ (function() {
+      var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function(o2) {
+          var ar = [];
+          for (var k in o2) if (Object.prototype.hasOwnProperty.call(o2, k)) ar[ar.length] = k;
+          return ar;
+        };
+        return ownKeys(o);
+      };
+      return function(mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) {
+          for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        }
+        __setModuleDefault(result, mod);
+        return result;
+      };
+    })();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.isBatchFile = isBatchFile;
+    exports2.resolveExecutable = resolveExecutable;
+    exports2.buildSpawnTarget = buildSpawnTarget;
+    var fs = __importStar(require("fs"));
+    var path = __importStar(require("path"));
+    var DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
+    function isBatchFile(file) {
+      const ext = path.extname(file).toLowerCase();
+      return ext === ".cmd" || ext === ".bat";
+    }
+    function pathEntries(env) {
+      const raw = env.PATH ?? env.Path ?? env.path ?? "";
+      return raw.split(path.delimiter).filter(Boolean);
+    }
+    function candidateNames(name, env) {
+      if (process.platform !== "win32")
+        return [name];
+      if (path.extname(name))
+        return [name];
+      const exts = (env.PATHEXT ?? DEFAULT_PATHEXT).split(";").filter(Boolean);
+      const ordered = [...exts].sort((a, b) => rank(a) - rank(b));
+      return ordered.map((ext) => `${name}${ext.toLowerCase()}`);
+    }
+    function rank(ext) {
+      const lower = ext.toLowerCase();
+      if (lower === ".exe" || lower === ".com")
+        return 0;
+      if (lower === ".cmd" || lower === ".bat")
+        return 2;
+      return 1;
+    }
+    function resolveExecutable(name, env = process.env) {
+      if (!name)
+        return { file: name, kind: "unresolved" };
+      const explicit = name.includes("/") || name.includes("\\");
+      const roots = explicit ? [path.dirname(path.resolve(name))] : pathEntries(env);
+      const base = explicit ? path.basename(name) : name;
+      for (const dir of roots) {
+        for (const candidate of candidateNames(base, env)) {
+          const full = path.join(dir, candidate);
+          try {
+            if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+              return { file: full, kind: isBatchFile(full) ? "batch" : "executable" };
+            }
+          } catch {
+          }
+        }
+      }
+      return { file: name, kind: "unresolved" };
+    }
+    function buildSpawnTarget(executable, args, env = process.env) {
+      const resolved = resolveExecutable(executable, env);
+      if (resolved.kind === "batch") {
+        const comspec = env.ComSpec ?? env.COMSPEC ?? "cmd.exe";
+        return { command: comspec, args: ["/d", "/s", "/c", resolved.file, ...args], viaCmd: true };
+      }
+      return { command: resolved.file, args, viaCmd: false };
+    }
   }
 });
 
@@ -23846,7 +24023,72 @@ var require_policy = __commonJS({
         "java",
         "javac",
         "mvn",
-        "gradle"
+        "gradle",
+        "git"
+      ]);
+      /**
+       * Git subcommands that only read. Safe for any caller, including a model-originated terminal
+       * call, because none of them changes the repository or the working tree.
+       */
+      static GIT_READONLY = /* @__PURE__ */ new Set([
+        "status",
+        "diff",
+        "log",
+        "show",
+        "rev-parse",
+        "ls-files",
+        "ls-tree",
+        "cat-file",
+        "describe",
+        "blame",
+        "shortlog",
+        "symbolic-ref",
+        "merge-base",
+        "name-rev",
+        "var"
+      ]);
+      /**
+       * Git subcommands that change the repository. Allowed only for the governed git tools, which
+       * apply their own staging restrictions, commit-message validation and human approval. The
+       * terminal tool cannot reach these, so a model cannot commit or push by shelling out and
+       * side-stepping the approval gate.
+       */
+      static GIT_GOVERNED = /* @__PURE__ */ new Set([
+        "add",
+        "commit",
+        "push",
+        "checkout",
+        "switch",
+        "branch",
+        "restore",
+        "stash"
+      ]);
+      /**
+       * Never allowed, from any source. Each destroys work or rewrites history, and none is something
+       * COMU needs in order to do its job.
+       */
+      static GIT_FORBIDDEN_SUBCOMMANDS = /* @__PURE__ */ new Set([
+        "rebase",
+        "filter-branch",
+        "filter-repo",
+        "reflog",
+        "gc",
+        "prune",
+        "update-ref",
+        "replace",
+        "fsck",
+        "am",
+        "cherry-pick",
+        "revert",
+        "merge",
+        "pull",
+        "clone",
+        "init",
+        "submodule",
+        "worktree",
+        "daemon",
+        "credential",
+        "config"
       ]);
       static DESTRUCTIVE_EXECUTABLES = /* @__PURE__ */ new Set([
         "rm",
@@ -23869,7 +24111,13 @@ var require_policy = __commonJS({
         "ping",
         "telnet"
       ]);
-      static SHELL_INJECTION_CHARS = /([;&|><$`]|\$\()/;
+      /**
+       * `%` and `^` are included because a Windows batch shim still has to be started through cmd.exe,
+       * which performs `%VAR%` expansion and treats `^` as an escape. Neither appears in a normal
+       * development command, so rejecting them costs nothing and closes the gap the old
+       * `shell: true` spawn left open.
+       */
+      static SHELL_INJECTION_CHARS = /([;&|><$`%^]|\$\()/;
       evaluate(plan) {
         if (this.hasShellInjection(plan.executable) || plan.args.some((arg) => this.hasShellInjection(arg))) {
           return {
@@ -23901,6 +24149,9 @@ var require_policy = __commonJS({
             reason: `Executable '${execBase}' is categorized as network-capable.`
           };
         }
+        if (execBase === "git") {
+          return this.evaluateGit(plan);
+        }
         if (_CommandPolicy.SAFE_EXECUTABLES.has(execBase)) {
           if ((execBase === "npm" || execBase === "pnpm" || execBase === "yarn") && plan.args.includes("publish")) {
             return {
@@ -23920,6 +24171,67 @@ var require_policy = __commonJS({
           category: "UNKNOWN",
           reason: `Executable '${execBase}' is not on the allowed development tools list.`
         };
+      }
+      /**
+       * Git's surface is decided per subcommand and per caller, not by the executable alone.
+       *
+       * Routing the git tools through here is what gives them cancellation, output bounds and an audit
+       * trail; before this they called the process manager directly, so Stop did not reach them and a
+       * push could complete after the user cancelled it.
+       */
+      evaluateGit(plan) {
+        const args = plan.args.filter((a) => !a.startsWith("-"));
+        const subcommand = (args[0] ?? "").toLowerCase();
+        const flags = plan.args.filter((a) => a.startsWith("-")).map((a) => a.toLowerCase());
+        const has = (...names) => names.some((n) => flags.includes(n));
+        if (!subcommand) {
+          return { decision: "DENY", category: "UNKNOWN", reason: "git requires a subcommand." };
+        }
+        if (_CommandPolicy.GIT_FORBIDDEN_SUBCOMMANDS.has(subcommand)) {
+          return {
+            decision: "DENY",
+            category: "DESTRUCTIVE",
+            reason: `git ${subcommand} is permanently forbidden: it rewrites history, reaches the network unsupervised, or changes repository configuration.`
+          };
+        }
+        if (subcommand === "reset" && has("--hard", "--merge", "--keep")) {
+          return { decision: "DENY", category: "DESTRUCTIVE", reason: "git reset --hard discards uncommitted work and is permanently forbidden." };
+        }
+        if (subcommand === "clean" && has("-f", "-fd", "-fdx", "-d", "-x", "--force")) {
+          return { decision: "DENY", category: "DESTRUCTIVE", reason: "git clean deletes untracked files and is permanently forbidden." };
+        }
+        if ((subcommand === "checkout" || subcommand === "switch" || subcommand === "restore") && has("-f", "--force", "--discard-changes")) {
+          return { decision: "DENY", category: "DESTRUCTIVE", reason: `git ${subcommand} --force discards uncommitted work and is permanently forbidden.` };
+        }
+        if (subcommand === "push" && has("-f", "--force", "--force-with-lease", "--delete", "--mirror", "--prune")) {
+          return { decision: "DENY", category: "DESTRUCTIVE", reason: "A force, delete, mirror or prune push rewrites remote history and is permanently forbidden." };
+        }
+        if (subcommand === "branch" && has("-d", "-D", "--delete", "-m", "-M", "--move")) {
+          return { decision: "DENY", category: "DESTRUCTIVE", reason: "Deleting or renaming a branch is permanently forbidden." };
+        }
+        if (subcommand === "tag" && has("-d", "--delete")) {
+          return { decision: "DENY", category: "DESTRUCTIVE", reason: "Deleting a tag is permanently forbidden." };
+        }
+        if (subcommand === "stash" && args.slice(1).some((a) => ["drop", "clear", "pop"].includes(a.toLowerCase()))) {
+          return { decision: "DENY", category: "DESTRUCTIVE", reason: "Dropping or popping a stash can discard work and is permanently forbidden." };
+        }
+        if (subcommand === "reset") {
+          return plan.source === "GIT" ? { decision: "ALLOW", category: "SAFE_DEVELOPMENT", reason: "Governed git tool performing a non-destructive reset." } : { decision: "DENY", category: "RESTRICTED", reason: "git reset is available only to COMU's governed git tools." };
+        }
+        if (_CommandPolicy.GIT_READONLY.has(subcommand)) {
+          return { decision: "ALLOW", category: "OBSERVABILITY", reason: `git ${subcommand} only reads repository state.` };
+        }
+        if (_CommandPolicy.GIT_GOVERNED.has(subcommand)) {
+          if (plan.source === "GIT") {
+            return { decision: "ALLOW", category: "SAFE_DEVELOPMENT", reason: `Governed git tool performing git ${subcommand}.` };
+          }
+          return {
+            decision: "DENY",
+            category: "RESTRICTED",
+            reason: `git ${subcommand} is available only to COMU's governed git tools, which apply staging limits, commit validation and human approval. It cannot be run from the terminal.`
+          };
+        }
+        return { decision: "DENY", category: "UNKNOWN", reason: `git ${subcommand} is not on the allowed subcommand list.` };
       }
       hasShellInjection(str) {
         return _CommandPolicy.SHELL_INJECTION_CHARS.test(str);
@@ -23989,6 +24301,7 @@ var require_process_manager = __commonJS({
     exports2.ProcessManager = void 0;
     var child_process_1 = require("child_process");
     var env_sanitizer_1 = require_env_sanitizer();
+    var executable_resolver_1 = require_executable_resolver();
     var ProcessManager = class {
       async start(plan, options = {}) {
         const {
@@ -24010,10 +24323,11 @@ var require_process_manager = __commonJS({
           let stderrData = Buffer.alloc(0);
           const startTime = Date.now();
           const env = env_sanitizer_1.EnvSanitizer.sanitize(process.env);
-          const child = (0, child_process_1.spawn)(plan.executable, plan.args, {
+          const target = (0, executable_resolver_1.buildSpawnTarget)(plan.executable, plan.args, env);
+          const child = (0, child_process_1.spawn)(target.command, target.args, {
             cwd: plan.cwd,
             env,
-            shell: process.platform === "win32",
+            shell: false,
             windowsHide: true,
             detached: process.platform !== "win32"
             // Useful for killing process trees on POSIX
@@ -24052,10 +24366,15 @@ var require_process_manager = __commonJS({
             }
           };
           if (abortSignal) {
-            abortSignal.addEventListener("abort", () => {
+            if (abortSignal.aborted) {
               isCancelled = true;
               killProcessTree();
-            });
+            } else {
+              abortSignal.addEventListener("abort", () => {
+                isCancelled = true;
+                killProcessTree();
+              }, { once: true });
+            }
           }
           if (timeoutMs > 0) {
             timeoutId = setTimeout(() => {
@@ -24146,6 +24465,7 @@ var require_terminal_tool = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.TerminalTool = void 0;
+    var tool_core_1 = require_dist2();
     var policy_1 = require_policy();
     var process_manager_1 = require_process_manager();
     var output_sanitizer_1 = require_output_sanitizer();
@@ -24176,12 +24496,13 @@ var require_terminal_tool = __commonJS({
       policy = new policy_1.CommandPolicy();
       processManager = new process_manager_1.ProcessManager();
       async execute(args, context) {
+        (0, tool_core_1.throwIfAborted)(context.abortSignal, "execute_command");
         const rootPath = context.workspace.rootPath;
         let targetCwd = rootPath;
         if (args.cwd) {
           targetCwd = (0, path_1.isAbsolute)(args.cwd) ? args.cwd : (0, path_1.resolve)(rootPath, args.cwd);
         }
-        if (!(0, path_1.normalize)(targetCwd).startsWith((0, path_1.normalize)(rootPath))) {
+        if (!(0, tool_core_1.isInsideWorkspace)(targetCwd, rootPath)) {
           throw new Error(`WORKSPACE_BOUNDARY_VIOLATION: Cannot execute command outside of workspace root: ${rootPath}`);
         }
         const plan = {
@@ -24194,27 +24515,13 @@ var require_terminal_tool = __commonJS({
         if (decision.decision !== "ALLOW") {
           throw new Error(`COMMAND_DENIED: ${decision.reason} (Category: ${decision.category})`);
         }
-        const abortController = new AbortController();
-        if (context.abortSignal?.aborted || context.cancellation?.isCancelled) {
-          throw new Error("COMMAND_CANCELLED: Task was cancelled before command execution.");
-        }
-        if (context.abortSignal) {
-          context.abortSignal.addEventListener("abort", () => {
-            abortController.abort();
-          }, { once: true });
-        }
-        if (context.cancellation) {
-          context.cancellation.onCancel(() => {
-            abortController.abort();
-          });
-        }
         const result = await this.processManager.start(plan, {
           timeoutMs: context.limits.maxCommandTimeoutMs || 3e4,
           // 30 seconds default
           maxStdoutBytes: context.limits.maxStdoutBytes || 1024 * 1024,
           maxStderrBytes: context.limits.maxStderrBytes || 1024 * 1024,
           maxCombinedOutputBytes: context.limits.maxCombinedOutputBytes || 2 * 1024 * 1024,
-          abortSignal: abortController.signal
+          abortSignal: context.abortSignal
         });
         if (result.timedOut) {
           throw new Error(`COMMAND_TIMEOUT: Process timed out. stdout: ${result.stdout} stderr: ${result.stderr}`);
@@ -24251,11 +24558,60 @@ var require_dist5 = __commonJS({
     };
     Object.defineProperty(exports2, "__esModule", { value: true });
     __exportStar(require_command_plan(), exports2);
+    __exportStar(require_executable_resolver(), exports2);
     __exportStar(require_policy(), exports2);
     __exportStar(require_process_manager(), exports2);
     __exportStar(require_env_sanitizer(), exports2);
     __exportStar(require_output_sanitizer(), exports2);
     __exportStar(require_terminal_tool(), exports2);
+  }
+});
+
+// ../../tools/git/dist/git_runner.js
+var require_git_runner = __commonJS({
+  "../../tools/git/dist/git_runner.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.GitRunner = void 0;
+    var tool_core_1 = require_dist2();
+    var shared_1 = require_dist();
+    var terminal_1 = require_dist5();
+    var GitRunner = class _GitRunner {
+      static policy = new terminal_1.CommandPolicy();
+      static processManager = new terminal_1.ProcessManager();
+      /**
+       * Runs a git command on behalf of a governed git tool.
+       *
+       * `source: "GIT"` is what lets the policy allow the mutating subcommands (add, commit, push)
+       * that a model-originated terminal call must never reach. The forbidden set — history rewriting,
+       * force pushes, hard resets, clean — is refused here too, whoever is asking.
+       */
+      static async run(args, context, options = {}) {
+        (0, tool_core_1.throwIfAborted)(context.abortSignal, `git ${args[0] ?? ""}`.trim());
+        const plan = {
+          executable: "git",
+          args,
+          cwd: context.workspace.rootPath,
+          source: "GIT"
+        };
+        const decision = _GitRunner.policy.evaluate(plan);
+        if (decision.decision !== "ALLOW") {
+          throw new shared_1.ToolError(`COMMAND_DENIED: ${decision.reason} (Category: ${decision.category})`);
+        }
+        const result = await _GitRunner.processManager.start(plan, {
+          timeoutMs: options.timeoutMs ?? 1e4,
+          maxStdoutBytes: options.maxStdoutBytes ?? context.limits?.maxStdoutBytes ?? 1024 * 1024,
+          maxStderrBytes: context.limits?.maxStderrBytes ?? 256 * 1024,
+          maxCombinedOutputBytes: context.limits?.maxCombinedOutputBytes ?? 2 * 1024 * 1024,
+          abortSignal: context.abortSignal
+        });
+        if (result.cancelled) {
+          throw new shared_1.TaskCancelledError(`git ${args[0] ?? ""} was cancelled`.trim());
+        }
+        return result;
+      }
+    };
+    exports2.GitRunner = GitRunner;
   }
 });
 
@@ -24265,7 +24621,7 @@ var require_git_status_tool = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.GitStatusTool = void 0;
-    var terminal_1 = require_dist5();
+    var git_runner_js_1 = require_git_runner();
     var GitStatusTool2 = class {
       name = "git_status";
       description = "Get the status of the git repository in the workspace. Returns structured info on staged, modified, deleted, and untracked files.";
@@ -24274,17 +24630,16 @@ var require_git_status_tool = __commonJS({
         type: "object",
         properties: {}
       };
-      processManager = new terminal_1.ProcessManager();
       async execute(args, context) {
         const cwd = context.workspace.rootPath;
         const checkPlan = {
           executable: "git",
           args: ["rev-parse", "--is-inside-work-tree"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const checkResult = await this.processManager.start(checkPlan, { timeoutMs: 5e3 });
+        const checkResult = await git_runner_js_1.GitRunner.run(checkPlan.args, context, { timeoutMs: 5e3 });
         if (checkResult.exitCode !== 0) {
           return {
             isRepository: false,
@@ -24298,19 +24653,19 @@ var require_git_status_tool = __commonJS({
           executable: "git",
           args: ["branch", "--show-current"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const branchResult = await this.processManager.start(branchPlan, { timeoutMs: 5e3 });
+        const branchResult = await git_runner_js_1.GitRunner.run(branchPlan.args, context, { timeoutMs: 5e3 });
         const branch = branchResult.stdout.trim();
         const statusPlan = {
           executable: "git",
           args: ["status", "--porcelain"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const statusResult = await this.processManager.start(statusPlan, { timeoutMs: 5e3 });
+        const statusResult = await git_runner_js_1.GitRunner.run(statusPlan.args, context, { timeoutMs: 5e3 });
         const lines = statusResult.stdout.split("\n").filter((l) => l.trim() !== "");
         const staged = [];
         const modified = [];
@@ -24353,7 +24708,7 @@ var require_git_diff_tool = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.GitDiffTool = void 0;
-    var terminal_1 = require_dist5();
+    var git_runner_js_1 = require_git_runner();
     var GitDiffTool2 = class {
       name = "git_diff";
       description = "Get the diff of the git repository. Use staged=true to view staged changes, or pass a file to view specific changes.";
@@ -24371,7 +24726,6 @@ var require_git_diff_tool = __commonJS({
           }
         }
       };
-      processManager = new terminal_1.ProcessManager();
       async execute(args, context) {
         const cwd = context.workspace.rootPath;
         const cmdArgs = ["diff"];
@@ -24388,10 +24742,10 @@ var require_git_diff_tool = __commonJS({
           executable: "git",
           args: cmdArgs,
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const result = await this.processManager.start(diffPlan, {
+        const result = await git_runner_js_1.GitRunner.run(diffPlan.args, context, {
           timeoutMs: 1e4,
           maxStdoutBytes: context.limits.maxBytes || 500 * 1024
           // default 500KB diff
@@ -24417,7 +24771,7 @@ var require_git_branch_tool = __commonJS({
     exports2.GitCreateBranchTool = void 0;
     var node_fs_1 = __importDefault(require("fs"));
     var node_path_1 = __importDefault(require("path"));
-    var terminal_1 = require_dist5();
+    var git_runner_js_1 = require_git_runner();
     var GitCreateBranchTool2 = class _GitCreateBranchTool {
       name = "git_create_branch";
       description = "Create a new git branch safely for task isolation with pre-branch validation.";
@@ -24430,7 +24784,6 @@ var require_git_branch_tool = __commonJS({
         },
         required: ["branchName"]
       };
-      processManager = new terminal_1.ProcessManager();
       static sanitizeBranchName(name) {
         return name.trim().replace(/[\s~^:?*\[\\]+/g, "-").replace(/\.\.+/g, ".").replace(/^\/+|\/+$/g, "").replace(/^-+/, "");
       }
@@ -24460,10 +24813,10 @@ var require_git_branch_tool = __commonJS({
           executable: "git",
           args: ["branch", "--show-current"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const currentRes = await this.processManager.start(currentBranchPlan, { timeoutMs: 5e3 });
+        const currentRes = await git_runner_js_1.GitRunner.run(currentBranchPlan.args, context, { timeoutMs: 5e3 });
         const previousBranch = currentRes.stdout.trim() || void 0;
         if (!previousBranch || previousBranch === "HEAD") {
           return {
@@ -24477,10 +24830,10 @@ var require_git_branch_tool = __commonJS({
           executable: "git",
           args: ["rev-parse", "--verify", `refs/heads/${branchName}`],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const existsRes = await this.processManager.start(checkExistsPlan, { timeoutMs: 5e3 });
+        const existsRes = await git_runner_js_1.GitRunner.run(checkExistsPlan.args, context, { timeoutMs: 5e3 });
         if (existsRes.exitCode === 0) {
           return {
             success: false,
@@ -24498,10 +24851,10 @@ var require_git_branch_tool = __commonJS({
           executable: "git",
           args: checkoutArgs,
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const checkoutRes = await this.processManager.start(checkoutPlan, { timeoutMs: 5e3 });
+        const checkoutRes = await git_runner_js_1.GitRunner.run(checkoutPlan.args, context, { timeoutMs: 5e3 });
         if (checkoutRes.exitCode !== 0) {
           return {
             success: false,
@@ -24533,7 +24886,7 @@ var require_git_stage_tool = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.GitStageFilesTool = void 0;
     var node_path_1 = __importDefault(require("path"));
-    var terminal_1 = require_dist5();
+    var git_runner_js_1 = require_git_runner();
     var GitStageFilesTool2 = class {
       name = "git_stage_files";
       description = "Stage specifically authorized files for commit. Rejects arbitrary staging and enforces ChangeSet confinement.";
@@ -24554,7 +24907,6 @@ var require_git_stage_tool = __commonJS({
         },
         required: ["files"]
       };
-      processManager = new terminal_1.ProcessManager();
       async execute(args, context) {
         const cwd = context.workspace.rootPath;
         const requestedFiles = args.files;
@@ -24595,10 +24947,10 @@ var require_git_stage_tool = __commonJS({
           executable: "git",
           args: ["add", "--", ...normalizedRequested],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const addRes = await this.processManager.start(addPlan, { timeoutMs: 1e4 });
+        const addRes = await git_runner_js_1.GitRunner.run(addPlan.args, context, { timeoutMs: 1e4 });
         if (addRes.exitCode !== 0) {
           return {
             success: false,
@@ -24612,19 +24964,19 @@ var require_git_stage_tool = __commonJS({
           executable: "git",
           args: ["diff", "--cached", "--name-only"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const nameOnlyRes = await this.processManager.start(nameOnlyPlan, { timeoutMs: 5e3 });
+        const nameOnlyRes = await git_runner_js_1.GitRunner.run(nameOnlyPlan.args, context, { timeoutMs: 5e3 });
         const stagedFiles = nameOnlyRes.stdout.split("\n").map((s) => s.trim().replace(/\\/g, "/")).filter((s) => s.length > 0);
         const diffPlan = {
           executable: "git",
           args: ["diff", "--cached"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const diffRes = await this.processManager.start(diffPlan, { timeoutMs: 5e3 });
+        const diffRes = await git_runner_js_1.GitRunner.run(diffPlan.args, context, { timeoutMs: 5e3 });
         const cachedDiff = diffRes.stdout.slice(0, 5e4);
         let matchesChangeSet = true;
         if (authorizedSet) {
@@ -24658,7 +25010,7 @@ var require_git_commit_tool = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.GitCommitTool = void 0;
     var node_path_1 = __importDefault(require("path"));
-    var terminal_1 = require_dist5();
+    var git_runner_js_1 = require_git_runner();
     var GitCommitTool2 = class _GitCommitTool {
       name = "git_commit";
       description = "Create a git commit with conventional commit message validation and staged file verification.";
@@ -24677,7 +25029,6 @@ var require_git_commit_tool = __commonJS({
         },
         required: ["message"]
       };
-      processManager = new terminal_1.ProcessManager();
       static validateCommitMessage(message) {
         if (!message || typeof message !== "string" || message.trim().length === 0) {
           return { valid: false, error: "Commit message cannot be empty." };
@@ -24711,10 +25062,10 @@ var require_git_commit_tool = __commonJS({
           executable: "git",
           args: ["diff", "--cached", "--name-only"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const stagedRes = await this.processManager.start(stagedPlan, { timeoutMs: 5e3 });
+        const stagedRes = await git_runner_js_1.GitRunner.run(stagedPlan.args, context, { timeoutMs: 5e3 });
         const stagedFiles = stagedRes.stdout.split("\n").map((s) => s.trim().replace(/\\/g, "/")).filter((s) => s.length > 0);
         if (stagedFiles.length === 0) {
           return {
@@ -24743,19 +25094,19 @@ var require_git_commit_tool = __commonJS({
           executable: "git",
           args: ["branch", "--show-current"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const branchRes = await this.processManager.start(branchPlan, { timeoutMs: 5e3 });
+        const branchRes = await git_runner_js_1.GitRunner.run(branchPlan.args, context, { timeoutMs: 5e3 });
         const branch = branchRes.stdout.trim();
         const commitPlan = {
           executable: "git",
           args: ["commit", "-m", rawMessage.trim()],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const commitRes = await this.processManager.start(commitPlan, { timeoutMs: 1e4 });
+        const commitRes = await git_runner_js_1.GitRunner.run(commitPlan.args, context, { timeoutMs: 1e4 });
         if (commitRes.exitCode !== 0) {
           return {
             success: false,
@@ -24769,10 +25120,10 @@ var require_git_commit_tool = __commonJS({
           executable: "git",
           args: ["rev-parse", "HEAD"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const revRes = await this.processManager.start(revPlan, { timeoutMs: 5e3 });
+        const revRes = await git_runner_js_1.GitRunner.run(revPlan.args, context, { timeoutMs: 5e3 });
         const commitHash = revRes.stdout.trim();
         return {
           success: true,
@@ -24793,7 +25144,7 @@ var require_git_push_tool = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.GitPushTool = void 0;
-    var terminal_1 = require_dist5();
+    var git_runner_js_1 = require_git_runner();
     var GitPushTool2 = class {
       name = "git_push";
       description = "Push committed changes to a remote repository. A human approves every push; there is no way to pre-authorise it.";
@@ -24807,7 +25158,6 @@ var require_git_push_tool = __commonJS({
         },
         required: []
       };
-      processManager = new terminal_1.ProcessManager();
       async execute(args, context) {
         const cwd = context.workspace.rootPath;
         const remote = args.remote || "origin";
@@ -24826,10 +25176,10 @@ var require_git_push_tool = __commonJS({
             executable: "git",
             args: ["branch", "--show-current"],
             cwd,
-            source: "AGENT",
+            source: "GIT",
             category: "SAFE_DEVELOPMENT"
           };
-          const branchRes = await this.processManager.start(branchPlan, { timeoutMs: 5e3 });
+          const branchRes = await git_runner_js_1.GitRunner.run(branchPlan.args, context, { timeoutMs: 5e3 });
           branch = branchRes.stdout.trim();
         }
         if (!branch || branch === "HEAD") {
@@ -24845,19 +25195,19 @@ var require_git_push_tool = __commonJS({
           executable: "git",
           args: ["rev-parse", "HEAD"],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const revRes = await this.processManager.start(revPlan, { timeoutMs: 5e3 });
+        const revRes = await git_runner_js_1.GitRunner.run(revPlan.args, context, { timeoutMs: 5e3 });
         const commitHash = revRes.stdout.trim();
         const pushPlan = {
           executable: "git",
           args: ["push", remote, branch],
           cwd,
-          source: "AGENT",
+          source: "GIT",
           category: "SAFE_DEVELOPMENT"
         };
-        const pushRes = await this.processManager.start(pushPlan, { timeoutMs: 3e4 });
+        const pushRes = await git_runner_js_1.GitRunner.run(pushPlan.args, context, { timeoutMs: 3e4 });
         if (pushRes.exitCode !== 0) {
           return {
             success: false,
@@ -24900,6 +25250,7 @@ var require_dist6 = __commonJS({
       for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports3, p)) __createBinding(exports3, m, p);
     };
     Object.defineProperty(exports2, "__esModule", { value: true });
+    __exportStar(require_git_runner(), exports2);
     __exportStar(require_git_status_tool(), exports2);
     __exportStar(require_git_diff_tool(), exports2);
     __exportStar(require_git_branch_tool(), exports2);
@@ -25123,6 +25474,7 @@ var require_validation_tools = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.RunTypecheckTool = exports2.RunLinterTool = exports2.RunBuildTool = exports2.RunTestsTool = void 0;
+    var tool_core_1 = require_dist2();
     var terminal_1 = require_dist5();
     var command_resolver_1 = require_command_resolver();
     var BaseValidationTool = class {
@@ -25139,6 +25491,7 @@ var require_validation_tools = __commonJS({
         this.target = target;
       }
       async execute(args, context) {
+        (0, tool_core_1.throwIfAborted)(context.abortSignal, this.name);
         const cwd = context.workspace.rootPath;
         const vContext = { cwd, target: this.target };
         const plan = command_resolver_1.CommandResolver.resolve(vContext);
@@ -25158,19 +25511,12 @@ var require_validation_tools = __commonJS({
         if (decision.decision !== "ALLOW") {
           throw new Error(`COMMAND_DENIED: Validation command denied by policy. Reason: ${decision.reason}`);
         }
-        const abortController = new AbortController();
-        if (context.cancellation) {
-          if (context.cancellation.isCancelled) {
-            return this.createResult(null, "CANCELLED", 0, false);
-          }
-          context.cancellation.onCancel(() => abortController.abort());
-        }
         const result = await this.processManager.start(plan, {
           timeoutMs: context.limits.maxCommandTimeoutMs || 6e4,
           maxStdoutBytes: context.limits.maxStdoutBytes || 512 * 1024,
           maxStderrBytes: context.limits.maxStderrBytes || 512 * 1024,
           maxCombinedOutputBytes: context.limits.maxCombinedOutputBytes || 1024 * 1024,
-          abortSignal: abortController.signal
+          abortSignal: context.abortSignal
         });
         const sanitized = terminal_1.OutputSanitizer.sanitizeResult(result);
         let status = "PASS";
@@ -25367,6 +25713,7 @@ var require_dist8 = __commonJS({
         return { valid: true, url: parsed };
       }
     };
+    var import_tool_core2 = require_dist2();
     var WebDocsTool2 = class _WebDocsTool {
       name = "web_docs";
       description = "Fetch official documentation content safely from allowed documentation domains.";
@@ -25409,6 +25756,7 @@ ${decoded.trim()}
         };
       }
       async execute(args, context) {
+        (0, import_tool_core2.throwIfAborted)(context?.abortSignal, "web_docs");
         const rawUrl = args.url;
         const maxBytes = Math.min(1e5, Math.max(1e3, args.maxBytes || 5e4));
         let currentUrl = rawUrl;
@@ -25437,6 +25785,7 @@ ${decoded.trim()}
         while (redirectCount <= maxRedirects) {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 8e3);
+          context?.abortSignal?.addEventListener("abort", () => controller.abort(), { once: true });
           try {
             response = await fetch(finalUrl.toString(), {
               method: "GET",
@@ -27888,6 +28237,7 @@ var require_dist15 = __commonJS({
       WorkingSetManager: () => WorkingSetManager
     });
     module2.exports = __toCommonJS2(index_exports);
+    var import_tool_core2 = require_dist2();
     var ContextEngine = class {
       constructor(executor) {
         this.executor = executor;
@@ -27935,13 +28285,16 @@ var require_dist15 = __commonJS({
           searchResults: workingSet.searchResults,
           modifiedFiles: workingSet.modifiedFiles
         };
-        const dummyToolContext = {
+        const treeToolContext = {
           taskId: request.taskId,
           workspace: request.workspace,
-          limits: { maxResults: 1e3, maxBytes: budget.maxFileChars }
+          limits: { maxResults: 1e3, maxBytes: budget.maxFileChars },
+          // Compilation has nothing of its own to cancel; the caller's signal belongs here once
+          // ContextEngine is on the execution path (Phase 2.1).
+          abortSignal: (0, import_tool_core2.neverAborted)()
         };
         try {
-          const treeResult = await this.executor.execute("get_workspace_tree", { maxDepth: budget.maxTreeDepth }, dummyToolContext);
+          const treeResult = await this.executor.execute("get_workspace_tree", { maxDepth: budget.maxTreeDepth }, treeToolContext);
           compiled.repositoryMap = {
             tree: treeResult.tree,
             isTruncated: treeResult.truncated
@@ -28977,11 +29330,15 @@ var require_dist16 = __commonJS({
         }
         const counts = _ApprovalGate.countChanges(diff);
         const operation = exists ? "MODIFY" : "CREATE";
+        let content;
+        if (operation === "CREATE") {
+          content = proposed.length > MAX_DIFF_CHARS ? proposed.slice(0, MAX_DIFF_CHARS) : proposed;
+        }
         return {
           kind,
           tool,
           summary: `${operation === "CREATE" ? "Create" : "Modify"} ${_ApprovalGate.normalizeRelativePath(path)} (+${counts.additions} -${counts.deletions})`,
-          file: { path, operation, diff, additions: counts.additions, deletions: counts.deletions, truncated, note },
+          file: { path, operation, diff, additions: counts.additions, deletions: counts.deletions, truncated, note, content },
           scopes: []
         };
       }
@@ -29127,6 +29484,7 @@ var require_dist16 = __commonJS({
     };
     var import_model_core3 = require_dist9();
     var import_shared2 = require_dist();
+    var import_tool_core2 = require_dist2();
     var import_planning_engine2 = require_dist11();
     var import_verification_engine2 = require_dist12();
     var import_diagnostics_engine = require_dist13();
@@ -29591,19 +29949,9 @@ var require_dist16 = __commonJS({
           workspace: { rootPath: ctx.workspaceRoot },
           limits: { maxResults: 100, maxBytes: 1e6 },
           permissions: permissionsFromContract(contract),
-          abortSignal: ctx.abortSignal,
-          cancellation: ctx.abortSignal ? {
-            get isCancelled() {
-              return ctx.abortSignal?.aborted ?? false;
-            },
-            onCancel: (cb) => {
-              if (ctx.abortSignal?.aborted) {
-                cb();
-              } else {
-                ctx.abortSignal?.addEventListener("abort", cb, { once: true });
-              }
-            }
-          } : void 0
+          // One cancellation mechanism, always present: an orchestrator context without a signal gets
+          // one that never aborts rather than a tool silently losing the ability to stop.
+          abortSignal: ctx.abortSignal ?? (0, import_tool_core2.neverAborted)()
         };
         const runtimeToolCtx = {
           ...toolCtx,
@@ -34072,6 +34420,7 @@ __export(server_exports, {
   createAuthMiddleware: () => createAuthMiddleware,
   createLoopbackGuard: () => createLoopbackGuard,
   createRuntimeApp: () => createRuntimeApp,
+  createToolRegistry: () => createToolRegistry,
   default: () => server_default,
   defaultProviderFactory: () => defaultProviderFactory,
   extractPresentedToken: () => extractPresentedToken,
@@ -34258,24 +34607,7 @@ function defaultProviderFactory(selection, providers) {
   const nvidiaEndpoint = providers?.["nvidia"]?.endpoint;
   return new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint);
 }
-function createRuntimeApp(options = {}) {
-  const providerFactory = options.providerFactory || defaultProviderFactory;
-  const approvalTimeoutMs = options.approvalTimeoutMs ?? (Number(process.env.COMU_APPROVAL_TIMEOUT_MS) > 0 ? Number(process.env.COMU_APPROVAL_TIMEOUT_MS) : 10 * 60 * 1e3);
-  const allowedOrigin = options.allowedOriginPattern || DEFAULT_ALLOWED_ORIGIN;
-  const app2 = (0, import_express.default)();
-  app2.use(createLoopbackGuard());
-  app2.use((0, import_cors.default)({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, false);
-      callback(null, allowedOrigin.test(origin));
-    },
-    allowedHeaders: ["Content-Type", "Authorization", "X-COMU-Token"],
-    methods: ["GET", "POST", "DELETE", "OPTIONS"]
-  }));
-  if (options.authToken) {
-    app2.use(createAuthMiddleware(options.authToken));
-  }
-  app2.use(import_express.default.json());
+function createToolRegistry() {
   const registry = new import_tool_core.ToolRegistry();
   registry.register(import_tool_filesystem.ReadFileTool);
   registry.register(import_tool_filesystem.ListDirectoryTool);
@@ -34300,6 +34632,27 @@ function createRuntimeApp(options = {}) {
     ...import_tool_search.SearchTextTool,
     execute: async (args, ctx) => import_tool_search.SearchTextTool.execute(args, { ...ctx, searchBackend })
   });
+  return registry;
+}
+function createRuntimeApp(options = {}) {
+  const providerFactory = options.providerFactory || defaultProviderFactory;
+  const approvalTimeoutMs = options.approvalTimeoutMs ?? (Number(process.env.COMU_APPROVAL_TIMEOUT_MS) > 0 ? Number(process.env.COMU_APPROVAL_TIMEOUT_MS) : 10 * 60 * 1e3);
+  const allowedOrigin = options.allowedOriginPattern || DEFAULT_ALLOWED_ORIGIN;
+  const app2 = (0, import_express.default)();
+  app2.use(createLoopbackGuard());
+  app2.use((0, import_cors.default)({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, false);
+      callback(null, allowedOrigin.test(origin));
+    },
+    allowedHeaders: ["Content-Type", "Authorization", "X-COMU-Token"],
+    methods: ["GET", "POST", "DELETE", "OPTIONS"]
+  }));
+  if (options.authToken) {
+    app2.use(createAuthMiddleware(options.authToken));
+  }
+  app2.use(import_express.default.json());
+  const registry = createToolRegistry();
   const executor = new import_tool_core.ToolExecutor(registry);
   const diffEngine = new import_diff_engine.ComuDiffEngine();
   const interactionManager = new import_agent_core.InteractionManager();
@@ -34920,6 +35273,7 @@ var server_default = app;
   createAuthMiddleware,
   createLoopbackGuard,
   createRuntimeApp,
+  createToolRegistry,
   defaultProviderFactory,
   extractPresentedToken,
   generateRuntimeToken,

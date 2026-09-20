@@ -1,7 +1,8 @@
 import path from "node:path";
 import { AgentTool, ToolCapability, ToolContext, ToolApprovalRequirement } from "@comu/tool-core";
-import { ProcessManager, CommandPlan } from "@comu/terminal";
 import { GitCommitResult } from "@comu/protocol";
+import { GitRunner } from "./git_runner.js";
+import type { CommandPlan } from "@comu/terminal";
 
 export class GitCommitTool implements AgentTool<any, GitCommitResult> {
   name = "git_commit";
@@ -21,8 +22,6 @@ export class GitCommitTool implements AgentTool<any, GitCommitResult> {
     },
     required: ["message"]
   };
-
-  private processManager = new ProcessManager();
 
   public static validateCommitMessage(message: string): { valid: boolean; error?: string } {
     if (!message || typeof message !== "string" || message.trim().length === 0) {
@@ -66,10 +65,10 @@ export class GitCommitTool implements AgentTool<any, GitCommitResult> {
       executable: "git",
       args: ["diff", "--cached", "--name-only"],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const stagedRes = await this.processManager.start(stagedPlan, { timeoutMs: 5000 });
+    const stagedRes = await GitRunner.run(stagedPlan.args, context, { timeoutMs: 5000 });
     const stagedFiles = stagedRes.stdout
       .split("\n")
       .map(s => s.trim().replace(/\\/g, "/"))
@@ -106,10 +105,10 @@ export class GitCommitTool implements AgentTool<any, GitCommitResult> {
       executable: "git",
       args: ["branch", "--show-current"],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const branchRes = await this.processManager.start(branchPlan, { timeoutMs: 5000 });
+    const branchRes = await GitRunner.run(branchPlan.args, context, { timeoutMs: 5000 });
     const branch = branchRes.stdout.trim();
 
     // Execute commit
@@ -117,10 +116,10 @@ export class GitCommitTool implements AgentTool<any, GitCommitResult> {
       executable: "git",
       args: ["commit", "-m", rawMessage.trim()],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const commitRes = await this.processManager.start(commitPlan, { timeoutMs: 10000 });
+    const commitRes = await GitRunner.run(commitPlan.args, context, { timeoutMs: 10000 });
     if (commitRes.exitCode !== 0) {
       return {
         success: false,
@@ -136,10 +135,10 @@ export class GitCommitTool implements AgentTool<any, GitCommitResult> {
       executable: "git",
       args: ["rev-parse", "HEAD"],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const revRes = await this.processManager.start(revPlan, { timeoutMs: 5000 });
+    const revRes = await GitRunner.run(revPlan.args, context, { timeoutMs: 5000 });
     const commitHash = revRes.stdout.trim();
 
     return {

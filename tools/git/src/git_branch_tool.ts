@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { AgentTool, ToolCapability, ToolContext } from "@comu/tool-core";
-import { ProcessManager, CommandPlan } from "@comu/terminal";
 import { GitBranchResult } from "@comu/protocol";
+import { GitRunner } from "./git_runner.js";
+import type { CommandPlan } from "@comu/terminal";
 
 export class GitCreateBranchTool implements AgentTool<any, GitBranchResult> {
   name = "git_create_branch";
@@ -16,8 +17,6 @@ export class GitCreateBranchTool implements AgentTool<any, GitBranchResult> {
     },
     required: ["branchName"]
   };
-
-  private processManager = new ProcessManager();
 
   public static sanitizeBranchName(name: string): string {
     return name
@@ -60,10 +59,10 @@ export class GitCreateBranchTool implements AgentTool<any, GitBranchResult> {
       executable: "git",
       args: ["branch", "--show-current"],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const currentRes = await this.processManager.start(currentBranchPlan, { timeoutMs: 5000 });
+    const currentRes = await GitRunner.run(currentBranchPlan.args, context, { timeoutMs: 5000 });
     const previousBranch = currentRes.stdout.trim() || undefined;
 
     if (!previousBranch || previousBranch === "HEAD") {
@@ -80,10 +79,10 @@ export class GitCreateBranchTool implements AgentTool<any, GitBranchResult> {
       executable: "git",
       args: ["rev-parse", "--verify", `refs/heads/${branchName}`],
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const existsRes = await this.processManager.start(checkExistsPlan, { timeoutMs: 5000 });
+    const existsRes = await GitRunner.run(checkExistsPlan.args, context, { timeoutMs: 5000 });
     if (existsRes.exitCode === 0) {
       return {
         success: false,
@@ -104,10 +103,10 @@ export class GitCreateBranchTool implements AgentTool<any, GitBranchResult> {
       executable: "git",
       args: checkoutArgs,
       cwd,
-      source: "AGENT",
+      source: "GIT",
       category: "SAFE_DEVELOPMENT"
     };
-    const checkoutRes = await this.processManager.start(checkoutPlan, { timeoutMs: 5000 });
+    const checkoutRes = await GitRunner.run(checkoutPlan.args, context, { timeoutMs: 5000 });
     if (checkoutRes.exitCode !== 0) {
       return {
         success: false,
