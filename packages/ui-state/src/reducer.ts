@@ -108,6 +108,11 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
   let next: SessionState = { ...state, seenEventIds: rememberEvent(state.seenEventIds, key) };
   const e = event as any;
 
+  // A replica rebuilt purely from the stream still knows which task it is watching.
+  if (!next.taskId && typeof e.taskId === "string" && e.taskId) {
+    next.taskId = e.taskId;
+  }
+
   switch (event.type) {
     case "task.started":
       next.status = "running";

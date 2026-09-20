@@ -23,9 +23,17 @@ body {
   line-height: var(--comu-line);
   color: var(--comu-text);
   background: var(--comu-surface);
-  /* A 300px panel has no room for a horizontal scrollbar, and mid-word breaks are a defect. */
-  overflow-wrap: anywhere;
+  /*
+   * Deliberately NOT overflow-wrap: anywhere. Applying it globally is what breaks a label in half
+   * at narrow widths. Components opt in with .comu-wrap-anywhere for content whose shape we do not
+   * control: file paths, diff bodies and model output.
+   */
   word-break: normal;
+}
+
+/* Opt-in breaking for uncontrolled content only. */
+.comu-wrap-anywhere {
+  overflow-wrap: anywhere;
 }
 
 #root {

@@ -169,3 +169,18 @@
   font-family: var(--comu-font-mono);
   font-size: var(--comu-text-xs);
 }
+
+/* ── Icon ───────────────────────────────────────────────────────── */
+.icon {
+  flex-shrink: 0;
+}
+
+.spin {
+  animation: comu-spin 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

@@ -51,3 +51,31 @@ imported, so none of it reaches the production bundle.
 The panel holds a **replica**. `@comu/ui-state` is the single reducer both the extension host and
 this app run, so neither re-implements what an event means, and the host can always rebuild the
 replica from its own authoritative copy. See that package's README for the replication model.
+
+## Visual regression
+
+```bash
+pnpm --filter @comu/webview test:visual          # check against the baselines
+pnpm --filter @comu/webview test:visual:update   # accept intended changes
+```
+
+Playwright screenshots the panel across the full harness matrix: every fixture, in dark, light and
+high contrast dark, at 280, 400 and 900 pixels. 54 baselines, committed under
+`tests/visual/__screenshots__`.
+
+This is the only check that can see the defect class the rebuild exists to fix. A hardcoded colour
+that looks fine in dark and unreadable in light, a control that overflows a narrow panel, a word
+broken in half: none of it is visible to typecheck, lint or a DOM assertion.
+
+Determinism: the clock is frozen, motion is disabled through `prefers-reduced-motion` (which the
+token layer honours), fixtures are delivered instantly rather than paced, and the suite waits for a
+settled signal from the harness before capturing. The tolerance is a 1% pixel ratio, enough to
+absorb sub-pixel antialiasing and not enough to hide a layout change.
+
+Baselines are per-platform, because system font rendering differs. Playwright names them with the
+OS suffix, so a new platform runs `test:visual:update` once and commits its own set. The committed
+baselines are `win32`.
+
+Alongside the screenshots, the suite asserts three invariants that a picture alone would not catch:
+nothing pushes the layout wider than 280 pixels, no label or control is allowed to break mid-word,
+and no debug bar is present.

@@ -64,6 +64,8 @@ class HarnessHost {
   /** Replays a fixture, delivering each event the way the runtime would. */
   public play(events: AgentEvent[], speed: number) {
     this.stop();
+    // Visual regression waits on this flag, so a screenshot is never taken mid-replay.
+    delete document.body.dataset.comuHarnessSettled;
     this.state = createInitialSessionState();
     this.sequencer.reset("fixture-task");
 
@@ -72,7 +74,10 @@ class HarnessHost {
     const paced = speed === 0 ? [] : events.slice(immediate.length);
 
     this.emitAll(immediate);
-    if (paced.length === 0) return;
+    if (paced.length === 0) {
+      this.markSettled();
+      return;
+    }
 
     let i = 0;
     this.timer = window.setInterval(() => {
@@ -85,10 +90,18 @@ class HarnessHost {
     }, speed);
   }
 
+  private markSettled() {
+    // One frame after the last delivery, so React has committed.
+    window.setTimeout(() => {
+      document.body.dataset.comuHarnessSettled = "1";
+    }, 0);
+  }
+
   public stop() {
     if (this.timer !== undefined) {
       window.clearInterval(this.timer);
       this.timer = undefined;
+      this.markSettled();
     }
   }
 

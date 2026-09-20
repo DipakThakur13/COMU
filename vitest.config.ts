@@ -6,7 +6,9 @@ export default defineConfig({
       "**/node_modules/**",
       "**/dist/**",
       "**/.vscode-test/**",
-      "apps/vscode-extension/src/test/**"
+      "apps/vscode-extension/src/test/**",
+      // Playwright owns the visual suite; vitest would try to run it as unit tests.
+      "apps/webview/tests/visual/**"
     ]
   }
 });

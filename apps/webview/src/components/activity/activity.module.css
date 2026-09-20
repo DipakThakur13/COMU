@@ -95,6 +95,7 @@
   padding: 0 var(--comu-space-3) var(--comu-space-2) 34px;
   font-size: var(--comu-text-xs);
   color: var(--comu-text-muted);
+  /* Tool output and paths: break anywhere rather than overflow a 280px panel. */
   overflow-wrap: anywhere;
 }
 

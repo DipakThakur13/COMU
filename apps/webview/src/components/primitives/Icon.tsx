@@ -10,6 +10,7 @@
  * token of whatever it sits in. Emoji cannot do that, which is why the old interface could not be
  * themed.
  */
+import styles from "./primitives.module.css";
 import checkSvg from "@vscode/codicons/src/icons/check.svg?raw";
 import errorSvg from "@vscode/codicons/src/icons/error.svg?raw";
 import warningSvg from "@vscode/codicons/src/icons/warning.svg?raw";
@@ -93,7 +94,7 @@ export function Icon({ name, label, size = 14, className, spin }: IconProps) {
   const inner = INNER.get(name) ?? "";
   return (
     <svg
-      className={className}
+      className={[styles.icon, spin ? styles.spin : "", className].filter(Boolean).join(" ")}
       width={size}
       height={size}
       viewBox="0 0 16 16"
@@ -102,11 +103,6 @@ export function Icon({ name, label, size = 14, className, spin }: IconProps) {
       role={label ? "img" : undefined}
       aria-label={label}
       focusable="false"
-      style={
-        spin
-          ? { animation: "comu-spin 1.4s linear infinite", flexShrink: 0 }
-          : { flexShrink: 0 }
-      }
       // Build-time constant from node_modules, never runtime or model-supplied content.
       dangerouslySetInnerHTML={{ __html: inner }}
     />
