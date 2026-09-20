@@ -26,6 +26,8 @@ is usually the most useful part.
 | [0009](0009-every-task-ends-with-exactly-one-terminal-event.md) | Every task ends with exactly one terminal event, guaranteed by the runtime | Runtime ↔ clients |
 | [0010](0010-budgets-are-per-task-and-reported-back.md) | A budget is a per-task parameter with a ceiling, and the resolved budget is reported back | Runtime limits |
 | [0011](0011-retry-depends-on-why-the-request-failed.md) | How many times a request is retried depends on why it failed | Model requests |
+| [0012](0012-commands-are-allowed-by-name-and-git-by-subcommand.md) | Commands are allowed by name, git is allowed by subcommand and caller | Command execution |
+| [0013](0013-no-shell-and-windows-shims.md) | No shell, ever — and what that costs on Windows | Command execution |
 
 ## What belongs here
 
