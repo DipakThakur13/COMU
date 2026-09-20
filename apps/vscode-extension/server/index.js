@@ -25377,7 +25377,7 @@ var require_dist8 = __commonJS({
     var WebDocsTool2 = class _WebDocsTool {
       name = "web_docs";
       description = "Fetch official documentation content safely from allowed documentation domains.";
-      capabilities = ["execute"];
+      capabilities = ["network"];
       inputSchema = {
         type: "object",
         properties: {
@@ -26518,10 +26518,12 @@ var require_dist10 = __commonJS({
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
     var index_exports = {};
     __export2(index_exports, {
+      TASK_AUTONOMY_LEVELS: () => TASK_AUTONOMY_LEVELS2,
       TASK_MODES: () => TASK_MODES2
     });
     module2.exports = __toCommonJS2(index_exports);
     var TASK_MODES2 = ["AUTO", "CHAT", "ASK", "PLAN", "AGENT"];
+    var TASK_AUTONOMY_LEVELS2 = ["readonly", "ask", "auto"];
   }
 });
 
@@ -28665,11 +28667,16 @@ var require_dist16 = __commonJS({
             let expectedMutation = false;
             let verificationRequired = false;
             if (classification.mode === "ASK" || classification.mode === "PLAN") {
-              allowedCapabilities = ["read"];
+              allowedCapabilities = ["read", "network"];
             } else if (classification.mode === "AGENT") {
-              allowedCapabilities = ["read", "write", "execute"];
+              allowedCapabilities = ["read", "write", "execute", "network"];
               expectedMutation = true;
               verificationRequired = true;
+            }
+            if (input.autonomy === "readonly") {
+              allowedCapabilities = allowedCapabilities.filter((c) => c === "read" || c === "network");
+              expectedMutation = false;
+              verificationRequired = false;
             }
             return {
               taskId: input.taskId,
@@ -28691,8 +28698,10 @@ var require_dist16 = __commonJS({
     });
     var index_exports = {};
     __export2(index_exports, {
+      ALL_TOOL_CAPABILITIES: () => ALL_TOOL_CAPABILITIES,
       AgentKernel: () => AgentKernel,
       AgentOrchestrator: () => AgentOrchestrator2,
+      ApprovalGate: () => ApprovalGate,
       CHAT_SYSTEM_PROMPT: () => CHAT_SYSTEM_PROMPT,
       CLARIFICATION_OPTIONS: () => CLARIFICATION_OPTIONS,
       ClarificationHandler: () => ClarificationHandler,
@@ -28702,10 +28711,340 @@ var require_dist16 = __commonJS({
       ModelIntentClassifier: () => ModelIntentClassifier,
       SubagentManager: () => SubagentManager2,
       formatStepSummary: () => formatStepSummary,
+      permissionsFromContract: () => permissionsFromContract,
       stripPoliteness: () => stripPoliteness,
+      toolAllowedByContract: () => toolAllowedByContract,
       validateTaskContract: () => validateTaskContract
     });
     module2.exports = __toCommonJS2(index_exports);
+    var ALL_TOOL_CAPABILITIES = ["read", "write", "execute", "network"];
+    function permissionsFromContract(contract) {
+      const capabilities = {};
+      for (const cap of ALL_TOOL_CAPABILITIES) {
+        capabilities[cap] = contract.allowedCapabilities.includes(cap) ? "ALLOW" : "DENY";
+      }
+      return { capabilities };
+    }
+    function toolAllowedByContract(contract, tool) {
+      if (contract.allowedTools.length > 0 && !contract.allowedTools.includes(tool.name)) return false;
+      return tool.capabilities.every((cap) => contract.allowedCapabilities.includes(cap));
+    }
+    function validateTaskContract(contract, toolName, requiredCapabilities) {
+      for (const cap of requiredCapabilities) {
+        if (!contract.allowedCapabilities.includes(cap)) {
+          return {
+            valid: false,
+            reason: `Capability '${cap}' is forbidden in ${contract.mode} mode.`
+          };
+        }
+      }
+      if (contract.allowedTools.length > 0) {
+        if (!contract.allowedTools.includes(toolName)) {
+          return {
+            valid: false,
+            reason: `Tool '${toolName}' is not allowed by the current task contract.`
+          };
+        }
+      }
+      if (contract.mode === "CHAT") {
+        return {
+          valid: false,
+          reason: "No tools can be executed in CHAT mode."
+        };
+      }
+      if (contract.mode === "ASK" || contract.mode === "PLAN") {
+        if (requiredCapabilities.includes("write") || requiredCapabilities.includes("execute")) {
+          return {
+            valid: false,
+            reason: `Write/Execute tools are forbidden in ${contract.mode} mode.`
+          };
+        }
+      }
+      return { valid: true };
+    }
+    var import_path3 = require("path");
+    var MAX_DIFF_CHARS = 2e4;
+    var SHORT_COMMAND_ARGS = 6;
+    var ApprovalGate = class _ApprovalGate {
+      constructor(options) {
+        this.options = options;
+      }
+      options;
+      grants = /* @__PURE__ */ new Set();
+      get autonomy() {
+        return this.options.autonomy;
+      }
+      /** Does this tool call need a human decision under the current autonomy level? */
+      requiresApproval(tool) {
+        if (tool.requiresApproval === "always") return true;
+        if (this.options.autonomy !== "ask") return false;
+        return tool.capabilities.includes("write") || tool.capabilities.includes("execute");
+      }
+      // ---------------------------------------------------------------------------------------
+      // Scope keys
+      // ---------------------------------------------------------------------------------------
+      static normalizeRelativePath(p) {
+        const unified = String(p || "").replace(/\\/g, "/");
+        const normalized = import_path3.posix.normalize(unified).replace(/^\.\//, "").replace(/^\/+/, "");
+        return normalized === "." ? "" : normalized;
+      }
+      /**
+       * Command grant key: executable plus the full normalised argument vector for short commands, so
+       * `npm run build` and `npm run deploy` are distinct grants. Long argument vectors keep the first
+       * two arguments and the count, which still separates subcommands.
+       */
+      static commandKey(executable, args) {
+        const exe = String(executable || "").trim().toLowerCase().split(/[/\\]/).pop() || "";
+        const list = Array.isArray(args) ? args.map((a) => String(a).trim()).filter((a) => a.length > 0) : [];
+        if (list.length <= SHORT_COMMAND_ARGS) {
+          return `cmd:${[exe, ...list].join(" ")}`;
+        }
+        return `cmd:${[exe, ...list.slice(0, 2)].join(" ")} (+${list.length - 2} more args)`;
+      }
+      /** Every grant key that would cover this call, most specific first. */
+      static matchingKeys(payload) {
+        if (payload.file) {
+          const rel = _ApprovalGate.normalizeRelativePath(payload.file.path);
+          const keys = [`file:${rel}`];
+          const parts = rel.split("/");
+          parts.pop();
+          while (parts.length > 0) {
+            keys.push(`dir:${parts.join("/")}/`);
+            parts.pop();
+          }
+          keys.push("dir:/");
+          keys.push("writes:*");
+          return keys;
+        }
+        if (payload.command) {
+          return [_ApprovalGate.commandKey(payload.command.executable, payload.command.args)];
+        }
+        if (payload.kind === "git_push") {
+          return [];
+        }
+        return [`tool:${payload.tool}`];
+      }
+      /** The breadth choices offered on the card. Each has its own key and its own label. */
+      static scopeOptions(payload) {
+        if (payload.file) {
+          const rel = _ApprovalGate.normalizeRelativePath(payload.file.path);
+          const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+          const options = [
+            { key: `file:${rel}`, label: `Approve writes to ${rel} for this session` }
+          ];
+          if (dir) {
+            options.push({ key: `dir:${dir}/`, label: `Approve writes under ${dir}/ for this session` });
+          }
+          options.push({ key: "writes:*", label: "Approve all writes for this session" });
+          return options;
+        }
+        if (payload.command) {
+          const key = _ApprovalGate.commandKey(payload.command.executable, payload.command.args);
+          return [{ key, label: `Approve this exact command for this session` }];
+        }
+        if (payload.kind === "git_push") {
+          return [];
+        }
+        return [{ key: `tool:${payload.tool}`, label: `Approve ${payload.tool} for this session` }];
+      }
+      /** Returns the grant key that already covers this call, if any. */
+      findGrant(payload) {
+        return _ApprovalGate.matchingKeys(payload).find((key) => this.grants.has(key));
+      }
+      grant(scopeKey) {
+        this.grants.add(scopeKey);
+      }
+      listGrants() {
+        return Array.from(this.grants);
+      }
+      // ---------------------------------------------------------------------------------------
+      // Payload
+      // ---------------------------------------------------------------------------------------
+      buildPayload(tool, args, baseline) {
+        const a = args && typeof args === "object" ? args : {};
+        let payload;
+        if (tool.name === "write_file" || tool.name === "create_file") {
+          const path = String(a.path ?? "");
+          const proposed = typeof a.content === "string" ? a.content : String(a.content ?? "");
+          payload = this.filePayload("file_write", tool.name, path, proposed, baseline);
+        } else if (tool.name === "edit_file") {
+          const path = String(a.path ?? "");
+          const applied = _ApprovalGate.applyEdits(baseline?.content ?? "", Array.isArray(a.edits) ? a.edits : []);
+          payload = this.filePayload("file_edit", tool.name, path, applied.content, baseline, applied.note);
+        } else if (tool.name === "execute_command") {
+          const executable = String(a.executable ?? "");
+          const argv = Array.isArray(a.args) ? a.args.map((x) => String(x)) : [];
+          const cwd = (0, import_path3.resolve)(this.options.workspaceRoot, typeof a.cwd === "string" && a.cwd ? a.cwd : ".");
+          payload = {
+            kind: "command",
+            tool: tool.name,
+            summary: `Run ${[executable, ...argv].join(" ")}`.trim(),
+            command: { executable, args: argv, cwd },
+            scopes: []
+          };
+        } else if (tool.name === "git_push") {
+          payload = {
+            kind: "git_push",
+            tool: tool.name,
+            summary: `Push ${a.branch ? `branch ${a.branch}` : "current branch"} to ${a.remote || "origin"}`,
+            details: a,
+            scopes: []
+          };
+        } else if (tool.name === "git_commit") {
+          payload = {
+            kind: "git_commit",
+            tool: tool.name,
+            summary: `Commit: ${String(a.message ?? "").split("\n")[0]}`,
+            details: a,
+            scopes: []
+          };
+        } else {
+          payload = {
+            kind: "tool",
+            tool: tool.name,
+            summary: `Run tool ${tool.name}`,
+            details: a,
+            scopes: []
+          };
+        }
+        payload.scopes = _ApprovalGate.scopeOptions(payload);
+        return payload;
+      }
+      filePayload(kind, tool, path, proposed, baseline, note) {
+        const exists = !!baseline?.exists;
+        const original = exists ? baseline?.content ?? "" : "";
+        let diff = this.options.createUnifiedDiff(path, original, proposed);
+        let truncated = false;
+        if (diff.length > MAX_DIFF_CHARS) {
+          diff = diff.slice(0, MAX_DIFF_CHARS) + "\n... [diff truncated]";
+          truncated = true;
+        }
+        const counts = _ApprovalGate.countChanges(diff);
+        const operation = exists ? "MODIFY" : "CREATE";
+        return {
+          kind,
+          tool,
+          summary: `${operation === "CREATE" ? "Create" : "Modify"} ${_ApprovalGate.normalizeRelativePath(path)} (+${counts.additions} -${counts.deletions})`,
+          file: { path, operation, diff, additions: counts.additions, deletions: counts.deletions, truncated, note },
+          scopes: []
+        };
+      }
+      /** Mirrors EditFileTool's exact-match replacement so the diff shows what will land. */
+      static applyEdits(content, edits) {
+        let current = content;
+        const problems = [];
+        edits.forEach((edit, index) => {
+          const oldText = String(edit?.oldText ?? "");
+          const newText = String(edit?.newText ?? "");
+          const occurrences = oldText ? current.split(oldText).length - 1 : 0;
+          if (occurrences === 1) {
+            current = current.replace(oldText, newText);
+          } else if (occurrences === 0) {
+            problems.push(`edit ${index + 1}: oldText not found (the tool will fail)`);
+          } else {
+            problems.push(`edit ${index + 1}: oldText matches ${occurrences} times (the tool will fail)`);
+          }
+        });
+        return { content: current, note: problems.length ? problems.join("; ") : void 0 };
+      }
+      static countChanges(unifiedDiff) {
+        let additions = 0;
+        let deletions = 0;
+        for (const line of unifiedDiff.split("\n")) {
+          if (line.startsWith("+++") || line.startsWith("---")) continue;
+          if (line.startsWith("+")) additions++;
+          else if (line.startsWith("-")) deletions++;
+        }
+        return { additions, deletions };
+      }
+      // ---------------------------------------------------------------------------------------
+      // Decision
+      // ---------------------------------------------------------------------------------------
+      /**
+       * Asks the human, honours session grants, and defines the no-human case: with no event stream
+       * subscriber attached, or after the bounded wait, the answer is a denial.
+       */
+      async decide(payload) {
+        const existing = this.findGrant(payload);
+        if (existing) {
+          const decision2 = { approved: true, reason: "SESSION_GRANT", scopeKey: existing, message: `Covered by session grant ${existing}` };
+          this.record(payload, decision2);
+          return decision2;
+        }
+        if (this.options.hasHumanObserver && !this.options.hasHumanObserver()) {
+          const decision2 = {
+            approved: false,
+            reason: "NO_HUMAN_OBSERVER",
+            message: "No one is watching this task, so the action was not approved. Attach the COMU panel and retry, or run the task with autonomy 'auto' if no supervision is wanted."
+          };
+          this.record(payload, decision2);
+          return decision2;
+        }
+        if (!this.options.interactionManager) {
+          const decision2 = {
+            approved: false,
+            reason: "NO_INTERACTION_CHANNEL",
+            message: "This runtime has no interaction channel, so approval could not be requested."
+          };
+          this.record(payload, decision2);
+          return decision2;
+        }
+        const answer = await this.options.interactionManager.requestApprovalDecision(
+          this.options.taskId,
+          `Approval required: ${payload.summary}`,
+          _ApprovalGate.describe(payload),
+          this.options.timeoutMs,
+          this.options.onEvent,
+          this.options.abortSignal,
+          payload
+        );
+        let decision;
+        if (answer.reason === "APPROVED_SESSION") {
+          const valid = payload.scopes.some((s) => s.key === answer.scopeKey);
+          if (valid && answer.scopeKey) {
+            this.grant(answer.scopeKey);
+            decision = { approved: true, reason: "APPROVED_SESSION", scopeKey: answer.scopeKey, message: `Approved and granted ${answer.scopeKey} for this session` };
+          } else {
+            decision = { approved: true, reason: "APPROVED", message: `Approved once (unknown scope key '${answer.scopeKey}' was ignored)` };
+          }
+        } else if (answer.approved) {
+          decision = { approved: true, reason: "APPROVED", message: "Approved by the user" };
+        } else if (answer.reason === "TIMEOUT") {
+          decision = { approved: false, reason: "TIMEOUT", message: `No decision within ${Math.round(this.options.timeoutMs / 1e3)}s; treated as denied.` };
+        } else {
+          decision = { approved: false, reason: "DENIED", message: "Denied by the user" };
+        }
+        this.record(payload, decision, answer.interactionId);
+        return decision;
+      }
+      record(payload, decision, interactionId) {
+        this.options.onEvent({
+          type: "approval.decided",
+          eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          taskId: this.options.taskId,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          interactionId,
+          tool: payload.tool,
+          kind: payload.kind,
+          summary: payload.summary,
+          approved: decision.approved,
+          decision: decision.reason,
+          scopeKey: decision.scopeKey,
+          path: payload.file?.path,
+          command: payload.command ? { executable: payload.command.executable, args: payload.command.args, cwd: payload.command.cwd } : void 0
+        });
+      }
+      static describe(payload) {
+        if (payload.file) {
+          const f = payload.file;
+          return `${f.operation === "CREATE" ? "Create" : "Modify"} ${f.path}: +${f.additions} -${f.deletions}${f.note ? ` (note: ${f.note})` : ""}. Review the diff below.`;
+        }
+        if (payload.command) {
+          return `Run ${JSON.stringify([payload.command.executable, ...payload.command.args])} in ${payload.command.cwd}. No shell is involved; this is the exact argument vector.`;
+        }
+        return payload.summary;
+      }
+    };
     var import_model_core3 = require_dist9();
     var import_shared2 = require_dist();
     var import_planning_engine2 = require_dist11();
@@ -28729,7 +29068,7 @@ var require_dist16 = __commonJS({
           case "RESEARCH":
             return {
               allowedTools: ["read_file", "list_directory", "search_text", "get_workspace_tree", "web_docs"],
-              allowedCapabilities: ["read", "execute"]
+              allowedCapabilities: ["read", "network"]
             };
           case "VERIFICATION":
             return {
@@ -28746,6 +29085,21 @@ var require_dist16 = __commonJS({
               allowedCapabilities: ["read", "execute"]
             };
         }
+      }
+      /**
+       * The context a worker's tools actually run with: the parent's permissions intersected with the
+       * worker type's declared capabilities. A worker can never hold a capability its parent lacks,
+       * and never one outside its own declaration, regardless of which tool name the model produces.
+       */
+      static buildWorkerToolContext(parent, type) {
+        const declared = _SubagentManager.getWorkerCapabilities(type).allowedCapabilities;
+        const all = ["read", "write", "execute", "network"];
+        const capabilities = {};
+        for (const cap of all) {
+          const parentAllows = parent.permissions ? parent.permissions.capabilities[cap] === "ALLOW" : true;
+          capabilities[cap] = declared.includes(cap) && parentAllows ? "ALLOW" : "DENY";
+        }
+        return { ...parent, permissions: { capabilities } };
       }
       async executeSubagent(params) {
         const startTime = Date.now();
@@ -28809,7 +29163,8 @@ var require_dist16 = __commonJS({
           goal: params.goal
         });
         const allowed = _SubagentManager.getWorkerCapabilities(params.type);
-        const workerTools = params.registry.getAll().filter((t) => allowed.allowedTools.includes(t.name)).map((t) => ({
+        const workerContext = _SubagentManager.buildWorkerToolContext(params.toolContext, params.type);
+        const workerTools = params.registry.getAll().filter((t) => allowed.allowedTools.includes(t.name)).filter((t) => t.capabilities.every((cap) => workerContext.permissions.capabilities[cap] === "ALLOW")).map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema
@@ -28891,7 +29246,7 @@ var require_dist16 = __commonJS({
               }
               let toolResult;
               try {
-                toolResult = await params.executor.execute(tc.name, tc.arguments, params.toolContext);
+                toolResult = await params.executor.execute(tc.name, tc.arguments, workerContext);
               } catch (e) {
                 toolResult = { error: e.message };
               }
@@ -29040,12 +29395,12 @@ var require_dist16 = __commonJS({
           ANALYZING: ["PLANNING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
           PLANNING: ["THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
           THINKING: ["TOOL_CALLING", "OBSERVING", "VERIFYING", "THINKING", "WAITING_FOR_USER", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
-          TOOL_CALLING: ["OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+          TOOL_CALLING: ["WAITING_FOR_USER", "OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
           OBSERVING: ["VERIFYING", "THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
           VERIFYING: ["DIAGNOSING", "THINKING", "VERIFYING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
           DIAGNOSING: ["REPAIRING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
           REPAIRING: ["VERIFYING", "THINKING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
-          WAITING_FOR_USER: ["CLASSIFYING", "ANALYZING", "THINKING", "CANCELLED", "FAILED"],
+          WAITING_FOR_USER: ["CLASSIFYING", "ANALYZING", "THINKING", "TOOL_CALLING", "OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
           COMPLETED: [],
           FAILED: [],
           CANCELLED: [],
@@ -29078,6 +29433,7 @@ var require_dist16 = __commonJS({
           taskId: ctx.taskId,
           runId: ctx.taskId,
           mode: ctx.mode,
+          autonomy: ctx.autonomy,
           systemPrompt: ctx.systemPrompt,
           userPrompt: ctx.userPrompt,
           workspaceRoot: ctx.workspaceRoot,
@@ -29085,7 +29441,8 @@ var require_dist16 = __commonJS({
           limits: ctx.limits,
           abortSignal: ctx.abortSignal,
           onEvent: ctx.onEvent,
-          gitConfig: ctx.gitConfig
+          gitConfig: ctx.gitConfig,
+          hasHumanObserver: ctx.hasHumanObserver
         });
       }
       async runWithContract(ctx, contract) {
@@ -29105,7 +29462,7 @@ var require_dist16 = __commonJS({
           taskId: ctx.taskId,
           workspace: { rootPath: ctx.workspaceRoot },
           limits: { maxResults: 100, maxBytes: 1e6 },
-          permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } },
+          permissions: permissionsFromContract(contract),
           abortSignal: ctx.abortSignal,
           cancellation: ctx.abortSignal ? {
             get isCancelled() {
@@ -29120,6 +29477,26 @@ var require_dist16 = __commonJS({
             }
           } : void 0
         };
+        const runtimeToolCtx = {
+          ...toolCtx,
+          permissions: { capabilities: { read: "ALLOW", write: "DENY", execute: "ALLOW", network: "DENY" } }
+        };
+        const autonomy = ctx.autonomy || "ask";
+        let waitingMs = 0;
+        const elapsedMs = () => Date.now() - startTime - waitingMs;
+        const approvalGate = new ApprovalGate({
+          taskId: ctx.taskId,
+          autonomy,
+          workspaceRoot: ctx.workspaceRoot,
+          interactionManager: this.interactionManager,
+          onEvent: ctx.onEvent,
+          abortSignal: ctx.abortSignal,
+          hasHumanObserver: ctx.hasHumanObserver,
+          timeoutMs: ctx.limits.approvalTimeoutMs ?? 10 * 60 * 1e3,
+          createUnifiedDiff: (path, original, proposed) => this.diffEngine.createUnifiedDiff(path, original, proposed)
+        });
+        const toolsEnabled = contract.mode !== "CHAT" && contract.mode !== "PLAN";
+        const validateContract = (toolName, capabilities) => validateTaskContract(contract, toolName, capabilities);
         if (ctx.abortSignal?.aborted) {
           this.transition(ctx, "CANCELLED", "Task was cancelled");
           ctx.onEvent({
@@ -29198,12 +29575,12 @@ var require_dist16 = __commonJS({
 [SUPPLEMENTARY PROJECT KNOWLEDGE - Active workspace files remain authoritative]:
 ${memoryContext}` : ctx.userPrompt;
         const messages = [{ role: "user", content: initialPrompt }];
-        const tools = this.registry.getAll().map((t) => ({
+        const tools = toolsEnabled ? this.registry.getAll().filter((t) => toolAllowedByContract(contract, t)).map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema
-        }));
-        tools.push({
+        })) : [];
+        if (toolsEnabled && contract.allowedCapabilities.includes("read")) tools.push({
           name: "delegate_subtask",
           description: "Delegate a bounded read-only investigation (RESEARCH) or verification task to a supervised worker agent.",
           inputSchema: {
@@ -29240,7 +29617,7 @@ ${memoryContext}` : ctx.userPrompt;
             });
             return { status: "limit_reached", steps, changeSet, plan: planManager.getPlan() };
           }
-          if (Date.now() - startTime > ctx.limits.maxExecutionTimeMs) {
+          if (elapsedMs() > ctx.limits.maxExecutionTimeMs) {
             this.transition(ctx, "LIMIT_REACHED", "Max execution time reached");
             ctx.onEvent({
               type: "agent.limit_reached",
@@ -29278,9 +29655,9 @@ ${memoryContext}` : ctx.userPrompt;
                 planManager,
                 changeSet,
                 lastVerification,
-                startTime,
+                startTime + waitingMs,
                 steps,
-                toolCtx,
+                runtimeToolCtx,
                 lastAssistantText
               );
             }
@@ -29303,7 +29680,7 @@ ${memoryContext}` : ctx.userPrompt;
               changeSet,
               userPrompt: ctx.userPrompt,
               toolExecutor: this.executor,
-              toolContext: toolCtx,
+              toolContext: runtimeToolCtx,
               abortSignal: ctx.abortSignal
             });
             ctx.onEvent({
@@ -29345,9 +29722,9 @@ ${memoryContext}` : ctx.userPrompt;
                   planManager,
                   changeSet,
                   lastVerification,
-                  startTime,
+                  startTime + waitingMs,
                   steps,
-                  toolCtx,
+                  runtimeToolCtx,
                   lastAssistantText
                 );
               }
@@ -29381,7 +29758,7 @@ ${memoryContext}` : ctx.userPrompt;
                   diagnosis: lastDiagnosis,
                   proposedTargetFiles: lastDiagnosis.affectedFiles,
                   existingChangedFiles: Array.from(changeSet.changes.keys()),
-                  startTimeMs: startTime,
+                  startTimeMs: startTime + waitingMs,
                   totalValidationRuns,
                   limits: {
                     maxRepairAttempts: ctx.limits.maxRepairAttempts,
@@ -29569,13 +29946,29 @@ Please implement targeted fixes to resolve this failure.`
               planManager,
               changeSet,
               lastVerification,
-              startTime,
+              startTime + waitingMs,
               steps,
-              toolCtx,
+              runtimeToolCtx,
               lastAssistantText
             );
           }
-          this.transition(ctx, "TOOL_CALLING", "Executing tools...");
+          if (!toolsEnabled) {
+            for (const tc of response.toolCalls) {
+              const error = `TOOLS_UNAVAILABLE: Tools cannot be executed in ${contract.mode} mode. Respond in text.`;
+              ctx.onEvent({
+                type: "tool.completed",
+                tool: tc.name,
+                result: { error },
+                eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                taskId: ctx.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString()
+              });
+              messages.push({ role: "tool", content: `ERROR: ${error}`, toolCallId: tc.id });
+            }
+            this.transition(ctx, "OBSERVING", "Observing results");
+            continue;
+          }
+          this.transition(ctx, "TOOL_CALLING", "Executing tools...", contract);
           for (const tc of response.toolCalls) {
             toolCallsCount++;
             if (toolCallsCount > ctx.limits.maxToolCalls) {
@@ -29600,6 +29993,15 @@ Please implement targeted fixes to resolve this failure.`
             let result;
             try {
               if (tc.name === "delegate_subtask") {
+                const workerType = tc.arguments?.type;
+                const workerCaps = SubagentManager2.getWorkerCapabilities(workerType)?.allowedCapabilities;
+                if (!workerCaps) {
+                  throw new Error(`CONTRACT_REJECTED: Unknown worker type '${String(tc.arguments?.type)}'.`);
+                }
+                const delegation = validateContract("delegate_subtask", workerCaps);
+                if (!delegation.valid) {
+                  throw new Error(`CONTRACT_REJECTED: ${delegation.reason}`);
+                }
                 ctx.onEvent({
                   type: "subagent.started",
                   eventId: `evt-${Date.now()}`,
@@ -29680,10 +30082,55 @@ Please implement targeted fixes to resolve this failure.`
                   return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
                 }
                 let toolError = null;
+                let registeredTool;
                 try {
-                  result = await this.executor.execute(tc.name, tc.arguments, toolCtx);
-                } catch (e) {
-                  toolError = e;
+                  registeredTool = this.registry.get(tc.name);
+                } catch {
+                  registeredTool = void 0;
+                }
+                if (registeredTool && approvalGate.requiresApproval(registeredTool)) {
+                  const payload = approvalGate.buildPayload(registeredTool, tc.arguments, { exists: baselineExists, content: baselineContent });
+                  const covered = approvalGate.findGrant(payload);
+                  if (!covered) {
+                    this.transition(ctx, "WAITING_FOR_USER", `Waiting for approval: ${payload.summary}`);
+                  }
+                  const waitStart = Date.now();
+                  let decision;
+                  try {
+                    decision = await approvalGate.decide(payload);
+                  } catch (e) {
+                    waitingMs += Date.now() - waitStart;
+                    if (ctx.abortSignal?.aborted || /cancel/i.test(e?.message || "")) {
+                      this.transition(ctx, "CANCELLED", "Task was cancelled");
+                      ctx.onEvent({
+                        type: "task.cancelled",
+                        eventId: `evt-${Date.now()}`,
+                        taskId: ctx.taskId,
+                        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+                      });
+                      return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
+                    }
+                    decision = { approved: false, reason: "DENIED", message: e?.message || String(e) };
+                  }
+                  waitingMs += Date.now() - waitStart;
+                  if (!covered) {
+                    this.transition(ctx, "TOOL_CALLING", "Executing tools...", contract);
+                  }
+                  if (!decision.approved) {
+                    toolError = new Error(`APPROVAL_DENIED: ${decision.message} You may propose a different approach or ask the user how to proceed.`);
+                  }
+                }
+                if (!toolError) {
+                  try {
+                    const outcome = await this.executor.processModelToolCall(tc, validateContract, toolCtx);
+                    if (outcome.type === "success") {
+                      result = outcome.result;
+                    } else {
+                      toolError = new Error(outcome.error || `Tool ${tc.name} returned ${outcome.type}`);
+                    }
+                  } catch (e) {
+                    toolError = e;
+                  }
                 }
                 if (ctx.abortSignal?.aborted || toolError && (toolError.name === "AbortError" || String(toolError).includes("COMMAND_CANCELLED") || String(toolError).includes("CANCELLED"))) {
                   this.transition(ctx, "CANCELLED", "Task was cancelled");
@@ -30108,7 +30555,13 @@ Please implement targeted fixes to resolve this failure.`
           }
         });
       }
-      async requestApproval(taskId, title, message, timeoutMs, onEvent, signal) {
+      /** Boolean convenience wrapper. Expiry resolves false (never an implicit approval). */
+      async requestApproval(taskId, title, message, timeoutMs, onEvent, signal, approval) {
+        const decision = await this.requestApprovalDecision(taskId, title, message, timeoutMs, onEvent, signal, approval);
+        return decision.approved;
+      }
+      /** Full decision including session-scope grants. Expiry resolves as a TIMEOUT denial. */
+      async requestApprovalDecision(taskId, title, message, timeoutMs, onEvent, signal, approval) {
         const interactionId = `act-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         const effectiveTimeout = timeoutMs ?? this.defaultTimeoutMs;
         const expiresAt = new Date(Date.now() + effectiveTimeout).toISOString();
@@ -30118,6 +30571,7 @@ Please implement targeted fixes to resolve this failure.`
           type: "APPROVAL",
           title,
           message,
+          approval,
           status: "PENDING",
           createdAt: (/* @__PURE__ */ new Date()).toISOString(),
           expiresAt
@@ -30139,7 +30593,7 @@ Please implement targeted fixes to resolve this failure.`
                 interactionId
               });
             }
-            resolve2(false);
+            resolve2({ approved: false, reason: "TIMEOUT", interactionId });
           }, effectiveTimeout);
           if (signal) {
             if (signal.aborted) {
@@ -30217,9 +30671,11 @@ Please implement targeted fixes to resolve this failure.`
           }
         } else if (item.request.type === "APPROVAL") {
           if (response.type === "APPROVE") {
-            item.resolve(true);
+            item.resolve({ approved: true, reason: "APPROVED", interactionId });
+          } else if (response.type === "APPROVE_SESSION") {
+            item.resolve({ approved: true, reason: "APPROVED_SESSION", scopeKey: response.scopeKey, interactionId });
           } else {
-            item.resolve(false);
+            item.resolve({ approved: false, reason: "DENIED", interactionId });
           }
         }
         return true;
@@ -30234,39 +30690,6 @@ Please implement targeted fixes to resolve this failure.`
         }
       }
     };
-    function validateTaskContract(contract, toolName, requiredCapabilities) {
-      for (const cap of requiredCapabilities) {
-        if (!contract.allowedCapabilities.includes(cap)) {
-          return {
-            valid: false,
-            reason: `Capability '${cap}' is forbidden in ${contract.mode} mode.`
-          };
-        }
-      }
-      if (contract.allowedTools.length > 0) {
-        if (!contract.allowedTools.includes(toolName)) {
-          return {
-            valid: false,
-            reason: `Tool '${toolName}' is not allowed by the current task contract.`
-          };
-        }
-      }
-      if (contract.mode === "CHAT") {
-        return {
-          valid: false,
-          reason: "No tools can be executed in CHAT mode."
-        };
-      }
-      if (contract.mode === "ASK" || contract.mode === "PLAN") {
-        if (requiredCapabilities.includes("write") || requiredCapabilities.includes("execute")) {
-          return {
-            valid: false,
-            reason: `Write/Execute tools are forbidden in ${contract.mode} mode.`
-          };
-        }
-      }
-      return { valid: true };
-    }
     init_intent_router();
     init_clarification_handler();
     init_model_intent_classifier();
@@ -32277,16 +32700,10 @@ var require_dist17 = __commonJS({
       getUnifiedDiff(changeSet, path) {
         const change = changeSet.changes.get(path);
         if (!change) return void 0;
-        const oldText = change.originalContent ?? "";
-        const newText = change.newContent;
-        const patch = diff.createPatch(
-          path,
-          oldText,
-          newText,
-          "original",
-          "modified"
-        );
-        return patch;
+        return this.createUnifiedDiff(path, change.originalContent ?? "", change.newContent);
+      }
+      createUnifiedDiff(path, original, proposed) {
+        return diff.createPatch(path, original, proposed, "original", "modified");
       }
       getDiffs(changeSet) {
         const diffs = /* @__PURE__ */ new Map();
@@ -33703,6 +34120,7 @@ function defaultProviderFactory(selection, providers) {
 }
 function createRuntimeApp(options = {}) {
   const providerFactory = options.providerFactory || defaultProviderFactory;
+  const approvalTimeoutMs = options.approvalTimeoutMs ?? (Number(process.env.COMU_APPROVAL_TIMEOUT_MS) > 0 ? Number(process.env.COMU_APPROVAL_TIMEOUT_MS) : 10 * 60 * 1e3);
   const allowedOrigin = options.allowedOriginPattern || DEFAULT_ALLOWED_ORIGIN;
   const app2 = (0, import_express.default)();
   app2.use(createLoopbackGuard());
@@ -34024,6 +34442,18 @@ function createRuntimeApp(options = {}) {
       }
       mode = requested;
     }
+    let autonomy = "ask";
+    if (taskReq.autonomy !== void 0 && taskReq.autonomy !== null) {
+      const requested = String(taskReq.autonomy).toLowerCase();
+      if (!import_protocol.TASK_AUTONOMY_LEVELS.includes(requested)) {
+        return res.status(400).json({
+          error: "INVALID_AUTONOMY",
+          code: "INVALID_AUTONOMY",
+          message: `autonomy must be one of ${import_protocol.TASK_AUTONOMY_LEVELS.join(", ")} (received '${taskReq.autonomy}').`
+        });
+      }
+      autonomy = requested;
+    }
     const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const controller = new AbortController();
     taskControllers.set(taskId, controller);
@@ -34071,6 +34501,9 @@ function createRuntimeApp(options = {}) {
           workspaceRoot,
           workspaceId,
           mode,
+          autonomy,
+          // A human can only approve what they can see: an attached event stream is the signal.
+          hasHumanObserver: () => (eventStreams.get(taskId)?.length ?? 0) > 0,
           systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
           userPrompt: taskReq.description || taskReq.prompt || "",
           limits: {
@@ -34081,7 +34514,8 @@ function createRuntimeApp(options = {}) {
             maxRepairAttempts: 3,
             maxValidationRuns: 6,
             maxRepairFiles: 5,
-            maxRepairTimeMs: 18e4
+            maxRepairTimeMs: 18e4,
+            approvalTimeoutMs
           },
           onEvent: (event) => {
             console.log(`[Event ${event.type}]`, event);
@@ -34214,8 +34648,15 @@ function createRuntimeApp(options = {}) {
     if (pending.type === "INPUT" && response.type !== "INPUT") {
       return res.status(400).json({ error: "Invalid response type for INPUT interaction" });
     }
-    if (pending.type === "APPROVAL" && response.type !== "APPROVE" && response.type !== "DENY") {
+    if (pending.type === "APPROVAL" && response.type !== "APPROVE" && response.type !== "APPROVE_SESSION" && response.type !== "DENY") {
       return res.status(400).json({ error: "Invalid response type for APPROVAL interaction" });
+    }
+    if (response.type === "APPROVE_SESSION") {
+      const scopeKey = typeof response.scopeKey === "string" ? response.scopeKey : "";
+      const offered = (pending.approval?.scopes || []).map((s) => s.key);
+      if (!scopeKey || !offered.includes(scopeKey)) {
+        return res.status(400).json({ error: "APPROVE_SESSION requires a scopeKey offered by the interaction", offered });
+      }
     }
     const success = interactionManager.resolveInteraction(taskId, interactionId, response, (event) => {
       eventStore.append(event);
