@@ -38,6 +38,10 @@ export function mountHarness(rootElement: HTMLElement) {
   if (surface === "changes" || surface === "activity") {
     useStore.getState().setSurface(surface);
   }
+  const drawer = params.get("drawer");
+  if (drawer === "overview" || drawer === "verification" || drawer === "memory" || drawer === "workers") {
+    useStore.getState().setDrawer(drawer);
+  }
   if (params.get("settings") === "1") {
     useStore.getState().setSettingsOpen(true);
   }

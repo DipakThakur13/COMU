@@ -7,6 +7,7 @@ import { ActivityStream } from "./components/activity/ActivityStream.js";
 import { ApprovalCard } from "./components/approval/ApprovalCard.js";
 import { PlanRibbon } from "./components/plan/PlanRibbon.js";
 import { ChangesPanel } from "./components/changes/ChangesPanel.js";
+import { Drawer } from "./components/drawer/Drawer.js";
 import { SettingsView } from "./components/settings/SettingsView.js";
 import { Button, ErrorBoundary } from "./components/primitives/index.js";
 import styles from "./app.module.css";
@@ -107,6 +108,10 @@ export function App() {
           <ChangesPanel changes={session.changes} onOpenFile={store.openFile} onRequestDiff={store.requestDiff} />
         </ErrorBoundary>
       )}
+
+      <ErrorBoundary region="task detail drawer">
+        <Drawer session={session} open={ui.drawer} onSelect={store.setDrawer} />
+      </ErrorBoundary>
 
       <ErrorBoundary region="composer">
         <Composer

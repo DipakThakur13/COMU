@@ -1,0 +1,265 @@
+/*
+ * The drawer sits between the main surface and the composer. It opens upward over the stream
+ * rather than beside it: the panel is often 300px wide and there is no beside.
+ */
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-top: 1px solid var(--comu-border);
+  background: var(--comu-surface-raised);
+}
+
+/* Tabs sit below the body so the strip stays put as the body opens and closes. */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--comu-space-1);
+  padding: var(--comu-space-1) var(--comu-space-2);
+  min-width: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  padding: var(--comu-space-1) var(--comu-space-2);
+  border-radius: var(--comu-radius-sm);
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-xs);
+  white-space: nowrap;
+  transition: background var(--comu-motion-fast) var(--comu-ease);
+}
+
+.tab:hover {
+  background: var(--comu-hover);
+  color: var(--comu-text);
+}
+
+.tab.active {
+  background: var(--comu-selected);
+  color: var(--comu-text);
+}
+
+.tab:focus-visible {
+  outline: 1px solid var(--comu-focus);
+  outline-offset: -1px;
+}
+
+.chevron {
+  color: var(--comu-text-muted);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  /* Bounded: the drawer informs, it does not take over the panel. */
+  max-height: 44vh;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-bottom: 1px solid var(--comu-border);
+}
+
+.panelBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-3);
+  padding: var(--comu-space-3);
+  min-width: 0;
+}
+
+/* ── Blocks ─────────────────────────────────────────────────────────────── */
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-1);
+  min-width: 0;
+}
+
+.blockTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--comu-space-2);
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--comu-text-muted);
+}
+
+.blockText {
+  margin: 0;
+  font-size: var(--comu-text-sm);
+  color: var(--comu-text);
+  /* Only uncontrolled content wraps mid-word; see the note in global.css. */
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.muted {
+  margin: 0;
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-xs);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.code {
+  margin: 0;
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--comu-space-2);
+  margin: 0;
+  font-size: var(--comu-text-xs);
+}
+
+.facts dt {
+  color: var(--comu-text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--comu-text);
+}
+
+/* ── Rows ───────────────────────────────────────────────────────────────── */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-2) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--comu-border) 55%, transparent);
+  min-width: 0;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--comu-space-1);
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: var(--comu-text-sm);
+  color: var(--comu-text);
+  overflow-wrap: anywhere;
+}
+
+.rowSub,
+.rowText {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.rowText {
+  white-space: pre-wrap;
+}
+
+.rowCommand {
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.optional {
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-xs);
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.filePath {
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+/* ── Memory trust ───────────────────────────────────────────────────────── */
+
+.trust {
+  font-size: var(--comu-text-xs);
+}
+
+.trustHigh { color: var(--comu-status-ok); }
+.trustMid { color: var(--comu-text-muted); }
+.trustLow { color: var(--comu-status-warn); }
+
+.staleTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--comu-status-warn);
+  font-size: var(--comu-text-xs);
+}
+
+/* ── Workers ────────────────────────────────────────────────────────────── */
+
+.workerStream {
+  margin-top: var(--comu-space-1);
+  padding: var(--comu-space-1) var(--comu-space-2);
+  border-left: 2px solid var(--comu-border-strong);
+  background: var(--comu-surface-sunken);
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* A worker's live text is context, not the main event: show the tail, bounded. */
+  max-height: 8em;
+  overflow-y: auto;
+}
+
+/* ── Tones ──────────────────────────────────────────────────────────────── */
+
+.toneOk { color: var(--comu-status-ok); }
+.toneError { color: var(--comu-status-error); }
+.toneWarn { color: var(--comu-status-warn); }
+.toneMuted { color: var(--comu-text-muted); }

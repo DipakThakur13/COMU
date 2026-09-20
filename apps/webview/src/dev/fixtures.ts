@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@comu/protocol";
+import type { AgentEvent, WorkspaceMemoryEntry } from "@comu/protocol";
 
 /**
  * Recorded event sequences for the standalone harness.
@@ -245,7 +245,54 @@ export interface Fixture {
   label: string;
   description: string;
   events: AgentEvent[];
+  /** Memory arrives as its own host message rather than as a task event, so it is carried here. */
+  memories?: WorkspaceMemoryEntry[];
 }
+
+const memories: WorkspaceMemoryEntry[] = [
+  {
+    id: "mem-1",
+    workspaceId: "fixture",
+    type: "CONVENTION",
+    content: "Route handlers live under src/auth and are registered in src/server.ts.",
+    source: "USER",
+    trustLevel: "USER_VERIFIED",
+    confidence: 1,
+    createdAt: "2026-09-12T09:00:00.000Z",
+    updatedAt: "2026-09-12T09:00:00.000Z",
+    status: "ACTIVE",
+    scope: { workspaceId: "fixture", files: ["src/server.ts"] },
+    contentHash: "h1"
+  },
+  {
+    id: "mem-2",
+    workspaceId: "fixture",
+    type: "LESSON",
+    content: "The integration suite needs a running Redis; it fails with ECONNREFUSED otherwise.",
+    source: "VERIFICATION",
+    trustLevel: "VERIFIED_EVIDENCE",
+    confidence: 0.95,
+    createdAt: "2026-09-14T11:30:00.000Z",
+    updatedAt: "2026-09-14T11:30:00.000Z",
+    status: "ACTIVE",
+    scope: { workspaceId: "fixture" },
+    contentHash: "h2"
+  },
+  {
+    id: "mem-3",
+    workspaceId: "fixture",
+    type: "EPISODE",
+    content: "Rate limiting was attempted once before and reverted for breaking the health check.",
+    source: "AGENT",
+    trustLevel: "AGENT_DERIVED",
+    confidence: 0.4,
+    createdAt: "2026-08-30T16:00:00.000Z",
+    updatedAt: "2026-09-18T08:00:00.000Z",
+    status: "STALE",
+    scope: { workspaceId: "fixture", files: ["src/auth/login.ts"] },
+    contentHash: "h3"
+  }
+];
 
 export const FIXTURES: Fixture[] = [
   {
@@ -341,6 +388,23 @@ export const FIXTURES: Fixture[] = [
     label: "Changes tab",
     description: "The read-only aggregate review of every written file.",
     events: [...startup, ...streamingTail, ...completedTail]
+  },
+  {
+    id: "drawer",
+    label: "Drawer surfaces",
+    description: "Overview, verification, workers and memory all populated, for the drawer strip.",
+    events: [
+      ...startup,
+      e("subagent.started", { subagentId: "sub-1", subagentType: "research", goal: "Find every call site of rateLimit" }),
+      e("subagent.started", { subagentId: "sub-2", subagentType: "review", goal: "Check the change against the style guide" }),
+      e("subagent.completed", { subagentId: "sub-1", subagentType: "research", result: { summary: "Three call sites, all in src/auth." } }),
+      e("approval.decided", { tool: "write_file", kind: "file_write", summary: "Modify src/auth/login.ts (+12 -3)", approved: true, decision: "APPROVED_SESSION", scopeKey: "dir:src/auth/", path: "src/auth/login.ts" }),
+      e("approval.decided", { tool: "execute_command", kind: "command", summary: "Run npm run test:integration", approved: false, decision: "TIMEOUT" }),
+      e("approval.decided", { tool: "git_push", kind: "git_push", summary: "Push branch fix/rate-limit", approved: false, decision: "DENIED" }),
+      ...streamingTail,
+      ...completedTail
+    ],
+    memories
   },
   {
     id: "long",

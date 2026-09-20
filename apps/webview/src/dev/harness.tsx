@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AgentEvent, ProviderConfig } from "@comu/protocol";
+import type { AgentEvent, ProviderConfig, WorkspaceMemoryEntry } from "@comu/protocol";
 import { EventSequencer, HostToWebviewMessage, SessionState, WebviewToHostMessage, createInitialSessionState, reduceEvent } from "@comu/ui-state";
 import { VsCodeApi, connectToHost } from "../store/store.js";
 import { FIXTURES, fixtureById } from "./fixtures.js";
@@ -74,6 +74,8 @@ class HarnessHost {
   private sequencer = new EventSequencer();
   private state: SessionState = createInitialSessionState();
   private timer: number | undefined;
+  /** Whether the last replay pushed memory, so switching fixtures can clear it. */
+  private sentMemories = false;
 
   constructor(private readonly deliver: (message: HostToWebviewMessage) => void) {}
 
@@ -88,8 +90,15 @@ class HarnessHost {
   }
 
   /** Replays a fixture, delivering each event the way the runtime would. */
-  public play(events: AgentEvent[], speed: number) {
+  public play(events: AgentEvent[], speed: number, memories?: WorkspaceMemoryEntry[]) {
     this.stop();
+    // Memory is not a task event; the host pushes it separately, so the harness does too. Sent
+    // only when it changes something: an extra message costs an extra render pass, and that is
+    // enough to move the virtualised list by a row and invalidate every unrelated baseline.
+    if (memories?.length || this.sentMemories) {
+      this.deliver({ type: "memory_update", entries: memories ?? [] });
+      this.sentMemories = Boolean(memories?.length);
+    }
     // Visual regression waits on this flag, so a screenshot is never taken mid-replay.
     delete document.body.dataset.comuHarnessSettled;
     this.state = createInitialSessionState();
@@ -116,11 +125,38 @@ class HarnessHost {
     }, speed);
   }
 
+  /**
+   * Signals that the panel has stopped moving, so a screenshot is never taken mid-layout.
+   *
+   * Waiting one tick for React to commit is not enough: the activity stream is virtualised and
+   * measures its rows through a ResizeObserver that runs after the commit, then scrolls to the
+   * tail. How many frames that takes depends on how busy the machine is, which made the baselines
+   * depend on the load the rest of the suite happened to be putting on the box. So this waits for
+   * the scroller's own geometry to stop changing rather than for a fixed delay.
+   */
   private markSettled() {
-    // One frame after the last delivery, so React has committed.
-    window.setTimeout(() => {
-      document.body.dataset.comuHarnessSettled = "1";
-    }, 0);
+    const scroller = () => document.querySelector<HTMLElement>("[role='log']");
+    let last = "";
+    let stable = 0;
+    let frames = 0;
+
+    const check = () => {
+      const el = scroller();
+      const now = el ? `${el.scrollHeight}:${el.scrollTop}:${el.clientHeight}` : "none";
+      stable = now === last ? stable + 1 : 0;
+      last = now;
+      frames += 1;
+      // Three identical polls in a row, or a cap so a genuinely animating panel still settles.
+      if (stable >= 3 || frames > 200) {
+        document.body.dataset.comuHarnessSettled = "1";
+        return;
+      }
+      // setTimeout rather than requestAnimationFrame: the visual suite installs a fake clock, and
+      // this is the scheduling primitive already known to run under it.
+      window.setTimeout(check, 0);
+    };
+
+    window.setTimeout(check, 0);
   }
 
   public stop() {
@@ -159,7 +195,8 @@ export function installHarness(options: HarnessOptions): { api: VsCodeApi; host:
   };
 
   connectToHost(api);
-  host.play(fixtureById(options.fixtureId).events, options.speed);
+  const fixture = fixtureById(options.fixtureId);
+  host.play(fixture.events, options.speed, fixture.memories);
   return { api, host };
 }
 
@@ -186,7 +223,8 @@ export function HarnessControls({ host }: { host: HarnessHost }) {
   }, [fixture, theme, width, speed]);
 
   const replay = (id: string, ms: number) => {
-    host.play(fixtureById(id).events, ms);
+    const f = fixtureById(id);
+    host.play(f.events, ms, f.memories);
   };
 
   return (

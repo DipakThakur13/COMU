@@ -20,8 +20,23 @@ const FIXTURES = [
   "changes",
   "failed",
   "settings",
-  "long"
+  "long",
+  "drawer-overview",
+  "drawer-verification",
+  "drawer-workers",
+  "drawer-memory"
 ] as const;
+
+/**
+ * The drawer fixtures are one event fixture viewed with a different surface open, so they share a
+ * fixture id and differ only in which drawer tab is expanded.
+ */
+const DRAWER: Partial<Record<(typeof FIXTURES)[number], string>> = {
+  "drawer-overview": "overview",
+  "drawer-verification": "verification",
+  "drawer-workers": "workers",
+  "drawer-memory": "memory"
+};
 
 /** The Changes fixture is only meaningful with that surface selected. */
 const SURFACE: Partial<Record<(typeof FIXTURES)[number], string>> = { changes: "changes" };
@@ -39,8 +54,9 @@ async function openPanel(page: Page, fixture: string, theme: string, width: numb
   const surface = SURFACE[fixture as (typeof FIXTURES)[number]];
   // speed=0 delivers the whole fixture at once: no paced replay, nothing in flight.
   const settings = SETTINGS.has(fixture) ? "&settings=1" : "";
-  const fixtureId = SETTINGS.has(fixture) ? "idle" : fixture;
-  await page.goto(`/?fixture=${fixtureId}&theme=${theme}&width=${width}&speed=0${surface ? `&surface=${surface}` : ""}${settings}`);
+  const drawer = DRAWER[fixture as (typeof FIXTURES)[number]];
+  const fixtureId = SETTINGS.has(fixture) ? "idle" : drawer ? "drawer" : fixture;
+  await page.goto(`/?fixture=${fixtureId}&theme=${theme}&width=${width}&speed=0${surface ? `&surface=${surface}` : ""}${drawer ? `&drawer=${drawer}` : ""}${settings}`);
   await page.waitForSelector("body[data-comu-harness-settled='1']");
   await page.waitForFunction(() => document.fonts.status === "loaded");
   const frame = page.locator("#comu-harness-frame");
