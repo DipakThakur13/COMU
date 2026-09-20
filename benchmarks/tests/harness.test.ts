@@ -17,7 +17,7 @@ import { executeFixture } from "../src/execute.js";
 import { gradeRubric, parseJUnit, resetBaselineCache } from "../src/graders.js";
 import { SecretLeakError, assertNoSecret, assertNoSecretInArgv } from "../src/secrets.js";
 import { classifyFailure, refineFailureClass, summarise } from "../src/metrics.js";
-import { acquireRunLock, renderMarkdown } from "../src/report.js";
+import { acquireRunLock, killedByProvider, latestPerCell, renderMarkdown } from "../src/report.js";
 import { configureProvider, createCounters, fold, startRuntime, type TaskOutcome } from "../src/runner.js";
 import { SelfTestModel } from "../src/selftest_model.js";
 import type { GraderVerdict, RunRecord } from "../src/types.js";
@@ -249,40 +249,42 @@ describe("Failure classification", () => {
   });
 });
 
+/** A minimal record, so a test states only the fields it is about. */
+const record = (over: Partial<RunRecord>): RunRecord =>
+  ({
+    fixtureId: "f",
+    tier: "T1",
+    ecosystem: "typescript",
+    rep: 1,
+    model: { id: "m", provider: "p" },
+    limits: {},
+    startedAt: "2026-09-20T00:00:00.000Z",
+    durationMs: 1000,
+    comuStatus: "completed",
+    grader: { correct: true, reason: "", regressions: [], stillFailing: [] },
+    falseCompletion: false,
+    falseFailure: false,
+    unnecessaryChanges: [],
+    filesChanged: [],
+    approvalsRequested: 0,
+    clarificationsRequested: 0,
+    toolCalls: 0,
+    modelRequests: 0,
+    promptTokens: 100,
+    completionTokens: 10,
+    peakPromptTokens: 50,
+    contextWindow: 1000,
+    peakContextRatio: 0.05,
+    planSteps: 0,
+    planVersions: 0,
+    repairAttempts: 0,
+    repairRecovered: false,
+    providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
+    failureClass: null,
+    ...over
+  }) as RunRecord;
+
 describe("Summarising", () => {
-  const record = (over: Partial<RunRecord>): RunRecord =>
-    ({
-      fixtureId: "f",
-      tier: "T1",
-      ecosystem: "typescript",
-      rep: 1,
-      model: { id: "m", provider: "p" },
-      limits: {},
-      startedAt: "2026-09-20T00:00:00.000Z",
-      durationMs: 1000,
-      comuStatus: "completed",
-      grader: { correct: true, reason: "", regressions: [], stillFailing: [] },
-      falseCompletion: false,
-      falseFailure: false,
-      unnecessaryChanges: [],
-      filesChanged: [],
-      approvalsRequested: 0,
-      clarificationsRequested: 0,
-      toolCalls: 0,
-      modelRequests: 0,
-      promptTokens: 100,
-      completionTokens: 10,
-      peakPromptTokens: 50,
-      contextWindow: 1000,
-      peakContextRatio: 0.05,
-      planSteps: 0,
-      planVersions: 0,
-      repairAttempts: 0,
-      repairRecovered: false,
-      providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
-      failureClass: null,
-      ...over
-    }) as RunRecord;
 
   it("reports per-fixture success out of repetitions, because variance is the point", () => {
     const summary = summarise([
@@ -484,6 +486,47 @@ describe("Summarising", () => {
   });
 });
 
+describe("Re-measuring a cell the provider killed", () => {
+  const killed = (over: Partial<RunRecord> = {}): RunRecord =>
+    record({
+      comuStatus: "failed",
+      providerFailures: { timeouts: 1, rateLimits: 0, gateway: 0, other: 0 },
+      ...over
+    });
+
+  it("treats a provider-ended run as not a measurement of COMU", () => {
+    // A timeout under concurrency ends the task with the agent's work half applied, and the grader
+    // then reports a failure the agent did not commit.
+    expect(killedByProvider(killed())).toBe(true);
+    expect(killedByProvider(record({}))).toBe(false);
+  });
+
+  it("does not re-measure a run that succeeded despite a retried provider failure", () => {
+    // One 504 that was retried and recovered is not a reason to pay for the run again.
+    expect(killedByProvider(killed({ comuStatus: "completed" }))).toBe(false);
+  });
+
+  it("keeps the later measurement of a cell and leaves the earlier one in the journal", () => {
+    const first = killed({ fixtureId: "t4-ts-async", rep: 1, durationMs: 864_000 });
+    const second = record({ fixtureId: "t4-ts-async", rep: 1, durationMs: 120_000 });
+    const deduped = latestPerCell([first, second]);
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].durationMs).toBe(120_000);
+  });
+
+  it("counts a re-measured cell once", () => {
+    const summary = summarise(
+      latestPerCell([
+        killed({ fixtureId: "f", rep: 1 }),
+        record({ fixtureId: "f", rep: 1 }),
+        record({ fixtureId: "f", rep: 2 })
+      ])
+    );
+    expect(summary.runs).toBe(2);
+    expect(summary.perFixture[0].of).toBe(2);
+  });
+});
+
 describe("The run lock", () => {
   let dir: string;
   beforeEach(() => {
@@ -630,6 +673,7 @@ describe("End to end against a stand-in model", () => {
       baseUrl: runtime.baseUrl,
       headers: runtime.headers,
       model: { id: "selftest-model", provider: "selftest" },
+      concurrency: 1,
       contextWindow: 128_000,
       timeoutMs: 180_000
     });

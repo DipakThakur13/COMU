@@ -139,6 +139,7 @@ export interface AssembleInput {
   startedAt: string;
   durationMs: number;
   contextWindow: number;
+  concurrency: number;
   outcome: TaskOutcome;
   verdict: GraderVerdict;
   filesChanged: string[];
@@ -163,6 +164,7 @@ export function assembleRecord(input: AssembleInput): RunRecord {
     limits: outcome.limits,
     startedAt: input.startedAt,
     durationMs: input.durationMs,
+    concurrency: input.concurrency,
     comuStatus: outcome.status,
     comuError: (outcome.terminalError ?? "").slice(0, MAX_ANSWER_CHARS),
     finalAnswer: outcome.finalText.slice(0, MAX_ANSWER_CHARS),
@@ -208,6 +210,9 @@ export interface Summary {
   correct: number;
   falseCompletions: number;
   falseFailures: number;
+  /** Totals, because a cost is a rate applied to these and the rate is not COMU's to invent. */
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
   providerFailures: ProviderFailureCounts;
   durationMs: Spread;
   promptTokens: Spread;
@@ -281,6 +286,8 @@ export function summarise(records: RunRecord[]): Summary {
     correct: correct.length,
     falseCompletions: records.filter(r => r.falseCompletion).length,
     falseFailures: records.filter(r => r.falseFailure).length,
+    totalPromptTokens: records.reduce((sum, r) => sum + r.promptTokens, 0),
+    totalCompletionTokens: records.reduce((sum, r) => sum + r.completionTokens, 0),
     providerFailures: records.reduce(
       (acc, r) => {
         for (const k of FAILURE_KEYS) acc[k] += r.providerFailures?.[k] ?? 0;

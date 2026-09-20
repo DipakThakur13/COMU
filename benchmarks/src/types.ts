@@ -172,6 +172,14 @@ export interface RunRecord {
   limits: Record<string, number>;
   startedAt: string;
   durationMs: number;
+  /**
+   * How many runs were in flight when this one was measured.
+   *
+   * Per record rather than per run, because a long measurement can be resumed at a different level
+   * after contention is found to be reaching the results. Without it a mixed journal cannot say
+   * which durations are real and which are upper bounds.
+   */
+  concurrency: number;
 
   /** What COMU said about itself. Never used to decide correctness. */
   comuStatus: string;

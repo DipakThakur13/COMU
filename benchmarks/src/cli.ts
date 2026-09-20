@@ -7,7 +7,7 @@ import { createRuntimeApp } from "../../apps/agent-runtime/src/server.js";
 import { fixturesRoot, loadFixtures } from "./fixture.js";
 import { executeFixture } from "./execute.js";
 import { summarise } from "./metrics.js";
-import { acquireRunLock, appendRecord, readJournal, writeRun } from "./report.js";
+import { acquireRunLock, appendRecord, killedByProvider, latestPerCell, readJournal, writeRun } from "./report.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
 import { assertNoSecretInArgv, loadLocalEnv } from "./secrets.js";
@@ -36,6 +36,8 @@ interface Args {
   concurrency: number;
   /** Re-render the report from the journal without measuring anything. */
   reportOnly: boolean;
+  /** Measure again any cell the provider killed, rather than letting it stand as a result. */
+  redoProviderFailures: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -56,7 +58,8 @@ function parseArgs(argv: string[]): Args {
     outDir: get("out") ?? path.resolve(path.dirname(fixturesRoot()), "results"),
     limits: parseLimits(get("limits")),
     concurrency: Math.max(1, Number(get("concurrency") ?? 1)),
-    reportOnly: argv.includes("--report-only")
+    reportOnly: argv.includes("--report-only"),
+    redoProviderFailures: argv.includes("--redo-provider-failures")
   };
 }
 
@@ -127,7 +130,7 @@ async function main(): Promise<void> {
    * current reading to all of it at once.
    */
   if (args.reportOnly) {
-    const records = readJournal(args.outDir, args.label);
+    const records = latestPerCell(readJournal(args.outDir, args.label));
     if (records.length === 0) {
       console.error(`No journal for '${args.label}' in ${args.outDir}.`);
       process.exit(1);
@@ -189,10 +192,26 @@ async function main(): Promise<void> {
   const releaseLock = args.selftest ? () => {} : acquireRunLock(args.outDir, args.label);
   process.on("exit", releaseLock);
 
-  const previous = args.selftest ? [] : readJournal(args.outDir, args.label);
-  const done = new Set(previous.map(r => `${r.fixtureId}#${r.rep}`));
+  const previous = args.selftest ? [] : latestPerCell(readJournal(args.outDir, args.label));
+
+  /*
+   * A run the provider killed is not a measurement of COMU.
+   *
+   * A timeout under concurrency, or a gateway refusal mid-refactor, ends the task with whatever the
+   * agent had done so far left half-applied, and the grader then reports a failure the agent did
+   * not commit. Those cells are measured again rather than being allowed to stand. The original
+   * record stays in the journal as the audit trail for why the cell was re-run; the later record
+   * supersedes it.
+   */
+  const redo = args.redoProviderFailures ? previous.filter(killedByProvider) : [];
+  const redoKeys = new Set(redo.map(r => `${r.fixtureId}#${r.rep}`));
+  const done = new Set(previous.filter(r => !redoKeys.has(`${r.fixtureId}#${r.rep}`)).map(r => `${r.fixtureId}#${r.rep}`));
+
   if (previous.length > 0) {
     console.log(`Resuming '${args.label}': ${previous.length} runs already recorded.`);
+  }
+  if (redo.length > 0) {
+    console.log(`Re-measuring ${redo.length} the provider killed: ${redo.map(r => `${r.fixtureId} rep ${r.rep}`).join(", ")}`);
   }
 
   const records: RunRecord[] = [...previous];
@@ -250,6 +269,7 @@ async function main(): Promise<void> {
           headers: runtime.headers,
           model,
           contextWindow: args.selftest ? 128_000 : contextWindowFor(args.modelId),
+          concurrency: args.concurrency,
           timeoutMs: args.timeoutMs,
           limits: args.limits
         });
@@ -297,7 +317,7 @@ async function main(): Promise<void> {
   });
   await Promise.all(workers);
 
-  const summary = summarise(records);
+  const summary = summarise(latestPerCell(records));
   console.log("");
   console.log(`${summary.correct} of ${summary.runs} correct.`);
   console.log(`False completions: ${summary.falseCompletions}. False failures: ${summary.falseFailures}.`);
@@ -318,7 +338,7 @@ async function main(): Promise<void> {
     gitCommit: gitCommit(),
     reps: args.reps,
     concurrency: args.concurrency,
-    records
+    records: latestPerCell(records)
   };
   const written = writeRun(run, args.outDir);
   console.log(`\nWrote ${written.jsonPath}`);

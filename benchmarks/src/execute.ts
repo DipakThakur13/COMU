@@ -25,6 +25,8 @@ export interface ExecuteInput {
   headers: Record<string, string>;
   model: { id: string; provider: string };
   contextWindow: number;
+  /** Runs in flight, recorded with the result so a mixed journal stays readable. */
+  concurrency: number;
   timeoutMs: number;
   /** Applied when the fixture does not set its own, so a whole run can share a raised budget. */
   limits?: Record<string, number>;
@@ -82,6 +84,7 @@ export async function executeFixture(input: ExecuteInput): Promise<RunRecord> {
       startedAt,
       durationMs: Date.now() - began,
       contextWindow: input.contextWindow,
+      concurrency: input.concurrency,
       outcome: { ...outcome, finalText: answer },
       verdict,
       filesChanged: changed,

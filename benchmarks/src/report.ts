@@ -92,6 +92,26 @@ function isAlive(pid: number): boolean {
   }
 }
 
+/**
+ * One record per cell, keeping the most recent.
+ *
+ * The journal is append-only, so re-measuring a fixture and repetition leaves both records in it.
+ * That is deliberate — the earlier one is the audit trail for why the cell was re-run — but a
+ * summary must count each cell once, and the later measurement is the one that supersedes.
+ */
+export function latestPerCell(records: RunRecord[]): RunRecord[] {
+  const byCell = new Map<string, RunRecord>();
+  for (const record of records) byCell.set(`${record.fixtureId}#${record.rep}`, record);
+  return [...byCell.values()];
+}
+
+/** Whether the provider, rather than the agent, ended this run. */
+export function killedByProvider(record: RunRecord): boolean {
+  const f = record.providerFailures;
+  if (!f) return false;
+  return record.comuStatus !== "completed" && f.timeouts + f.rateLimits + f.gateway + f.other > 0;
+}
+
 export function writeRun(run: BenchmarkRun, outDir: string): { jsonPath: string; markdownPath: string } {
   fs.mkdirSync(outDir, { recursive: true });
   const stem = `${run.startedAt.slice(0, 10)}-${run.label}`;
@@ -185,7 +205,17 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push(
     `| Prompt tokens per run, median (range) | ${fmtCount(summary.promptTokens.median)} (${fmtCount(summary.promptTokens.min)} to ${fmtCount(summary.promptTokens.max)}) |`
   );
-  lines.push(`| Largest prompt seen, as a share of the window | ${(summary.maxPeakContextRatio * 100).toFixed(1)}% |`);
+  // Named, not just measured. "10.3% of the window" prompts no action; "t2-ts-endpoint reached
+  // 10.3%" says which fixture to look at first when context budgeting lands.
+  const worst = [...summary.perFixture].sort((a, b) => b.peakContextRatio - a.peakContextRatio)[0];
+  lines.push(
+    `| Largest prompt seen, as a share of the window | ${(summary.maxPeakContextRatio * 100).toFixed(1)}%${worst ? `, by ${worst.fixtureId}` : ""} |`
+  );
+  lines.push(`| Total prompt tokens | ${fmtCount(summary.totalPromptTokens)} |`);
+  lines.push(`| Total completion tokens | ${fmtCount(summary.totalCompletionTokens)} |`);
+  lines.push(
+    "| Cost | No price is configured for this model, so the runtime reports none. The token totals above are what a price would be applied to. |"
+  );
   const pf = summary.providerFailures;
   lines.push(`| Provider timeouts | ${pf.timeouts} |`);
   lines.push(`| Provider rate limits (429) | ${pf.rateLimits} |`);
