@@ -97,7 +97,17 @@ export class ModelRequestManager {
     if (error instanceof ProviderInvalidRequestError) return false;
     if (error instanceof ProviderCancelledError) return false;
     if (error?.name === "AbortError") return false;
-    // Everything else (timeouts, rate limits, 5xx, unknown network drops) is retryable
+    /*
+     * A timeout is not retried.
+     *
+     * Retrying spends another full timeout window on a request that has already shown it will not
+     * finish in one, so a slow model costs three windows before the task fails. Worse, the failure
+     * arrives three times later than the information did, which is the opposite of what someone
+     * watching a panel needs. If the budget is too small the answer is a bigger budget, which is
+     * now a per-task setting, not another attempt at the same wall.
+     */
+    if (error instanceof ProviderTimeoutError) return false;
+    // Everything else (rate limits, 5xx, unknown network drops) is retryable.
     return true;
   }
 

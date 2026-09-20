@@ -253,6 +253,21 @@ export class NvidiaProvider implements ModelProvider {
       stream: stream ?? false
     };
 
+    if (body.stream) {
+      /*
+       * Ask for the usage chunk.
+       *
+       * A streamed response from this API carries `usage: null` in every chunk and emits no totals
+       * at the end unless this is set. Without it every request reports zero tokens, which is not
+       * a cosmetic loss: the panel's live token and cost display reads zero for the provider in
+       * use, and nothing can tell a prompt approaching the context window from a small one.
+       *
+       * The stream parser already reads a usage chunk when one arrives; only the asking was
+       * missing.
+       */
+      body.stream_options = { include_usage: true };
+    }
+
     if (profile.defaults.topP !== undefined) {
       body.top_p = profile.defaults.topP;
     }

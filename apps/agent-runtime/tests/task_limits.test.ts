@@ -25,7 +25,8 @@ describe("Defaults", () => {
       maxRepairAttempts: 3,
       maxValidationRuns: 6,
       maxRepairFiles: 5,
-      maxRepairTimeMs: 180_000
+      maxRepairTimeMs: 180_000,
+      modelRequestTimeoutMs: 120_000
     });
   });
 
@@ -66,7 +67,8 @@ describe("Overrides", () => {
       maxRepairAttempts: 5,
       maxValidationRuns: 10,
       maxRepairFiles: 12,
-      maxRepairTimeMs: 600_000
+      maxRepairTimeMs: 600_000,
+      modelRequestTimeoutMs: 600_000
     };
     const resolved = resolveTaskLimits(all);
     expect(resolved.ok).toBe(true);
@@ -106,6 +108,15 @@ describe("What a caller may not ask for", () => {
     for (const bad of [42, "limits", [1, 2]]) {
       expect(resolveTaskLimits(bad).ok, JSON.stringify(bad)).toBe(false);
     }
+  });
+
+  it("carries the model request timeout, because it depends on the model rather than the task", () => {
+    // A small instruct model answers in a second and a large reasoning model can take a minute on
+    // a full prompt. A fixed 120s was killing every run against a deep reasoning model.
+    const resolved = resolveTaskLimits({ modelRequestTimeoutMs: 600_000 });
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) expect(resolved.limits.modelRequestTimeoutMs).toBe(600_000);
+    expect(resolveTaskLimits({ modelRequestTimeoutMs: 60 * 60 * 1000 }).ok).toBe(false);
   });
 
   it("names the approval fields as unknown, because they are the server's to set", () => {

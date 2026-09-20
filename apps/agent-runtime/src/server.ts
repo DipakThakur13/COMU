@@ -199,7 +199,8 @@ export const DEFAULT_AGENT_LIMITS = {
   maxRepairAttempts: 3,
   maxValidationRuns: 6,
   maxRepairFiles: 5,
-  maxRepairTimeMs: 180_000
+  maxRepairTimeMs: 180_000,
+  modelRequestTimeoutMs: 120_000
 } as const;
 
 /**
@@ -215,7 +216,8 @@ const MAX_AGENT_LIMITS: Record<keyof typeof DEFAULT_AGENT_LIMITS, number> = {
   maxRepairAttempts: 20,
   maxValidationRuns: 50,
   maxRepairFiles: 100,
-  maxRepairTimeMs: 30 * 60 * 1000
+  maxRepairTimeMs: 30 * 60 * 1000,
+  modelRequestTimeoutMs: 15 * 60 * 1000
 };
 
 export type TaskLimitsResolution =

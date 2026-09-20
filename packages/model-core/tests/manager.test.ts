@@ -133,6 +133,52 @@ describe("ModelRequestManager", () => {
     expect(timedOutEvents.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("does not retry a timeout, even when attempts remain", async () => {
+    /*
+     * Retrying spends another full timeout window on a request that has already shown it will not
+     * finish in one. With three attempts a slow model cost three windows before the task failed,
+     * and the news arrived three times later than the information did. If the budget is too small
+     * the answer is a bigger budget, which is a per-task setting, not another attempt at the same
+     * wall.
+     */
+    let calls = 0;
+    const provider = createMockProvider(async () => {
+      calls += 1;
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return { text: "late", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+    });
+
+    const manager = new ModelRequestManager(provider, onEvent, {
+      modelRequestTimeoutMs: 50,
+      maxAttempts: 3,
+      retryBaseDelayMs: 1,
+      maxRetryTimeMs: 1000
+    });
+
+    await expect(manager.execute("task-1", "run-1", DEFAULT_REQUEST)).rejects.toThrow(ProviderTimeoutError);
+    expect(calls).toBe(1);
+  });
+
+  it("still retries the failures that a second attempt can fix", async () => {
+    let calls = 0;
+    const provider = createMockProvider(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("transient socket hang up");
+      return { text: "second time lucky", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+    });
+
+    const manager = new ModelRequestManager(provider, onEvent, {
+      modelRequestTimeoutMs: 5000,
+      maxAttempts: 3,
+      retryBaseDelayMs: 1,
+      maxRetryTimeMs: 1000
+    });
+
+    const response = await manager.execute("task-1", "run-1", DEFAULT_REQUEST);
+    expect(response.text).toBe("second time lucky");
+    expect(calls).toBe(2);
+  });
+
   // TEST R06 — Cancellation before request
   it("R06: cancellation before request emits cancelled, no provider call", async () => {
     const generateFn = vi.fn(async () => ({

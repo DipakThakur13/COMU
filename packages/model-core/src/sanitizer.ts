@@ -53,6 +53,8 @@ export class RequestSanitizer {
     // 8. Streaming
     if (!profile.supportsStreaming && sanitized.stream) {
       sanitized.stream = false;
+      // stream_options only means anything on a stream, and several APIs reject it without one.
+      delete sanitized.stream_options;
     }
 
     // 9. Tool calling

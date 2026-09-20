@@ -665,7 +665,9 @@ export class AgentOrchestrator {
 
       // Initialize requestManager lazily per-task to bind onEvent
       if (!this.requestManager) {
-        this.requestManager = new ModelRequestManager(this.model, ctx.onEvent);
+        this.requestManager = new ModelRequestManager(this.model, ctx.onEvent, {
+          modelRequestTimeoutMs: ctx.limits.modelRequestTimeoutMs
+        });
       }
 
       let response;

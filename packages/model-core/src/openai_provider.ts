@@ -311,6 +311,13 @@ export class OpenAICompatibleProvider implements ModelProvider {
       rawPayload.tool_choice = "auto";
     }
 
+    if (stream) {
+      // Without this an OpenAI-compatible stream reports no token totals at all, so every request
+      // comes back as zero tokens and the panel's cost display reads zero. The parser already
+      // handles the usage chunk; only the asking was missing.
+      rawPayload.stream_options = { include_usage: true };
+    }
+
     // Strictly sanitize payload according to capability profile
     const sanitizedBody = RequestSanitizer.sanitize(rawPayload, this.profile);
 

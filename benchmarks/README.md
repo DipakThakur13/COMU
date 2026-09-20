@@ -96,3 +96,14 @@ A delta smaller than the run to run spread is no detected change.
   moved, since one fixture flipping necessarily moves some class.
 
 Anything smaller is reported as "no detected change", not as an improvement.
+
+## Why the benchmark resolves packages to source
+
+`tsconfig.json` maps every `@comu/*` package to its `src/index.ts`. Without that, the harness
+imports the runtime from source while the runtime imports its own dependencies from `dist`, so a
+run silently measures whatever was last built rather than the working tree.
+
+That is not hypothetical. A fix to the NVIDIA provider was made, tested and then measured as having
+no effect, because the provider package had not been rebuilt. For a benchmark whose entire purpose
+is comparing one state of the code against another, resolving to anything but the working tree is a
+defect in the instrument.

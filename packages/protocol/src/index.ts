@@ -720,6 +720,13 @@ export interface AgentLimits {
   maxValidationRuns?: number;
   maxRepairFiles?: number;
   maxRepairTimeMs?: number;
+  /**
+   * How long a single model request may take before it is abandoned.
+   *
+   * A per-task setting because it depends entirely on the model: a small instruct model answers in
+   * a second and a large reasoning model can take a minute on a full prompt. Defaults to 120s.
+   */
+  modelRequestTimeoutMs?: number;
   maxPlanSteps?: number;
   maxSubagentsPerTask?: number;
   maxSubagentDepth?: number;
