@@ -69,16 +69,39 @@ describe("POST /v1/tasks honours the requested mode (Phase 0.4)", () => {
     expect(terminal?.type, JSON.stringify(terminal)).toBe("task.completed");
   }, 20000);
 
-  it("AUTO mode classifies the same ambiguous prompt and waits for the user", async () => {
+  it("AUTO mode asks a clarification question for an ambiguous prompt and continues with the answer", async () => {
     const res = await startTask({ prompt: "what do you think", mode: "AUTO" });
     expect(res.status).toBe(201);
     const { taskId } = (await res.json()) as any;
-    const events = await collectTaskEvents(baseUrl, taskId, {}, 8000);
-    const resolved = events.find(e => e.type === "task.mode_resolved") as any;
-    expect(resolved).toMatchObject({ mode: "AMBIGUOUS" });
+    const collecting = collectTaskEvents(baseUrl, taskId, {}, 15000);
+
+    // The clarification is a real INPUT interaction with options.
+    let interaction: any = null;
+    for (let i = 0; i < 100 && !interaction; i++) {
+      await new Promise(r => setTimeout(r, 50));
+      const pending = await fetch(`${baseUrl}/v1/tasks/${taskId}/interactions`);
+      interaction = ((await pending.json()) as any).interaction;
+    }
+    expect(interaction, "expected a pending clarification interaction").toBeTruthy();
+    expect(interaction.type).toBe("INPUT");
+    expect(interaction.options).toContain("Plan changes");
+
+    const respond = await fetch(`${baseUrl}/v1/tasks/${taskId}/interactions/${interaction.interactionId}/respond`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ response: { type: "INPUT", value: "Plan changes" } })
+    });
+    expect(respond.status).toBe(200);
+
+    const events = await collecting;
+    const resolved = events.filter(e => e.type === "task.mode_resolved") as any[];
+    expect(resolved.map(e => e.mode)).toEqual(["AMBIGUOUS", "PLAN"]);
     expect(events.some(e => (e as any).status === "WAITING_FOR_USER")).toBe(true);
-    expect(model.requests.length).toBe(1); // only the explicit-ASK task above called the model
-  }, 20000);
+    expect(events.some(e => e.type === "interaction.requested")).toBe(true);
+    expect(events.some(e => e.type === "interaction.responded")).toBe(true);
+    const terminal = events.find(e => e.type === "task.completed" || e.type === "task.failed") as any;
+    expect(terminal?.type, JSON.stringify(terminal)).toBe("task.completed");
+  }, 30000);
 
   it("closes the SSE stream for a subscriber that connects after the task finished", async () => {
     const res = await startTask({ prompt: "what do you think", mode: "ASK" });

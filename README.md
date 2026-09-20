@@ -32,7 +32,7 @@
 | **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI-compatible, Ollama (local, keyless) |
 | **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
 | **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck & Build |
-| **Automated Test Suite** | **32 Test Files · 311 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
+| **Automated Test Suite** | **40 Test Files · 362 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
 | **VS Code Package** | `comu-ai-0.2.4.vsix` | Built & Ready to Install |
 
 ---
@@ -86,7 +86,7 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
 - **Context Drawer (`🗂`)**:
   - Displays the active working set: current active file, recently inspected files, modified files, active diagnostics, and token context estimates.
 - **Mode-Aware Composer** (the selected mode travels with the task request and is honoured as-is; only **Auto** classifies):
-  - **Auto**: Automatically classifies user intent into optimal mode.
+  - **Auto**: Classifies intent with a deterministic fast path (politeness prefixes ignored), falls back to a cheap model classification when the rules cannot decide, and only asks a clarification question (as an inline input card) when the model is genuinely uncertain.
   - **Agent**: Full autonomous multi-step execution, testing, and self-repair.
   - **Plan**: Generates comprehensive architectural designs and checklists without modifying code.
   - **Ask**: Fast codebase exploration, semantic search, and technical Q&A.

@@ -86,6 +86,11 @@ export class AgentOrchestrator {
     return this.model;
   }
 
+  /** The interaction manager, when the host wired one. The kernel uses it to ask for clarification. */
+  public getInteractionManager(): InteractionManager | undefined {
+    return this.interactionManager;
+  }
+
   public getWorkingSetManager(): WorkingSetManager {
     return this.workingSetManager;
   }

@@ -15,16 +15,39 @@ export interface RouterContext {
   activeFile?: string;
 }
 
+/** Anything a model could be asked to classify on demand. */
+export interface IntentClassifier {
+  classify(message: string, taskId: string, runId: string, signal?: AbortSignal): Promise<IntentClassification>;
+}
+
+/**
+ * Leading politeness and framing carry no intent. "please fix the login bug" must classify exactly
+ * like "fix the login bug". Applied repeatedly so "hey comu, could you please add ..." also collapses.
+ */
+const POLITENESS_PREFIX = /^(?:(?:hey|hi|hello|ok|okay)[,!]?\s+)?(?:comu[,:]?\s+)?(?:please|kindly|can you|could you|would you|will you|would you mind|i need you to|i want you to|i'd like you to|i would like you to|i need to|i want to|i'd like to|i would like to|let's|lets|go ahead and|just)\s+/i;
+
+export function stripPoliteness(message: string): string {
+  let text = message.trim();
+  for (let i = 0; i < 4; i++) {
+    const next = text.replace(POLITENESS_PREFIX, "");
+    if (next === text) break;
+    text = next.trim();
+  }
+  return text;
+}
+
 export class IntentRouter {
   /**
    * Deterministic fast classification based on regex and keywords.
    */
   private checkDeterministic(message: string): IntentClassification | null {
-    const text = message.trim().toLowerCase();
+    const original = message.trim().toLowerCase();
+    const text = stripPoliteness(original);
 
-    // 1. CHAT match
+    // Greetings are matched on the untouched message: "hi" alone is CHAT, but the "hi" in
+    // "hi, please fix the bug" is only a prefix.
     const chatRegex = /^(hi|hello|hey|how are you|good morning|thanks|thank you)\b/i;
-    if (chatRegex.test(text)) {
+    if (text === original && chatRegex.test(original)) {
       return {
         mode: "CHAT",
         confidence: 1.0,
@@ -131,7 +154,7 @@ export class IntentRouter {
   }
 
   /**
-   * Main entrypoint for routing an intent.
+   * Synchronous routing: context, then deterministic rules, then AMBIGUOUS.
    */
   public route(message: string, context?: RouterContext): IntentClassification {
     const ctx = this.checkContext(message, context);
@@ -146,6 +169,38 @@ export class IntentRouter {
       confidence: 0.0,
       source: "fallback",
       reasons: ["insufficient execution intent"],
+      requiresClarification: true,
+    };
+  }
+
+  /**
+   * Routing with a model fallback. The deterministic fast path decides obvious cases for free;
+   * only messages it cannot place are sent to the classifier. A deterministic AMBIGUOUS (a bare
+   * pointer such as "take a look at this") is kept as-is because no classifier can resolve a
+   * missing target. AMBIGUOUS is therefore reserved for genuine uncertainty.
+   */
+  public async routeWithFallback(
+    message: string,
+    context: RouterContext | undefined,
+    classifier: IntentClassifier | undefined,
+    ids: { taskId: string; runId: string },
+    signal?: AbortSignal
+  ): Promise<IntentClassification> {
+    const ctx = this.checkContext(message, context);
+    if (ctx) return ctx;
+
+    const det = this.checkDeterministic(message);
+    if (det) return det;
+
+    if (classifier) {
+      return classifier.classify(message, ids.taskId, ids.runId, signal);
+    }
+
+    return {
+      mode: "AMBIGUOUS",
+      confidence: 0.0,
+      source: "fallback",
+      reasons: ["insufficient execution intent and no classifier available"],
       requiresClarification: true,
     };
   }

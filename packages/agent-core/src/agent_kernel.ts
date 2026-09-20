@@ -2,6 +2,7 @@ import { AgentOrchestrator } from "./orchestrator.js";
 import { IntentRouter, IntentClassification } from "./interaction/intent_router.js";
 import { TaskContract, WorkspaceScope } from "./interaction/task_contract.js";
 import { ClarificationHandler } from "./interaction/clarification_handler.js";
+import { ModelIntentClassifier } from "./interaction/model_intent_classifier.js";
 import { OrchestratorContext, AgentResult, AgentState } from "./interfaces.js";
 import { AgentLimits, TaskMode, TASK_MODES } from "@comu/protocol";
 import { ToolCapability } from "@comu/tool-core";
@@ -92,39 +93,23 @@ export class AgentKernel {
       };
     }
 
-    const classification = this.resolveClassification(input);
+    let classification: IntentClassification;
+    try {
+      classification = await this.resolveClassification(input);
+    } catch (err: any) {
+      if (input.abortSignal?.aborted) {
+        return this.cancelled(input);
+      }
+      throw err;
+    }
 
-    input.onEvent({
-      type: "task.mode_resolved",
-      eventId: `evt-${Date.now()}-mode`,
-      taskId: input.taskId,
-      timestamp: new Date().toISOString(),
-      mode: classification.mode,
-      source: classification.source,
-      confidence: classification.confidence,
-      reasons: classification.reasons
-    });
+    this.emitModeResolved(input, classification);
 
     if (classification.mode === "AMBIGUOUS") {
       if (input.abortSignal?.aborted) {
-        input.onEvent({
-          type: "agent.status",
-          eventId: `evt-${Date.now()}`,
-          taskId: input.taskId,
-          timestamp: new Date().toISOString(),
-          status: "CANCELLED"
-        });
-        input.onEvent({
-          type: "task.cancelled",
-          eventId: `evt-${Date.now()}`,
-          taskId: input.taskId,
-          timestamp: new Date().toISOString()
-        });
-        return {
-          status: "cancelled",
-          steps: 0
-        };
+        return this.cancelled(input);
       }
+
       input.onEvent({
         type: "agent.status",
         eventId: `evt-${Date.now()}`,
@@ -132,11 +117,24 @@ export class AgentKernel {
         timestamp: new Date().toISOString(),
         status: "WAITING_FOR_USER"
       });
-      return {
-        status: "waiting_for_user",
-        steps: 0,
-        finalText: this.clarificationHandler.generateClarificationRequest(input.userPrompt)
-      };
+
+      const interactionManager = this.orchestrator.getInteractionManager();
+      if (!interactionManager) {
+        // No interaction channel wired by the host: report the question and stop.
+        return {
+          status: "waiting_for_user",
+          steps: 0,
+          finalText: this.clarificationHandler.generateClarificationRequest(input.userPrompt)
+        };
+      }
+
+      const clarified = await this.askForClarification(input, interactionManager);
+      if ("result" in clarified) {
+        return clarified.result;
+      }
+      classification = clarified.classification;
+      input = { ...input, userPrompt: clarified.userPrompt };
+      this.emitModeResolved(input, classification);
     }
 
     if (classification.mode === "CHAT") {
@@ -235,9 +233,10 @@ export class AgentKernel {
 
   /**
    * An explicit mode from the user is authoritative: no regex, no model, no clarification.
-   * Only AUTO (or an absent mode) goes through the IntentRouter.
+   * Only AUTO (or an absent mode) goes through the IntentRouter, whose deterministic fast path
+   * falls back to a cheap model classification before ever reporting AMBIGUOUS.
    */
-  private resolveClassification(input: AgentKernelInput): IntentClassification {
+  private async resolveClassification(input: AgentKernelInput): Promise<IntentClassification> {
     const requested = input.mode;
     if (requested && requested !== "AUTO") {
       if (!TASK_MODES.includes(requested)) {
@@ -251,7 +250,132 @@ export class AgentKernel {
         requiresClarification: false
       };
     }
-    return this.router.route(input.userPrompt, { activeTaskId: input.taskId });
+    return this.router.routeWithFallback(
+      input.userPrompt,
+      { activeTaskId: input.taskId },
+      this.buildClassifier(input),
+      { taskId: input.taskId, runId: input.runId },
+      input.abortSignal
+    );
+  }
+
+  private buildClassifier(input: AgentKernelInput): ModelIntentClassifier | undefined {
+    const model = this.orchestrator.getModel();
+    if (!model || typeof model.generate !== "function") return undefined;
+    return new ModelIntentClassifier(model, input.onEvent);
+  }
+
+  private emitModeResolved(input: AgentKernelInput, classification: IntentClassification) {
+    input.onEvent({
+      type: "task.mode_resolved",
+      eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-mode`,
+      taskId: input.taskId,
+      timestamp: new Date().toISOString(),
+      mode: classification.mode,
+      source: classification.source,
+      confidence: classification.confidence,
+      reasons: classification.reasons
+    });
+  }
+
+  private cancelled(input: AgentKernelInput): AgentResult {
+    input.onEvent({
+      type: "agent.status",
+      eventId: `evt-${Date.now()}`,
+      taskId: input.taskId,
+      timestamp: new Date().toISOString(),
+      status: "CANCELLED"
+    });
+    input.onEvent({
+      type: "task.cancelled",
+      eventId: `evt-${Date.now()}`,
+      taskId: input.taskId,
+      timestamp: new Date().toISOString()
+    });
+    return { status: "cancelled", steps: 0 };
+  }
+
+  /**
+   * One clarification round through the InteractionManager (an INPUT interaction the webview
+   * already renders with option buttons). A chosen option maps straight to a mode; free text is
+   * re-routed together with the original prompt. If it is still ambiguous after that, the task
+   * proceeds in read-only ASK mode rather than asking again.
+   */
+  private async askForClarification(
+    input: AgentKernelInput,
+    interactionManager: import("./interaction_manager.js").InteractionManager
+  ): Promise<{ classification: IntentClassification; userPrompt: string } | { result: AgentResult }> {
+    let answer: string;
+    try {
+      answer = await interactionManager.requestInput(
+        input.taskId,
+        "Clarification needed",
+        this.clarificationHandler.generateClarificationRequest(input.userPrompt),
+        this.clarificationHandler.getOptions(),
+        undefined,
+        input.onEvent,
+        input.abortSignal
+      );
+    } catch (err: any) {
+      if (input.abortSignal?.aborted || /cancelled/i.test(err?.message || "")) {
+        return { result: this.cancelled(input) };
+      }
+      const error = /USER_INPUT_TIMEOUT/.test(err?.message || "")
+        ? "No clarification was received before the interaction expired."
+        : (err?.message || String(err));
+      input.onEvent({
+        type: "agent.status",
+        eventId: `evt-${Date.now()}`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString(),
+        status: "FAILED"
+      });
+      input.onEvent({
+        type: "task.failed",
+        eventId: `evt-${Date.now()}-failed`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString(),
+        error,
+        payload: { code: "CLARIFICATION_TIMEOUT", message: error }
+      });
+      return { result: { status: "failed", steps: 0, error } };
+    }
+
+    const chosen = this.clarificationHandler.mapAnswerToMode(answer);
+    const userPrompt = `${input.userPrompt}\n\n[User clarification]: ${answer}`;
+    if (chosen) {
+      return {
+        classification: {
+          mode: chosen,
+          confidence: 1.0,
+          source: "explicit",
+          reasons: [`user chose "${answer}" when asked to clarify`],
+          requiresClarification: false
+        },
+        userPrompt
+      };
+    }
+
+    const rerouted = await this.router.routeWithFallback(
+      userPrompt,
+      { activeTaskId: input.taskId },
+      this.buildClassifier(input),
+      { taskId: input.taskId, runId: input.runId },
+      input.abortSignal
+    );
+    if (rerouted.mode !== "AMBIGUOUS") {
+      return { classification: rerouted, userPrompt };
+    }
+    return {
+      classification: {
+        mode: "ASK",
+        confidence: 0.5,
+        source: "fallback",
+        reasons: ["still ambiguous after clarification; proceeding read-only (ASK) rather than asking again"],
+        requiresClarification: false
+      },
+      userPrompt
+    };
   }
 
   private createContract(input: AgentKernelInput, classification: IntentClassification): TaskContract {
