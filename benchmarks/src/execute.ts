@@ -26,6 +26,8 @@ export interface ExecuteInput {
   model: { id: string; provider: string };
   contextWindow: number;
   timeoutMs: number;
+  /** Applied when the fixture does not set its own, so a whole run can share a raised budget. */
+  limits?: Record<string, number>;
 }
 
 export async function executeFixture(input: ExecuteInput): Promise<RunRecord> {
@@ -45,7 +47,7 @@ export async function executeFixture(input: ExecuteInput): Promise<RunRecord> {
       workspaceRoot: workspace.root,
       mode: fixture.spec.mode,
       autonomy: fixture.spec.autonomy ?? "ask",
-      limits: fixture.spec.limits,
+      limits: fixture.spec.limits ?? input.limits,
       timeoutMs: input.timeoutMs
     });
 

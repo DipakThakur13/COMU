@@ -30,6 +30,8 @@ interface Args {
   selftest: boolean;
   timeoutMs: number;
   outDir: string;
+  /** Budget override applied to every fixture that does not set its own. Recorded with the run. */
+  limits?: Record<string, number>;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -47,8 +49,24 @@ function parseArgs(argv: string[]): Args {
     modelId: get("model") ?? "nvidia/nemotron-3-ultra-550b-a55b",
     selftest: argv.includes("--selftest"),
     timeoutMs: Number(get("timeout") ?? 1_800_000),
-    outDir: get("out") ?? path.resolve(path.dirname(fixturesRoot()), "results")
+    outDir: get("out") ?? path.resolve(path.dirname(fixturesRoot()), "results"),
+    limits: parseLimits(get("limits"))
   };
+}
+
+/**
+ * Budget override, as JSON.
+ *
+ * The runtime validates the contents and rejects an unknown key, so this only has to be an object
+ * of numbers; a typo becomes a 400 naming the field rather than a silently ignored argument.
+ */
+function parseLimits(raw: string | undefined): Record<string, number> | undefined {
+  if (!raw) return undefined;
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("--limits must be a JSON object, for example --limits '{\"maxExecutionTimeMs\":1800000}'");
+  }
+  return parsed as Record<string, number>;
 }
 
 /** The provider whose key is present, and the environment variable it came from. */
@@ -147,7 +165,8 @@ async function main(): Promise<void> {
           headers: runtime.headers,
           model,
           contextWindow: args.selftest ? 128_000 : contextWindowFor(args.modelId),
-          timeoutMs: args.timeoutMs
+          timeoutMs: args.timeoutMs,
+          limits: args.limits
         });
         records.push(record);
         console.log(
