@@ -1,4 +1,6 @@
-import express, { Express } from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
+import { Server } from 'http';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import cors from 'cors';
 import { resolve, isAbsolute } from 'path';
 import { statSync, realpathSync } from 'fs';
@@ -30,6 +32,79 @@ export type ProviderFactory = (selection: ProviderSelection, config: Record<stri
 export interface RuntimeServerOptions {
   /** Test seam: replaces provider construction for the task runner. */
   providerFactory?: ProviderFactory;
+  /**
+   * Per-session bearer token. When set, every route requires it. The extension generates one
+   * per spawned runtime and passes it through the COMU_RUNTIME_TOKEN environment variable.
+   */
+  authToken?: string;
+  /** Browser origins allowed by CORS. Defaults to VS Code webview origins only. */
+  allowedOriginPattern?: RegExp;
+}
+
+export const AUTH_HEADER = 'authorization';
+export const AUTH_TOKEN_HEADER = 'x-comu-token';
+export const DEFAULT_ALLOWED_ORIGIN = /^vscode-webview:\/\//i;
+export const LOOPBACK_HOST = '127.0.0.1';
+
+/** Constant-time comparison that does not leak length information. */
+export function safeEqual(a: string | undefined, b: string | undefined): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ha = createHash('sha256').update(a).digest();
+  const hb = createHash('sha256').update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
+
+export function generateRuntimeToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+export function extractPresentedToken(req: Request): string | undefined {
+  const explicit = req.headers[AUTH_TOKEN_HEADER];
+  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  const auth = req.headers[AUTH_HEADER];
+  if (typeof auth === 'string') {
+    const match = /^Bearer\s+(.+)$/i.exec(auth.trim());
+    if (match) return match[1].trim();
+  }
+  return undefined;
+}
+
+export function createAuthMiddleware(token: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const presented = extractPresentedToken(req);
+    if (!safeEqual(presented, token)) {
+      res.status(401).json({ error: 'UNAUTHORIZED', code: 'UNAUTHORIZED', message: 'Missing or invalid runtime token.' });
+      return;
+    }
+    next();
+  };
+}
+
+export function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  const addr = address.toLowerCase();
+  if (addr === '::1' || addr === '::ffff:127.0.0.1' || addr === 'localhost') return true;
+  if (addr.startsWith('::ffff:')) return isLoopbackAddress(addr.slice('::ffff:'.length));
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(addr);
+}
+
+/** Defence in depth: even if the socket were bound more widely, refuse non-loopback peers. */
+export function createLoopbackGuard() {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
+      res.status(403).json({ error: 'NON_LOOPBACK_REJECTED', code: 'NON_LOOPBACK_REJECTED', message: 'The COMU runtime only accepts loopback connections.' });
+      return;
+    }
+    next();
+  };
+}
+
+/** Binds the runtime to the loopback interface only. */
+export function startRuntimeServer(app: Express, port: number | string, host: string = LOOPBACK_HOST): Promise<Server> {
+  return new Promise((resolvePromise, reject) => {
+    const server = app.listen(Number(port), host, () => resolvePromise(server));
+    server.once('error', reject);
+  });
 }
 
 export interface ProviderSelection {
@@ -104,9 +179,23 @@ export function defaultProviderFactory(selection: ProviderSelection, providers: 
 export function createRuntimeApp(options: RuntimeServerOptions = {}): Express {
 const providerFactory: ProviderFactory = options.providerFactory || defaultProviderFactory;
 
+const allowedOrigin = options.allowedOriginPattern || DEFAULT_ALLOWED_ORIGIN;
+
 const app: Express = express();
+app.use(createLoopbackGuard());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Non-browser clients (the extension host) send no Origin; CORS does not apply to them.
+    if (!origin) return callback(null, false);
+    callback(null, allowedOrigin.test(origin));
+  },
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-COMU-Token'],
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS']
+}));
+if (options.authToken) {
+  app.use(createAuthMiddleware(options.authToken));
+}
 app.use(express.json());
-app.use(cors());
 
 // Setup tools
 const registry = new ToolRegistry();
@@ -705,13 +794,29 @@ app.get('/v1/tasks/:taskId/subagents', (req, res) => {
 return app;
 }
 
-const app: Express = createRuntimeApp();
+function resolveStartupToken(): string | undefined {
+  const fromEnv = process.env.COMU_RUNTIME_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  if (require.main === module) {
+    // Standalone start without a token: never run open. Generate one and print it for the operator.
+    const generated = generateRuntimeToken();
+    console.log(`[COMU] COMU_RUNTIME_TOKEN not set; generated session token: ${generated}`);
+    return generated;
+  }
+  // Embedded/test usage constructs its own app via createRuntimeApp({ authToken }).
+  return undefined;
+}
+
+const app: Express = createRuntimeApp({ authToken: resolveStartupToken() });
 
 if (require.main === module) {
   const port = process.env.PORT || 3456;
-  app.listen(port, () => {
-    console.log(`Agent runtime server listening on port ${port}`);
-  });
+  startRuntimeServer(app, port)
+    .then(() => console.log(`Agent runtime server listening on http://${LOOPBACK_HOST}:${port} (loopback only, token required)`))
+    .catch(err => {
+      console.error(`[COMU] Failed to bind runtime on ${LOOPBACK_HOST}:${port}: ${err?.message || err}`);
+      process.exit(1);
+    });
 }
 
 export default app;

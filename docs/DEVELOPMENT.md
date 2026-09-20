@@ -68,9 +68,11 @@ pnpm vitest run apps/agent-runtime/tests/m7_e2e.test.ts
 
 Start the Agent Runtime server locally:
 ```bash
-pnpm --filter @comu/agent-runtime dev
+COMU_RUNTIME_TOKEN=<any-long-random-string> pnpm --filter @comu/agent-runtime dev
 ```
-The server will start on `http://localhost:3456` (or the configured `PORT`).
+The server binds to `http://127.0.0.1:3456` only (or the configured `PORT`) and requires the token on every request as `Authorization: Bearer <token>`. If `COMU_RUNTIME_TOKEN` is not set, the runtime generates one and prints it once at startup. To let the VS Code extension attach to a runtime you started by hand, launch VS Code with the same `COMU_RUNTIME_TOKEN` in its environment; otherwise the extension spawns its own runtime with a fresh per-session token.
+
+Every task request must carry the target `workspace.rootPath` (absolute, existing directory); the runtime never operates on its own working directory.
 
 ### Useful Endpoints:
 - `POST /v1/tasks`: Create and start a task.

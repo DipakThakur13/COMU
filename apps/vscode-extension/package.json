@@ -83,8 +83,8 @@
       "properties": {
         "comu.runtime.baseUrl": {
           "type": "string",
-          "default": "http://localhost:3456",
-          "description": "Base URL of the COMU Agent Runtime"
+          "default": "http://127.0.0.1:3456",
+          "description": "Base URL of the COMU Agent Runtime. The runtime binds to the loopback interface only and requires the per-session token the extension generates."
         },
         "comu.defaultModel": {
           "type": "string",

@@ -10,7 +10,20 @@
 
 ---
 
-## 2. Workspace Boundary Protection
+## 2. Runtime Network Boundary & Authentication
+
+The Agent Runtime (`apps/agent-runtime`) is a local daemon with authority to read and write workspace files and run commands, so it is never exposed as an open server:
+- **Loopback only**: the runtime binds to `127.0.0.1` exclusively (`startRuntimeServer`). A defence-in-depth middleware additionally rejects any request whose peer address is not loopback with `403 NON_LOOPBACK_REJECTED`.
+- **Per-session token**: the VS Code extension generates a random 256-bit token for each session (or honours `COMU_RUNTIME_TOKEN` if set), passes it to the spawned runtime through the environment, and sends it as `Authorization: Bearer <token>` (or `X-COMU-Token`) on every request, including health checks and the SSE stream.
+- **Every route is authenticated**: requests without the token, or with a wrong one, receive `401 UNAUTHORIZED`. Tokens are compared with a constant-time comparison over SHA-256 digests, so neither length nor content leaks through timing.
+- **No credentials in query strings or bodies**: the runtime reads the token from headers only.
+- **CORS scoped to the webview**: browser cross-origin access is only granted to `vscode-webview://` origins. The extension host itself talks to the runtime without an `Origin`, so CORS does not apply to it; the token is the real gate.
+- **Standalone start is never open**: when the runtime is launched by hand without `COMU_RUNTIME_TOKEN`, it generates a token, prints it once to stdout, and requires it.
+- **Workspace root comes from the request**: `POST /v1/tasks` requires an absolute, existing `workspace.rootPath`; the runtime never falls back to its own working directory.
+
+---
+
+## 3. Workspace Boundary Protection
 
 Filesystem tools (`read_file`, `write_file`, `edit_file`, `list_directory`, `get_workspace_tree`) enforce strict boundary security:
 - **Canonical Path Resolution**: Paths are resolved using `path.resolve` and normalized.
@@ -19,7 +32,7 @@ Filesystem tools (`read_file`, `write_file`, `edit_file`, `list_directory`, `get
 
 ---
 
-## 3. Terminal & Command Execution Security
+## 4. Terminal & Command Execution Security
 
 All terminal actions are governed by `CommandPolicy` and managed by `ProcessManager`:
 - **Allowed Categories**: Only commands classified as `SAFE_DEVELOPMENT` or `OBSERVABILITY` are permitted without elevation.
@@ -35,7 +48,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 
 ---
 
-## 4. Human Interaction Security
+## 5. Human Interaction Security
 
 - **Task-Scoped**: Interactions cannot be resolved across tasks; interaction requests are strictly bound to their `taskId`.
 - **One-Shot Resolution**: Exactly one developer response wins. Subsequent or concurrent submissions are rejected.
@@ -45,7 +58,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 
 ---
 
-## 5. ChangeSet & Workspace Integrity Verification
+## 6. ChangeSet & Workspace Integrity Verification
 
 - When a file modification is proposed, COMU captures `baselineHash` and `originalContent`.
 - If a mutation fails halfway or produces an OCC conflict, COMU detects `WORKSPACE_STATE_CHANGED_AFTER_TOOL_FAILURE` and aborts.
@@ -53,7 +66,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 
 ---
 
-## 6. Memory Security & Anti-Poisoning Defenses
+## 7. Memory Security & Anti-Poisoning Defenses
 
 - **External Storage Isolation**: Memory records default to OS application data directories, strictly outside repository trees, preventing accidental Git pollution.
 - **Anti-Poisoning Hierarchy**: Repository content cannot arbitrarily become high-trust memory (`USER_VERIFIED` is reserved for explicit human developer actions).
@@ -62,7 +75,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 
 ---
 
-## 7. Controlled Git Security & Push Invariants
+## 8. Controlled Git Security & Push Invariants
 
 - **Gated Execution**: Staging and committing are strictly forbidden before passing the Completion Gate.
 - **ChangeSet-Restricted Staging**: Staging is strictly limited to files modified within the task's authorized `ChangeSet`. Wildcard staging (`git add .`) is permanently blocked.
@@ -72,7 +85,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 
 ---
 
-## 8. Subagent Worker Security & Single Execution Authority
+## 9. Subagent Worker Security & Single Execution Authority
 
 - **Strict Depth Invariant**: Workers are single-level (`maxSubagentDepth = 1`). Recursive spawning is blocked at runtime.
 - **Master is the Only Writer**: Workers are strictly read-only (`RESEARCH`) or validation-only (`VERIFICATION`). Workers cannot create, edit, or delete files, and cannot execute Git commits or pushes.

@@ -139,6 +139,8 @@ Bring Your Own Key directly to VS Code. COMU does not resell inference credits o
   - When tests fail, COMU performs root cause diagnosis and initiates bounded self-repair cycles.
 - **Human-in-the-Loop Git Governance**:
   - Proposes structured Git commit messages and requires interactive user approval before committing or pushing to remotes.
+- **Locked-Down Local Runtime**:
+  - The agent runtime binds to `127.0.0.1` only, requires a random per-session bearer token on every route (constant-time checked), and scopes CORS to VS Code webview origins. Every task carries the workspace root it may operate on; the runtime never falls back to its own working directory.
 
 ---
 
