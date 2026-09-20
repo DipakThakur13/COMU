@@ -6,3 +6,5 @@ out
 *.vsix
 test-results
 playwright-report
+COMU_*BRIEF.md
+Claude outputs/
