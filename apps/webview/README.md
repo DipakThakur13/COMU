@@ -3,8 +3,9 @@
 The COMU panel: React 18, TypeScript, CSS Modules, built by Vite into
 `apps/vscode-extension/dist/webview`.
 
-Enable it in VS Code with the `comu.ui.experimental` setting. The current interface stays the
-default until this one reaches parity.
+This is the only interface. It reached parity in 0.3.0, the legacy webview was removed, and the
+`comu.ui.experimental` setting that used to choose between them is gone — there is nothing left for
+it to select.
 
 ## Development harness
 

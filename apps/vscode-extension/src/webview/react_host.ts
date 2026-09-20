@@ -84,8 +84,10 @@ function buildMissingBundleHtml(): string {
   <head><meta charset="UTF-8"><title>COMU</title></head>
   <body style="padding:16px;font-family:var(--vscode-font-family);color:var(--vscode-foreground);background:var(--vscode-editor-background);">
     <h3 style="color:var(--vscode-errorForeground);margin-top:0;">The COMU interface bundle is missing</h3>
-    <p>The experimental interface is enabled but <code>dist/webview</code> has not been built.</p>
-    <p>Run <code>pnpm --filter @comu/webview build</code>, or turn off <code>comu.ui.experimental</code> to use the current interface.</p>
+    <p><code>dist/webview</code> is not present in this build, so there is nothing to show.</p>
+    <p>If you are developing COMU, run <code>pnpm --filter @comu/webview build</code>. If you installed
+    this from a .vsix, the package was built incorrectly and the interface bundle was left out;
+    please report it.</p>
   </body>
 </html>`;
 }

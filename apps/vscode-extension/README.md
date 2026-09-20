@@ -1,137 +1,156 @@
-# COMU AI Software Engineering Workspace for VS Code
+# COMU — AI software engineering in VS Code
 
-<p align="center">
-  <strong>Autonomous, Model-Agnostic AI Software Engineering Inside VS Code</strong>
-</p>
+**Version 0.3.0 · Preview.** Model-agnostic, bring your own key, MIT licensed.
 
-<p align="center">
+COMU is an AI coding agent that runs inside VS Code. It reads a codebase, plans a change, edits
+files, runs the test suite, and asks before doing anything it cannot undo. You supply the model and
+the API key; COMU never proxies or resells inference.
 
-[![Version](https://img.shields.io/badge/Version-v0.2.4-blue.svg)](package.json)
-[![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.85.0-007ACC.svg)](https://code.visualstudio.com/)
-[![Tests Passing](https://img.shields.io/badge/Tests-65%20Passed-brightgreen)](tests/)
-[![BYOK](https://img.shields.io/badge/BYOK-Encrypted%20Storage-purple)](#-bring-your-own-key-byok-security)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
-
-</p>
-
-COMU is an open-source AI software engineering agent and workspace integrated directly into VS Code. It transforms the AI coding experience from a simple chatbot into a comprehensive software engineering control center that investigates codebases, creates structured implementation plans, modifies files with optimistic concurrency control, verifies builds and test suites, diagnoses failures, repairs bugs, and seeks human approval for critical actions.
+> **Read this before installing.** 0.3.0 is a preview. It has completed real tasks against a real
+> model, and it has known defects that will affect you. They are listed under
+> [Known limitations](#known-limitations), not buried. If you are looking for something dependable
+> for daily work, this is not that yet.
 
 ---
 
-## ⚡ Key Capabilities & Workspace Features
+## Security notice for anyone running 0.2.4 or earlier
 
-### 1. Phase 9 AI Engineering Workspace
-- **Overview (`📊`)**: High-level KPI dashboard, active task summary, real-time duration ticker, and Completion Gate banner.
-- **Plan (`📋`)**: Visual step-by-step checklist of the agent's architectural design with live progress indicators (`PENDING`, `ACTIVE`, `COMPLETED`, `FAILED`, `BLOCKED`).
-- **Activity (`⚡`)**: The signature activity timeline grouping repetitive tool actions, rendering markdown with copyable code blocks, and streaming model thoughts.
-- **Changes (`Δ`)**: Detailed ChangeSet review listing all added, modified, and deleted files with single-click triggers to open native VS Code side-by-side diff viewers.
-- **Verification (`🛡️`)**: Matrix of automated test suites, linters, and typechecks with diagnostic failure summaries and self-repair attempts.
-- **Memory (`🧠`)**: Project-specific conventions, architectural lessons, and verified memory cards.
-- **Workers (`🤖`)**: Background subagent workers (Research Worker, Verification Worker) collaborating on multi-step workflows.
+**Uninstall it.** Versions up to and including 0.2.4 start a local HTTP server that binds every
+network interface, allows every web origin, and requires no authentication. That server can create
+tasks which read and write files and run shell commands. Any web page you visited while VS Code was
+open could drive it, and on a shared or public network so could another machine.
 
-### 2. Collapsible Context Drawer (`🗂`)
-- **Active Working Set**: Displays the current file in focus.
-- **Recently Inspected Files**: Clickable chips to open any file inspected during research.
-- **Modified Files**: Visual list of staged file mutations.
-- **Diagnostics**: Real-time language server and compiler diagnostics.
-- **Context Budget**: Live token estimation for model prompts.
+0.3.0 fixes this with four independent controls, each verified against the packaged build:
 
-### 3. Mode-Aware Composer
-- **Auto (Classify)**: Automatically determines whether your request requires conversation, code investigation, architectural planning, or autonomous execution.
-- **Agent (Autonomous)**: Multi-step autonomous coding, test execution, and self-repair.
-- **Plan (Design)**: Comprehensive architectural planning without modifying files.
-- **Ask (Investigate)**: Codebase exploration, semantic search, and technical Q&A.
-- **Chat (Conversational)**: Direct conversational pair programming.
+| Control | Verified behaviour in 0.3.0 |
+| :--- | :--- |
+| Bound to loopback | Listens on `127.0.0.1` only, never `0.0.0.0` |
+| Loopback guard | Any non-loopback peer is refused with `403`, even if the bind changed |
+| Per-session token | No token or a wrong token gets `401`; the token is 256 random bits, new each session |
+| CORS closed by default | Only `vscode-webview://` origins are allowed; any other origin receives no `Access-Control-Allow-Origin` header |
 
-### 4. Instant Stop / Cancellation (`■ Stop`)
-- **<5ms Responsive Cancellation**: Clicking Stop immediately switches the UI to `◌ Cancelling…`, disables further execution, and terminates the running task without freezing the editor.
-
-### 5. High-Performance Startup & Non-Blocking Architecture
-- **Instant First Paint (<20ms)**: The entire workspace shell, navigation, and composer render instantly from local safe defaults.
-- **Zero-Blocking Lifecycle**: Never waits for runtime health checks, provider connection tests, or SSE connections before rendering.
-- **40ms Streaming Throttling**: Batches rapid model tokens to maintain smooth 60fps scrolling and UI responsiveness.
-- **Bounded Activity History**: Limits initial event rendering to 50 cards with an expandable "↑ Show earlier activities" control, preventing DOM bloat.
-
-### 6. Bring Your Own Key (BYOK) Model Gateway
-Connect directly to frontier AI models with your own API keys:
-- **NVIDIA Nemotron (NVIDIA NIM)**: Nemotron 3.5 Lightning, DeepSeek V4 Pro, DeepSeek V4 Flash, Kimi K3, Laguna XS 2.1, Muse Glimmer 30B.
-- **GPT-6 Astra (Experiential Labs)**: Frontier reasoning with up to **1,050,000 token** context window.
-- **OpenAI-Compatible**: Connect any OpenAI-compatible API endpoint (GPT-4o, custom vLLM).
-- **Ollama (Local & Offline)**: Run open-weights models (Llama 3, Qwen 2.5, DeepSeek) locally with **zero external telemetry**.
+Upgrading does not disinfect anything that already happened. If you had 0.2.4 installed on an
+untrusted network, treat the workspaces you opened as having been reachable.
 
 ---
 
-## 🚀 Getting Started
+## What works
 
-### 1. Installation
-Install the VSIX package into VS Code:
-```bash
-code --install-extension comu-ai-0.2.1.vsix
-```
+These are exercised by the automated benchmark against NVIDIA Nemotron, graded by running the code
+rather than by asking the agent whether it succeeded:
 
-### 2. Open COMU
-Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS) and run:
-```
-COMU: Open Chat
-```
-The COMU sidebar will appear in your primary sidebar. The embedded Agent Runtime server starts automatically in the background on port `3456`.
+- **Single-file bug fixes.** Read the failing test, find the defect, fix it, confirm the suite is
+  green. This is the most reliable thing COMU does.
+- **Small feature additions and multi-file renames**, with mixed results — see the limitations.
+- **Approval before irreversible actions.** File writes and commands stop for a human at the default
+  `ask` autonomy. `git push` always asks, at every autonomy level, and cannot be pre-authorised.
+- **Cancellation.** Stop aborts the run; every tool takes a required `AbortSignal` and a conformance
+  suite asserts that each one refuses an aborted signal and writes nothing.
+- **Python and TypeScript**, including repositories containing both.
 
-### 3. Connect Your Model Provider
-1. Click the **⚙ Settings** button in the header (or click **⚙ Providers** in the composer controls bar).
-2. Under your desired provider card, paste your API key:
-   - **NVIDIA**: [build.nvidia.com](https://build.nvidia.com/)
-   - **Experiential Labs (GPT-6 Astra)**: Experiential Labs gateway
-   - **OpenAI**: Any OpenAI API key
-   - **Ollama**: Default endpoint `http://localhost:11434`
-3. Click **Test Connection** to verify latency and connectivity.
+## Known limitations
 
----
+Honest list. Each is reproducible and each has a benchmark fixture.
 
-## 🛠️ Contributed Commands
+- **A correct result can be reported as a failure in a polyglot repository.** COMU detects the
+  project type from `package.json` before `pyproject.toml`. A Python project carrying a
+  `package.json` for unrelated front-end tooling is treated as a Node project, the wrong toolchain
+  runs, and verification fails **even though the change is correct and the tests pass**. Measured at
+  5 out of 5 attempts on the fixture built for it. If you work in a mixed repository, expect COMU to
+  tell you it failed when it did not.
+- **Long read-only questions are cut short.** The repair budget is measured from the start of the
+  task rather than from the start of repair, so a task older than three minutes can be terminated
+  with `REPAIR_TIMEOUT` — including "explain this codebase" questions, where there is nothing to
+  repair. Large repositories are the most affected.
+- **Multi-file refactors are not dependable.** One observed run renamed a definition, correctly
+  identified the five call sites, and then stopped without updating them, leaving the package
+  unimportable. Review the diff before accepting.
+- **The agent sometimes writes scratch files into your workspace**, such as an ad-hoc test script
+  next to your source. Check the Changes tab.
+- **Slow models can exhaust the default request timeout.** The default is two minutes per model
+  request, which a large model on a large prompt can exceed.
+- **`pnpm test` does not pass at the repository root.** Individual suites pass; the aggregate task
+  does not. This is a known debt, recorded rather than hidden.
+- **No published benchmark numbers yet.** A full baseline is being measured now. Nothing in this
+  README quotes a success rate, because an honest one does not exist yet.
 
-| Command | Title | Description |
-| :--- | :--- | :--- |
-| `comu.openChat` | **COMU: Open Chat** | Opens the COMU AI engineering sidebar workspace |
-| `comu.openProviderSettings` | **COMU: Open Provider Settings** | Opens the BYOK Provider configuration page |
-| `comu.configureNvidia` | **COMU: Configure NVIDIA Provider** | Directly navigates to NVIDIA Nemotron settings |
-| `comu.testProviderConnection` | **COMU: Test NVIDIA Connection** | Pings the NVIDIA endpoint and displays latency |
+## Not verified
 
----
+Stated plainly so you know what has and has not been checked:
 
-## ⚙️ Extension Settings
-
-| Setting | Default | Description |
-| :--- | :--- | :--- |
-| `comu.runtime.baseUrl` | `http://localhost:3456` | URL of the COMU Agent Runtime server |
-| `comu.defaultModel` | `nvidia/nemotron-3.5-lightning-30b-a3b` | Default model ID used for agent sessions |
-
----
-
-## 🛡️ Security & Privacy Invariants
-
-- **Zero Reselling of Inference**: COMU does not proxy or resell inference tokens. Your requests travel directly from your machine to your configured provider over TLS.
-- **Hardware-Backed Secret Storage**: API keys are saved exclusively in VS Code `SecretStorage` (Windows DPAPI, macOS Keychain, Linux Secret Service).
-- **Zero Secrets in Webview or DOM**: Keys are never exposed to the webview JavaScript runtime, HTML DOM, or telemetry logs.
-- **Safe Concurrency (OCC)**: File operations use Optimistic Concurrency Control with atomic patches to safeguard your workspace against corruption.
+- The packaging, the loopback binding, the token enforcement and the CORS policy in the table above
+  were verified against **this exact packaged build**.
+- An **end-to-end task driven from the VS Code interface** in this build has not been re-verified
+  since packaging, because the benchmark was holding the model provider. The runtime, the approval
+  gate and the tool layer are covered by automated tests; the interface path is not covered by this
+  statement.
 
 ---
 
-## 🧪 Automated Testing
+## Getting started
 
-The extension includes a dedicated test suite with 100% pass rate:
-- **`tests/startup_perf.test.ts`**: 35 performance and lifecycle tests (`PERF-01` through `PERF-35`).
-- **`tests/frontend_ui.test.ts`**: 30 frontend architecture tests (`UI-01` through `UI-30`).
+**1. Install**
 
 ```bash
-# Run extension unit tests
-pnpm vitest run tests/startup_perf.test.ts tests/frontend_ui.test.ts
+code --install-extension comu-ai-0.3.0.vsix
 ```
+
+**2. Open it.** `Ctrl+Shift+P` → `COMU: Open Chat`. The sidebar appears and the agent runtime
+starts in the background on `127.0.0.1:3456`, authenticated with a token generated for that session.
+
+**3. Add a key.** Click **⚙ Providers** and paste a key for one of:
+
+| Provider | Where the key comes from |
+| :--- | :--- |
+| NVIDIA NIM | [build.nvidia.com](https://build.nvidia.com/) |
+| OpenAI-compatible | Any OpenAI-compatible endpoint, including a local vLLM |
+| Experiential Labs | Their gateway |
+| Ollama | No key; a local daemon at `http://127.0.0.1:11434` |
+
+Keys are stored in VS Code `SecretStorage` (Windows DPAPI, macOS Keychain, Linux Secret Service).
+They are never written to the webview, the DOM, logs, or disk in plain text.
 
 ---
 
-## 📜 License & Author
+## Modes and autonomy
 
-- **License**: MIT License
-- **Author**: **Dipak Kumar**
-- **Sponsor & Organization**: **[Boswas Group](https://www.boswas.co.in)**
-- **Source Code**: [github.com/DipakThakur13/COMU](https://github.com/DipakThakur13/COMU)
+**Modes** — `Auto` picks one for you; `Agent` edits and runs commands; `Plan` designs without
+touching files; `Ask` investigates read-only; `Chat` just talks.
+
+**Autonomy** — `ask` (default) stops for approval before each write or command; `auto` runs without
+stopping, except `git push`, which always asks; `readonly` never writes or executes, whatever the
+mode says.
+
+An approval shows the actual diff or the exact command. An approval that expires counts as a
+denial, never as consent, and with nobody watching the panel the answer is no.
+
+## Commands
+
+| Command | What it does |
+| :--- | :--- |
+| `COMU: Open Chat` | Opens the sidebar |
+| `COMU: Open Provider Settings` | BYOK provider configuration |
+| `COMU: Configure NVIDIA Provider` | Jumps to the NVIDIA settings |
+| `COMU: Test NVIDIA Connection` | Pings the endpoint and reports latency |
+
+## Settings
+
+| Setting | Default | Meaning |
+| :--- | :--- | :--- |
+| `comu.runtime.baseUrl` | `http://127.0.0.1:3456` | Where the runtime listens. Loopback only, token required. |
+| `comu.defaultAutonomy` | `ask` | Autonomy preselected in the composer |
+| `comu.defaultModel` | `nvidia-nemotron-3-ultra` | Model used when none is chosen |
+| `comu.ollama.endpoint` | `http://127.0.0.1:11434` | Local Ollama daemon |
+
+## Telemetry
+
+None. COMU sends nothing anywhere except your prompts and code to the model provider you configure,
+over TLS, directly from your machine. There is no analytics service, no crash reporter and no usage
+collection. With Ollama, nothing leaves the machine at all.
+
+---
+
+## License and author
+
+MIT. Built by **Dipak Kumar**, sponsored by **[Boswas Group](https://www.boswas.co.in)**.
+Source: [github.com/DipakThakur13/COMU](https://github.com/DipakThakur13/COMU).

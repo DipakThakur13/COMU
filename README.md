@@ -10,11 +10,11 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/Version-v0.2.4-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-v0.3.0%20preview-orange.svg)](package.json)
 [![Open Source](https://img.shields.io/badge/Open%20Source-Community%20Driven-brightgreen)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue)](https://www.typescriptlang.org/)
-[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.2.4-007ACC)](https://code.visualstudio.com/)
-[![Tests Passing](https://img.shields.io/badge/Tests-311%20Passed%20(100%25)-brightgreen)](tests/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.3.0-007ACC)](https://code.visualstudio.com/)
+[![Tests](https://img.shields.io/badge/vitest-797%20passing%20in%2065%20files-brightgreen)](vitest.config.ts)
 [![Model Agnostic](https://img.shields.io/badge/AI-Model%20Agnostic%20%7C%20BYOK-purple)](#-bring-your-own-ai-provider-byok)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -22,18 +22,43 @@
 
 ---
 
-## 📌 Release & Specification Summary (v0.2.4)
+> ### ⚠️ If you have COMU 0.2.4 or earlier installed, uninstall it
+>
+> Those versions start a local HTTP server with `app.use(cors())` and `app.listen(3456)` — every
+> network interface, every web origin, no authentication — and that server creates tasks that read
+> files, write files and run shell commands. Any web page open in a browser could drive it. 0.3.0
+> closes this with four independent controls, verified against the packaged build. Upgrading does
+> not undo prior exposure.
+
+---
+
+## 📌 Release summary (v0.3.0, preview)
 
 | Component | Specification | Status |
 | :--- | :--- | :--- |
-| **Release Version** | `v0.2.4` | Production Hardened |
-| **Interface Architecture** | **Phase 9 AI Engineering Workspace** | ✅ 7 Navigation Tabs + Context Drawer |
-| **Startup Performance** | **Instant First Paint (<20ms)** | ✅ Non-blocking Async Hydration |
-| **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI-compatible, Ollama (local, keyless) |
-| **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
-| **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck, Lint & Build |
-| **Automated Test Suite** | **57 Test Files · 569 Tests Passing · 99 Visual Baselines** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
-| **VS Code Package** | `comu-ai-0.2.4.vsix` | Built & Ready to Install |
+| **Release version** | `v0.3.0` | **Preview.** Completes real tasks; has known defects, listed below |
+| **Interface** | React 18 + Vite panel (`apps/webview`) | The only interface; the legacy webview is removed |
+| **Model gateway** | Provider-neutral (`@comu/model-core`) | NVIDIA NIM, Experiential Labs, OpenAI-compatible, Ollama (local, keyless) |
+| **Runtime boundary** | Loopback bind, loopback guard, per-session token, closed CORS | Verified against the packaged 0.3.0 build |
+| **Monorepo** | 24 workspace packages (`pnpm`) | Typecheck, lint and build pass |
+| **Unit and integration tests** | 797 tests across 65 files (`vitest`) | Passing |
+| **VS Code integration tests** | `pnpm test` | **Failing** — the `@vscode/test-electron` launcher passes options VS Code 1.138 rejects |
+| **Benchmark baseline** | 15 fixtures × 5 repetitions, graded by running the code | **In progress.** No success rate is published yet |
+| **VS Code package** | `comu-ai-0.3.0.vsix` (708 KB) | Built, installed and verified |
+
+### Known defects in 0.3.0
+
+Reproducible, each with a benchmark fixture, none of them hidden:
+
+- **A correct change can be reported as a failure in a polyglot repository.** Project type is
+  detected from `package.json` before `pyproject.toml`, so a Python project carrying a
+  `package.json` for front-end tooling is verified with the wrong toolchain. Observed on 5 of 5
+  attempts against the fixture built for it.
+- **The repair budget is measured from the start of the task, not the start of repair**, so a task
+  running longer than three minutes can be killed with `REPAIR_TIMEOUT` — including read-only
+  questions, where there is nothing to repair.
+- **Multi-file refactors are unreliable**: one run renamed a definition, named the five call sites
+  it needed to update, and stopped without updating them.
 
 ---
 
@@ -74,7 +99,7 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
 
 ## ⚡ Core Features & Capabilities
 
-### 1. Phase 9 Engineering Workspace Interface
+### 1. The Engineering Workspace Interface
 - **Workspace Navigation Tabs**:
   - **Overview (`📊`)**: High-level task KPI dashboard, execution duration ticker, plan completion summary, and Completion Gate banner.
   - **Plan (`📋`)**: Live checklist of structured plan steps with real-time status badges (`PENDING`, `ACTIVE`, `COMPLETED`, `FAILED`, `BLOCKED`).
@@ -91,11 +116,13 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
   - **Plan**: Generates comprehensive architectural designs and checklists without modifying code (no tools are offered or executable in Plan).
   - **Ask**: Fast codebase exploration, semantic search, and technical Q&A. Read-only by contract: mutating and command tools are neither offered to the model nor executable if it names one anyway.
   - **Chat**: Conversational software engineering guidance.
-- **First-Class Instant Cancellation (`■ Stop`)**:
-  - Non-blocking, instant transition to `◌ Cancelling…` (<5ms response). Immediately stops agent execution without freezing the editor.
+- **First-Class Cancellation (`■ Stop`)**:
+  - Non-blocking transition to `◌ Cancelling…`, then the run stops without freezing the editor.
+    Cancellation is a required `AbortSignal` on every tool, and a conformance suite over the whole
+    registry asserts that each tool refuses an aborted signal and writes nothing.
 
 ### 2. Interface
-The panel is a React 18 + TypeScript application (`apps/webview`) built by Vite, with a Zustand store fed by a pure, unit-tested event reducer (`@comu/ui-state`) shared with the extension host. It is the only interface: the previous hand-written panel has been removed, and `comu.ui.experimental` no longer does anything.
+The panel is a React 18 + TypeScript application (`apps/webview`) built by Vite, with a Zustand store fed by a pure, unit-tested event reducer (`@comu/ui-state`) shared with the extension host. It is the only interface: the previous hand-written panel has been removed, and the `comu.ui.experimental` setting that used to select between them has been removed with it.
 
 - **Token-level streaming**: the assistant's reply renders as it is generated (`model.token_delta`), with worker turns kept on their own channel so they never interleave into the main stream.
 - **Live cost and usage**: tokens and, where the model has a published price, spend, both of which the runtime previously computed and discarded. A model with no published price shows tokens only rather than an invented figure.
@@ -108,8 +135,13 @@ The panel is a React 18 + TypeScript application (`apps/webview`) built by Vite,
 - **Drawer surfaces** for the task overview, verification checks, background workers, workspace memory and the working set, each appearing only when it has content.
 - **Visual regression** over every fixture in three themes at three panel widths, with committed baselines, which is the only check that can see a colour that ignores the theme or a control that overflows a 280px sidebar.
 
-### 3. High-Performance Startup & Runtime Stabilization
-- **Instant First Paint (<20ms)**: Renders the full workspace shell, navigation tabs, and composer immediately from local static defaults.
+### 3. Startup & Runtime Stabilization
+
+The startup suite (`PERF-01` to `PERF-35`) asserts budgets on the operations below; the figures it
+enforces are 100ms for the bounded initial render path and 50ms for event normalisation. Wall-clock
+first-paint and cancellation latency are **not** measured, so no number is quoted for them here.
+
+- **First paint from local defaults**: Renders the workspace shell, navigation tabs, and composer from local static defaults rather than waiting on I/O.
 - **Zero-Blocking Architecture**: First paint **never** waits for runtime health checks, provider connection tests, secret decryption, model catalogs, or SSE handshakes.
 - **Progressive Hydration**: Hydrates provider metadata, session history, and runtime status asynchronously in the background.
 - **Streaming Render Throttling**: SSE token updates are batched into a 40ms queue, preventing UI freezing during heavy streaming.
@@ -198,7 +230,7 @@ d:\COMU/
 ### 1. Install the VS Code Extension
 Install the packaged extension directly into VS Code:
 ```bash
-code --install-extension apps/vscode-extension/comu-ai-0.2.4.vsix
+code --install-extension apps/vscode-extension/comu-ai-0.3.0.vsix
 ```
 
 ### 2. Launch COMU
@@ -206,8 +238,10 @@ code --install-extension apps/vscode-extension/comu-ai-0.2.4.vsix
    ```
    COMU: Open Chat
    ```
-2. The COMU sidebar opens **instantly** (<20ms) in your primary sidebar.
-3. The Agent Runtime backend starts automatically in the background.
+2. The COMU sidebar opens in your primary sidebar, rendering from local defaults rather than
+   waiting on the runtime.
+3. The Agent Runtime starts in the background on `127.0.0.1:3456`, authenticated with a token
+   generated for that session.
 
 ### 3. Connect Your AI Provider (BYOK)
 1. Click the **⚙ Settings** button in the COMU header.
@@ -229,11 +263,18 @@ Select **Agent** mode and press **Enter**. Watch COMU plan, execute, verify, and
 
 ## 🧪 Testing & Quality Assurance
 
-COMU maintains a **100% automated test pass rate** across all packages:
+The unit and integration suites pass; the VS Code integration launcher does not. Both are stated
+because a green badge covering only the first would be the more flattering half of the truth.
 
 ```bash
-# Run full monorepo test suite (32 test files, 311 tests)
+# Unit and integration suites: 797 tests across 65 files, all passing
 pnpm vitest run
+
+# VS Code integration tests: currently FAILING.
+# @vscode/test-electron launches Code.exe with options VS Code 1.138 rejects
+# ("bad option: --skip-welcome"), so the harness exits before any test runs.
+# This is a harness incompatibility, not a product failure, and it is not yet fixed.
+pnpm test
 
 # Run TypeScript typechecks across all 21 packages
 pnpm typecheck

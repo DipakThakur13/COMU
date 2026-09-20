@@ -2,7 +2,7 @@
   "name": "comu-ai",
   "displayName": "COMU AI Coding Agent",
   "description": "Multi-Model AI Coding Agent for VS Code",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "publisher": "DipakKumarBoswasGroup",
   "icon": "resources/icon.png",
   "author": {
@@ -110,18 +110,12 @@
           "type": "string",
           "default": "nvidia-nemotron-3-ultra",
           "description": "Default model ID to use"
-        },
-        "comu.ui.experimental": {
-          "type": "boolean",
-          "default": true,
-          "description": "No longer used. The rebuilt interface is the only interface.",
-          "deprecationMessage": "The rebuilt interface reached parity and is now the only one, so this setting no longer does anything. It is kept so existing settings files do not report an unknown key, and will be removed in a later release."
         }
       }
     }
   },
   "scripts": {
-    "copy-server": "node -e \"const fs = require('fs'); fs.mkdirSync('server', { recursive: true }); fs.copyFileSync('../agent-runtime/dist/server.js', 'server/index.js');\"",
+    "copy-server": "node scripts/bundle_runtime.js",
     "build": "pnpm run copy-server && pnpm run build-webview && pnpm run compile",
     "vscode:prepublish": "pnpm --filter @comu/agent-runtime build && pnpm run copy-server && pnpm run build-webview && pnpm run compile",
     "compile": "tsup",

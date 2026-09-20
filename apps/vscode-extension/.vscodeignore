@@ -1,24 +1,53 @@
-.vscode/**
-.git/**
-.gitignore
-tsconfig.json
-node_modules/**
-*.vsix
-dist/test/**
-src/test/**
-src/*.ts
-src/diff/**
-src/protocol/**
-src/providers/**
-src/runtime/**
-src/security/**
-src/sessions/**
-src/workspace/**
-src/webview/**
-!dist/webview/**
-!dist/extension.js
-!server/index.js
+# What does NOT go into the .vsix.
+#
+# vsce packages the directory holding this manifest, so the monorepo's other workspaces are already
+# outside it. The entries for benchmarks, results and .vscode-test are deliberate anyway: a relative
+# path or a future restructure must not be able to pull fifteen fixture repositories and hours of
+# run journals into a published extension.
+#
+# The shape is "exclude broadly, then re-include exactly what ships", so a new directory is left out
+# by default rather than included by omission.
+
+# Everything, then the exceptions below.
+**
+
+# --- What actually ships -----------------------------------------------------
+#
+# Listed by exact type rather than by directory. A negation wins over any later exclusion in vsce,
+# whatever the order, so `!dist/webview/**` followed by `dist/**/*.map` still ships the maps — which
+# is how 1.25 MB of source maps got into the first attempt at this package. Naming the extensions
+# that ship is the only form of this list that cannot be overridden by accident.
 !package.json
 !README.md
+!CHANGELOG.md
 !LICENSE
-!resources/**
+!NOTICE.md
+!resources/*.png
+!dist/extension.js
+!dist/webview/.vite/manifest.json
+!dist/webview/assets/*.js
+!dist/webview/assets/*.css
+!server/index.js
+
+# --- Never, at any path ------------------------------------------------------
+# Earlier packages live beside this manifest; six of them would otherwise be packaged into the
+# seventh.
+**/*.vsix
+**/.vscode-test/**
+**/node_modules/**
+**/benchmarks/**
+**/results/**
+**/tests/**
+**/src/**
+**/*.ts
+**/*.tsx
+**/tsconfig*.json
+**/tsup.config.*
+**/.eslintrc*
+**/eslint.config.*
+**/*.log
+**/.env
+**/.env.*
+**/.git/**
+**/.gitignore
+**/.DS_Store

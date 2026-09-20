@@ -26030,8 +26030,28 @@ var require_dist9 = __commonJS({
         if (error instanceof import_shared.ProviderInvalidRequestError) return false;
         if (error instanceof import_shared.ProviderCancelledError) return false;
         if (error?.name === "AbortError") return false;
-        if (error instanceof import_shared.ProviderTimeoutError) return false;
         return true;
+      }
+      /**
+       * How many attempts a particular failure deserves.
+       *
+       * A blanket retry count spends the same budget on every failure, and two of them do not earn it.
+       *
+       * A timeout gets one attempt. Retrying spends another full timeout window on a request that has
+       * already shown it will not finish in one, so a slow model cost three windows before the task
+       * failed and the news arrived three times later than the information did. If the budget is too
+       * small the answer is a bigger budget, which is a per-task setting now, not another attempt at
+       * the same wall.
+       *
+       * A gateway error gets two. 502, 503 and 504 are the provider's front door giving up rather than
+       * the model refusing, so one retry is worth having; but they correlate with large requests, so a
+       * request that provoked one tends to provoke it again and a third attempt is usually just more
+       * waiting. The rate is worth watching on its own: it should fall once prompts get smaller.
+       */
+      maxAttemptsFor(error) {
+        if (error instanceof import_shared.ProviderTimeoutError) return 1;
+        if (error instanceof import_shared.ProviderUnavailableError) return Math.min(2, this.config.maxAttempts);
+        return this.config.maxAttempts;
       }
       async sleep(ms, signal) {
         return new Promise((resolve2, reject) => {
@@ -26156,7 +26176,7 @@ var require_dist9 = __commonJS({
               });
             }
             const retryable = this.isRetryable(error);
-            if (!retryable || attempt >= this.config.maxAttempts) {
+            if (!retryable || attempt >= this.maxAttemptsFor(error)) {
               if (!retryable && !isTimeout && !(error instanceof import_shared.ProviderError)) {
                 throw new import_shared.ProviderUnknownError(sanitizedMessage);
               }
@@ -26602,6 +26622,8 @@ var require_dist9 = __commonJS({
               throw new import_shared2.ProviderRateLimitError(message);
             } else if (response.status === 400 || response.status === 422) {
               throw new import_shared2.ProviderInvalidRequestError(message);
+            } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+              throw new import_shared2.ProviderUnavailableError(message);
             } else {
               throw new import_shared2.ProviderError(message);
             }
@@ -34252,6 +34274,8 @@ var require_dist19 = __commonJS({
               throw new import_shared2.ProviderRateLimitError(message);
             } else if (response.status === 400 || response.status === 422) {
               throw new import_shared2.ProviderInvalidRequestError(message);
+            } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+              throw new import_shared2.ProviderUnavailableError(message);
             } else {
               throw new import_shared2.ProviderError(message);
             }
