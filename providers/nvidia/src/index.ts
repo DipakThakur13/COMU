@@ -5,6 +5,7 @@ import {
   ProviderAuthenticationError,
   ProviderRateLimitError,
   ProviderInvalidRequestError,
+  ProviderUnavailableError,
   ProviderProtocolError,
   UnsupportedModelError
 } from "@comu/shared";
@@ -319,6 +320,10 @@ export class NvidiaProvider implements ModelProvider {
           throw new ProviderRateLimitError(message);
         } else if (response.status === 400 || response.status === 422) {
           throw new ProviderInvalidRequestError(message);
+        } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+          // The provider's front door gave up rather than the model refusing. Worth one retry, and
+          // worth counting separately: these correlate with large requests.
+          throw new ProviderUnavailableError(message);
         } else {
           throw new ProviderError(message);
         }

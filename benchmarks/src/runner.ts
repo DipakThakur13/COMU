@@ -26,6 +26,14 @@ export interface TaskOutcome {
   status: "completed" | "failed" | "cancelled" | "unknown";
   /** True when the run stopped at a step, tool call or repair limit. */
   limitReached: boolean;
+  /**
+   * Requests the provider's gateway refused with 502, 503 or 504.
+   *
+   * Its own number because it correlates with prompt size rather than with anything COMU decided,
+   * so it should fall once prompts get smaller. Counting it inside "provider error" would hide
+   * that.
+   */
+  gatewayErrors: number;
   finalText: string;
   events: AgentEvent[];
   approvalsRequested: number;
@@ -73,6 +81,7 @@ interface Counters {
   verificationStatus?: string;
   status: TaskOutcome["status"];
   limitReached: boolean;
+  gatewayErrors: number;
   finalText: string;
 }
 
@@ -107,6 +116,11 @@ function fold(counters: Counters, event: AgentEvent): void {
     case "verification.completed":
       counters.verificationStatus = e.result?.status ?? counters.verificationStatus;
       break;
+    case "model_request.failed": {
+      const text = String(e.error ?? "");
+      if (/(502|503|504)/.test(text)) counters.gatewayErrors += 1;
+      break;
+    }
     case "interaction.requested":
       if (e.interaction?.type === "APPROVAL") counters.approvalsRequested += 1;
       else counters.clarificationsRequested += 1;
@@ -173,6 +187,7 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
     repairRecovered: false,
     status: "unknown",
     limitReached: false,
+    gatewayErrors: 0,
     finalText: ""
   };
   const events: AgentEvent[] = [];

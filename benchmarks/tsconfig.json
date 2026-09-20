@@ -5,70 +5,7 @@
     "types": [
       "node"
     ],
-    "allowImportingTsExtensions": true,
-    "baseUrl": ".",
-    "paths": {
-      "@comu/agent-core": [
-        "../packages/agent-core/src/index.ts"
-      ],
-      "@comu/context-engine": [
-        "../packages/context-engine/src/index.ts"
-      ],
-      "@comu/diagnostics-engine": [
-        "../packages/diagnostics-engine/src/index.ts"
-      ],
-      "@comu/diff-engine": [
-        "../packages/diff-engine/src/index.ts"
-      ],
-      "@comu/memory-engine": [
-        "../packages/memory-engine/src/index.ts"
-      ],
-      "@comu/model-core": [
-        "../packages/model-core/src/index.ts"
-      ],
-      "@comu/planning-engine": [
-        "../packages/planning-engine/src/index.ts"
-      ],
-      "@comu/protocol": [
-        "../packages/protocol/src/index.ts"
-      ],
-      "@comu/repair-engine": [
-        "../packages/repair-engine/src/index.ts"
-      ],
-      "@comu/shared": [
-        "../packages/shared/src/index.ts"
-      ],
-      "@comu/tool-core": [
-        "../packages/tool-core/src/index.ts"
-      ],
-      "@comu/ui-state": [
-        "../packages/ui-state/src/index.ts"
-      ],
-      "@comu/verification-engine": [
-        "../packages/verification-engine/src/index.ts"
-      ],
-      "@comu/tool-filesystem": [
-        "../tools/filesystem/src/index.ts"
-      ],
-      "@comu/git": [
-        "../tools/git/src/index.ts"
-      ],
-      "@comu/tool-search": [
-        "../tools/search/src/index.ts"
-      ],
-      "@comu/terminal": [
-        "../tools/terminal/src/index.ts"
-      ],
-      "@comu/validation": [
-        "../tools/validation/src/index.ts"
-      ],
-      "@comu/tool-web-docs": [
-        "../tools/web-docs/src/index.ts"
-      ],
-      "@comu/provider-nvidia": [
-        "../providers/nvidia/src/index.ts"
-      ]
-    }
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src/**/*.ts",

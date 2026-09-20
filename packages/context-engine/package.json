@@ -14,5 +14,12 @@
     "@comu/tool-filesystem": "workspace:*",
     "@comu/protocol": "workspace:*",
     "@comu/shared": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }

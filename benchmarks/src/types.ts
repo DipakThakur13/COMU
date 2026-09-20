@@ -179,6 +179,9 @@ export interface RunRecord {
   /** peakPromptTokens / contextWindow. Keeps the context trend visible without an overflow. */
   peakContextRatio: number;
 
+  /** Requests the provider's gateway refused with 502, 503 or 504. Falls as prompts get smaller. */
+  gatewayErrors: number;
+
   planSteps: number;
   planVersions: number;
   repairAttempts: number;

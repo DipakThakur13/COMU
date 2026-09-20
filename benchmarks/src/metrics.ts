@@ -137,6 +137,7 @@ export function assembleRecord(input: AssembleInput): RunRecord {
     peakPromptTokens: outcome.peakPromptTokens,
     contextWindow: input.contextWindow,
     peakContextRatio: Number(peakContextRatio.toFixed(4)),
+    gatewayErrors: outcome.gatewayErrors,
     planSteps: outcome.planSteps,
     planVersions: outcome.planVersions,
     repairAttempts: outcome.repairAttempts,
@@ -164,6 +165,7 @@ export interface Summary {
   correct: number;
   falseCompletions: number;
   falseFailures: number;
+  gatewayErrors: number;
   durationMs: Spread;
   promptTokens: Spread;
   maxPeakContextRatio: number;
@@ -176,7 +178,20 @@ export interface Summary {
    * see: a fixture that succeeds three times in five is a different product from one that succeeds
    * five in five.
    */
-  perFixture: Array<{ fixtureId: string; tier: string; correct: number; of: number }>;
+  perFixture: Array<{
+    fixtureId: string;
+    tier: string;
+    correct: number;
+    of: number;
+    /**
+     * Largest prompt this fixture produced, as a share of the model's window.
+     *
+     * Per fixture rather than only in aggregate, because it is the number that predicts where the
+     * context ceiling bites: an aggregate maximum tells you one task got close and not which.
+     */
+    peakContextRatio: number;
+    gatewayErrors: number;
+  }>;
   /** Fixtures that always, sometimes and never produced correct work. */
   reliability: { always: number; sometimes: number; never: number };
 }
@@ -196,16 +211,25 @@ export function summarise(records: RunRecord[]): Summary {
     if (record.failureClass) failureCounts[record.failureClass] = (failureCounts[record.failureClass] ?? 0) + 1;
   }
 
-  const byFixture = new Map<string, { tier: string; correct: number; of: number }>();
+  const byFixture = new Map<string, { tier: string; correct: number; of: number; peakContextRatio: number; gatewayErrors: number }>();
   for (const record of records) {
-    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0 };
+    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, gatewayErrors: 0 };
     entry.of += 1;
     if (record.grader.correct) entry.correct += 1;
+    entry.peakContextRatio = Math.max(entry.peakContextRatio, record.peakContextRatio);
+    entry.gatewayErrors += record.gatewayErrors;
     byFixture.set(record.fixtureId, entry);
   }
 
   const perFixture = [...byFixture.entries()]
-    .map(([fixtureId, v]) => ({ fixtureId, tier: v.tier, correct: v.correct, of: v.of }))
+    .map(([fixtureId, v]) => ({
+      fixtureId,
+      tier: v.tier,
+      correct: v.correct,
+      of: v.of,
+      peakContextRatio: v.peakContextRatio,
+      gatewayErrors: v.gatewayErrors
+    }))
     .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId));
 
   return {
@@ -213,6 +237,7 @@ export function summarise(records: RunRecord[]): Summary {
     correct: correct.length,
     falseCompletions: records.filter(r => r.falseCompletion).length,
     falseFailures: records.filter(r => r.falseFailure).length,
+    gatewayErrors: records.reduce((sum, r) => sum + r.gatewayErrors, 0),
     durationMs: spread(records.map(r => r.durationMs)),
     promptTokens: spread(records.map(r => r.promptTokens)),
     maxPeakContextRatio: records.reduce((max, r) => Math.max(max, r.peakContextRatio), 0),

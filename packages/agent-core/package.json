@@ -21,5 +21,12 @@
     "@comu/repair-engine": "workspace:*",
     "@comu/memory-engine": "workspace:*",
     "@comu/context-engine": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }

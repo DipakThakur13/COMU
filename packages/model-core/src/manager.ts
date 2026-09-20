@@ -1,7 +1,8 @@
 import { ModelProvider, ModelRequest, ModelResponse, ModelRequestContext, ModelStreamDelta } from "./index.js";
 import { 
   ProviderError, 
-  ProviderTimeoutError, 
+  ProviderTimeoutError,
+  ProviderUnavailableError,
   ProviderCancelledError, 
   ProviderUnknownError,
   ProviderAuthenticationError,
@@ -97,18 +98,30 @@ export class ModelRequestManager {
     if (error instanceof ProviderInvalidRequestError) return false;
     if (error instanceof ProviderCancelledError) return false;
     if (error?.name === "AbortError") return false;
-    /*
-     * A timeout is not retried.
-     *
-     * Retrying spends another full timeout window on a request that has already shown it will not
-     * finish in one, so a slow model costs three windows before the task fails. Worse, the failure
-     * arrives three times later than the information did, which is the opposite of what someone
-     * watching a panel needs. If the budget is too small the answer is a bigger budget, which is
-     * now a per-task setting, not another attempt at the same wall.
-     */
-    if (error instanceof ProviderTimeoutError) return false;
-    // Everything else (rate limits, 5xx, unknown network drops) is retryable.
+    // Everything else is retryable, but not all of it is worth the same number of attempts.
     return true;
+  }
+
+  /**
+   * How many attempts a particular failure deserves.
+   *
+   * A blanket retry count spends the same budget on every failure, and two of them do not earn it.
+   *
+   * A timeout gets one attempt. Retrying spends another full timeout window on a request that has
+   * already shown it will not finish in one, so a slow model cost three windows before the task
+   * failed and the news arrived three times later than the information did. If the budget is too
+   * small the answer is a bigger budget, which is a per-task setting now, not another attempt at
+   * the same wall.
+   *
+   * A gateway error gets two. 502, 503 and 504 are the provider's front door giving up rather than
+   * the model refusing, so one retry is worth having; but they correlate with large requests, so a
+   * request that provoked one tends to provoke it again and a third attempt is usually just more
+   * waiting. The rate is worth watching on its own: it should fall once prompts get smaller.
+   */
+  private maxAttemptsFor(error: unknown): number {
+    if (error instanceof ProviderTimeoutError) return 1;
+    if (error instanceof ProviderUnavailableError) return Math.min(2, this.config.maxAttempts);
+    return this.config.maxAttempts;
   }
 
   private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -260,7 +273,7 @@ export class ModelRequestManager {
         }
 
         const retryable = this.isRetryable(error);
-        if (!retryable || attempt >= this.config.maxAttempts) {
+        if (!retryable || attempt >= this.maxAttemptsFor(error)) {
           if (!retryable && !isTimeout && !(error instanceof ProviderError)) {
             throw new ProviderUnknownError(sanitizedMessage);
           }

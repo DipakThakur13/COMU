@@ -26030,6 +26030,7 @@ var require_dist9 = __commonJS({
         if (error instanceof import_shared.ProviderInvalidRequestError) return false;
         if (error instanceof import_shared.ProviderCancelledError) return false;
         if (error?.name === "AbortError") return false;
+        if (error instanceof import_shared.ProviderTimeoutError) return false;
         return true;
       }
       async sleep(ms, signal) {
@@ -26318,6 +26319,7 @@ var require_dist9 = __commonJS({
         }
         if (!profile.supportsStreaming && sanitized.stream) {
           sanitized.stream = false;
+          delete sanitized.stream_options;
         }
         if (!profile.supportsToolCalling) {
           delete sanitized.tools;
@@ -26570,6 +26572,9 @@ var require_dist9 = __commonJS({
         if (tools) {
           rawPayload.tools = tools;
           rawPayload.tool_choice = "auto";
+        }
+        if (stream) {
+          rawPayload.stream_options = { include_usage: true };
         }
         const sanitizedBody = RequestSanitizer.sanitize(rawPayload, this.profile);
         try {
@@ -30363,7 +30368,9 @@ Please implement targeted fixes to resolve this failure.`
           this.transition(ctx, "THINKING", "Thinking...");
           steps++;
           if (!this.requestManager) {
-            this.requestManager = new import_model_core3.ModelRequestManager(this.model, ctx.onEvent);
+            this.requestManager = new import_model_core3.ModelRequestManager(this.model, ctx.onEvent, {
+              modelRequestTimeoutMs: ctx.limits.modelRequestTimeoutMs
+            });
           }
           let response;
           try {
@@ -34198,6 +34205,9 @@ var require_dist19 = __commonJS({
           max_tokens: request.maxTokens ?? profile.defaults.maxTokens,
           stream: stream ?? false
         };
+        if (body.stream) {
+          body.stream_options = { include_usage: true };
+        }
         if (profile.defaults.topP !== void 0) {
           body.top_p = profile.defaults.topP;
         }
@@ -34427,6 +34437,7 @@ var server_exports = {};
 __export(server_exports, {
   AUTH_HEADER: () => AUTH_HEADER,
   AUTH_TOKEN_HEADER: () => AUTH_TOKEN_HEADER,
+  DEFAULT_AGENT_LIMITS: () => DEFAULT_AGENT_LIMITS,
   DEFAULT_ALLOWED_ORIGIN: () => DEFAULT_ALLOWED_ORIGIN,
   LOOPBACK_HOST: () => LOOPBACK_HOST,
   asyncRoute: () => asyncRoute,
@@ -34440,6 +34451,7 @@ __export(server_exports, {
   generateRuntimeToken: () => generateRuntimeToken,
   isLoopbackAddress: () => isLoopbackAddress,
   jsonErrorHandler: () => jsonErrorHandler,
+  resolveTaskLimits: () => resolveTaskLimits,
   resolveWorkspaceRoot: () => resolveWorkspaceRoot,
   safeEqual: () => safeEqual,
   selectProvider: () => selectProvider,
@@ -34600,6 +34612,49 @@ function resolveWorkspaceRoot(workspace) {
   }
   const workspaceId = ws && typeof ws.workspaceId === "string" && ws.workspaceId.trim() ? ws.workspaceId.trim() : void 0;
   return { ok: true, rootPath, workspaceId };
+}
+var DEFAULT_AGENT_LIMITS = {
+  maxSteps: 30,
+  maxToolCalls: 100,
+  maxExecutionTimeMs: 5 * 60 * 1e3,
+  maxRepairAttempts: 3,
+  maxValidationRuns: 6,
+  maxRepairFiles: 5,
+  maxRepairTimeMs: 18e4,
+  modelRequestTimeoutMs: 12e4
+};
+var MAX_AGENT_LIMITS = {
+  maxSteps: 1e3,
+  maxToolCalls: 5e3,
+  maxExecutionTimeMs: 2 * 60 * 60 * 1e3,
+  maxRepairAttempts: 20,
+  maxValidationRuns: 50,
+  maxRepairFiles: 100,
+  maxRepairTimeMs: 30 * 60 * 1e3,
+  modelRequestTimeoutMs: 15 * 60 * 1e3
+};
+function resolveTaskLimits(requested) {
+  if (requested === void 0 || requested === null) {
+    return { ok: true, limits: { ...DEFAULT_AGENT_LIMITS } };
+  }
+  if (typeof requested !== "object" || Array.isArray(requested)) {
+    return { ok: false, message: "limits must be an object." };
+  }
+  const limits = { ...DEFAULT_AGENT_LIMITS };
+  for (const [key, value] of Object.entries(requested)) {
+    if (!(key in DEFAULT_AGENT_LIMITS)) {
+      return { ok: false, message: `Unknown limit '${key}'. Allowed: ${Object.keys(DEFAULT_AGENT_LIMITS).join(", ")}.` };
+    }
+    if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+      return { ok: false, message: `limits.${key} must be a positive integer (received ${JSON.stringify(value)}).` };
+    }
+    const ceiling = MAX_AGENT_LIMITS[key];
+    if (value > ceiling) {
+      return { ok: false, message: `limits.${key} must not exceed ${ceiling} (received ${value}).` };
+    }
+    limits[key] = value;
+  }
+  return { ok: true, limits };
 }
 function defaultProviderFactory(selection, providers) {
   const { modelId, providerId } = selection;
@@ -34960,10 +35015,19 @@ function createRuntimeApp(options = {}) {
       }
       autonomy = requested;
     }
+    const limitsResolution = resolveTaskLimits(taskReq.limits);
+    if (!limitsResolution.ok) {
+      return res.status(400).json({
+        error: "INVALID_LIMITS",
+        code: "INVALID_LIMITS",
+        message: limitsResolution.message
+      });
+    }
+    const taskLimits = limitsResolution.limits;
     const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const controller = new AbortController();
     taskControllers.set(taskId, controller);
-    res.status(201).json({ taskId, workspaceRoot });
+    res.status(201).json({ taskId, workspaceRoot, limits: taskLimits });
     const emit = (event) => {
       eventStore.append(event);
       const streams = eventStreams.get(taskId) || [];
@@ -34991,6 +35055,21 @@ function createRuntimeApp(options = {}) {
         finishedTasks.delete(taskId);
       }, 5 * 60 * 1e3);
     };
+    const ensureTerminalEvent = (taskId2, failure) => {
+      const history = eventStore.getEvents(taskId2);
+      const hasTerminal = history.some(
+        (ev) => ev.type === "task.completed" || ev.type === "task.failed" || ev.type === "task.cancelled"
+      );
+      if (hasTerminal) return;
+      emit({
+        type: "task.failed",
+        eventId: `evt-${Date.now()}-${failure.code.toLowerCase()}`,
+        taskId: taskId2,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        error: failure.message,
+        payload: { code: failure.code, message: failure.message }
+      });
+    };
     const runTask = async () => {
       try {
         const model = providerFactory(selection, runtimeConfig.providers);
@@ -35013,14 +35092,7 @@ function createRuntimeApp(options = {}) {
           systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
           userPrompt: taskReq.description || taskReq.prompt || "",
           limits: {
-            maxSteps: 30,
-            maxToolCalls: 100,
-            maxExecutionTimeMs: 5 * 60 * 1e3,
-            // 5 mins
-            maxRepairAttempts: 3,
-            maxValidationRuns: 6,
-            maxRepairFiles: 5,
-            maxRepairTimeMs: 18e4,
+            ...taskLimits,
             approvalTimeoutMs,
             approvalObserverGraceMs: options.approvalObserverGraceMs
           },
@@ -35035,22 +35107,15 @@ function createRuntimeApp(options = {}) {
         if (result.changeSet) {
           taskChangeSets.set(taskId, result.changeSet);
         }
+        ensureTerminalEvent(taskId, {
+          code: result.status === "limit_reached" ? "LIMIT_REACHED" : "RUN_ENDED_WITHOUT_TERMINAL_EVENT",
+          message: result.status === "limit_reached" ? `The task stopped early: ${result.error || "an execution limit was reached"}.` : `The task ended with status '${result.status}' and published no terminal event.`
+        });
         closeStreams();
         scheduleCleanup();
       } catch (e) {
         console.error(`Error executing task ${taskId}:`, e);
-        const history = eventStore.getEvents(taskId);
-        const hasTerminal = history.some((ev) => ev.type === "task.completed" || ev.type === "task.failed" || ev.type === "task.cancelled");
-        if (!hasTerminal) {
-          emit({
-            type: "task.failed",
-            eventId: `evt-${Date.now()}-runtime-error`,
-            taskId,
-            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-            error: e?.message || String(e),
-            payload: { code: "RUNTIME_ERROR", message: e?.message || String(e) }
-          });
-        }
+        ensureTerminalEvent(taskId, { code: "RUNTIME_ERROR", message: e?.message || String(e) });
         closeStreams();
         scheduleCleanup();
       }
@@ -35280,6 +35345,7 @@ var server_default = app;
 0 && (module.exports = {
   AUTH_HEADER,
   AUTH_TOKEN_HEADER,
+  DEFAULT_AGENT_LIMITS,
   DEFAULT_ALLOWED_ORIGIN,
   LOOPBACK_HOST,
   asyncRoute,
@@ -35292,6 +35358,7 @@ var server_default = app;
   generateRuntimeToken,
   isLoopbackAddress,
   jsonErrorHandler,
+  resolveTaskLimits,
   resolveWorkspaceRoot,
   safeEqual,
   selectProvider,

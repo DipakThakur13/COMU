@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "bench": "tsx src/cli.ts",
-    "selftest": "tsx src/cli.ts --selftest",
+    "bench": "tsx --conditions=development src/cli.ts",
+    "selftest": "tsx --conditions=development src/cli.ts --selftest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run"

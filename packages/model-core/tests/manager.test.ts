@@ -4,6 +4,7 @@ import { ModelProvider, ModelRequest, ModelResponse, ModelRequestContext } from 
 import {
   ProviderError,
   ProviderTimeoutError,
+  ProviderUnavailableError,
   ProviderCancelledError,
   ProviderAuthenticationError,
   ProviderInvalidRequestError,
@@ -157,6 +158,29 @@ describe("ModelRequestManager", () => {
 
     await expect(manager.execute("task-1", "run-1", DEFAULT_REQUEST)).rejects.toThrow(ProviderTimeoutError);
     expect(calls).toBe(1);
+  });
+
+  it("retries a gateway error once and then stops", async () => {
+    /*
+     * 502, 503 and 504 are the provider's front door giving up rather than the model refusing, so
+     * one retry is worth having. They also correlate with large requests, so a request that
+     * provoked one tends to provoke it again and a third attempt is just more waiting.
+     */
+    let calls = 0;
+    const provider = createMockProvider(async () => {
+      calls += 1;
+      throw new ProviderUnavailableError("NVIDIA API Error: 504 - ");
+    });
+
+    const manager = new ModelRequestManager(provider, onEvent, {
+      modelRequestTimeoutMs: 5000,
+      maxAttempts: 3,
+      retryBaseDelayMs: 1,
+      maxRetryTimeMs: 1000
+    });
+
+    await expect(manager.execute("task-1", "run-1", DEFAULT_REQUEST)).rejects.toThrow(ProviderUnavailableError);
+    expect(calls).toBe(2);
   });
 
   it("still retries the failures that a second attempt can fix", async () => {

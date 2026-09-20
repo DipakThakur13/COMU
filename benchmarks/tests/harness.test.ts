@@ -171,6 +171,7 @@ describe("Failure classification", () => {
     repairAttempts: 0,
     repairRecovered: false,
     limitReached: false,
+    gatewayErrors: 0,
     limits: {},
     ...over
   });
@@ -240,6 +241,7 @@ describe("Summarising", () => {
       planVersions: 0,
       repairAttempts: 0,
       repairRecovered: false,
+      gatewayErrors: 0,
       failureClass: null,
       ...over
     }) as RunRecord;
@@ -251,10 +253,28 @@ describe("Summarising", () => {
       record({ fixtureId: "b", rep: 1 })
     ]);
     expect(summary.perFixture).toEqual([
-      { fixtureId: "a", tier: "T1", correct: 1, of: 2 },
-      { fixtureId: "b", tier: "T1", correct: 1, of: 1 }
+      { fixtureId: "a", tier: "T1", correct: 1, of: 2, peakContextRatio: 0.05, gatewayErrors: 0 },
+      { fixtureId: "b", tier: "T1", correct: 1, of: 1, peakContextRatio: 0.05, gatewayErrors: 0 }
     ]);
     expect(summary.failureCounts).toEqual({ planning_miss: 1 });
+  });
+
+  it("carries the peak prompt share per fixture, not only in aggregate", () => {
+    // The aggregate maximum says one task got close to the window; it does not say which. Per
+    // fixture is the number that predicts where the context ceiling bites.
+    const summary = summarise([
+      record({ fixtureId: "small", peakContextRatio: 0.04 }),
+      record({ fixtureId: "big", peakContextRatio: 0.71 }),
+      record({ fixtureId: "big", rep: 2, peakContextRatio: 0.55 })
+    ]);
+    expect(summary.perFixture.find(f => f.fixtureId === "big")?.peakContextRatio).toBe(0.71);
+    expect(summary.perFixture.find(f => f.fixtureId === "small")?.peakContextRatio).toBe(0.04);
+  });
+
+  it("counts gateway errors on their own, because they track prompt size", () => {
+    const summary = summarise([record({ gatewayErrors: 2 }), record({ rep: 2, gatewayErrors: 1 })]);
+    expect(summary.gatewayErrors).toBe(3);
+    expect(summary.perFixture[0].gatewayErrors).toBe(3);
   });
 
   it("counts the two directions of disagreement separately", () => {

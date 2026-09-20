@@ -49,8 +49,16 @@ export function loadFixtures(root: string, filter?: { tier?: Tier; ids?: string[
   return loaded;
 }
 
-/** Recursively lists files relative to a root, skipping directories the harness creates itself. */
-export function listFiles(root: string, skip: Set<string> = new Set([".git", "node_modules", ".venv", "__pycache__"])): string[] {
+/**
+ * Directories a test runner creates, which are not the agent's work.
+ *
+ * Counting them turned a clean Python run into five unnecessary changes, which would have been
+ * recorded as the agent touching files outside the golden set and could have classified a correct
+ * run as a failure.
+ */
+const RUNNER_ARTEFACTS = [".git", "node_modules", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "reports", ".tox"];
+
+export function listFiles(root: string, skip: Set<string> = new Set(RUNNER_ARTEFACTS)): string[] {
   const out: string[] = [];
   const walk = (dir: string, prefix: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

@@ -15,15 +15,15 @@ export default defineConfig({
     /**
      * Resolve the workspace packages to their source, not their built `dist`.
      *
-     * Without this the harness consumes whatever was last built, so a stale build silently changes
-     * what the visual baselines capture. That happened once already: a set of baselines was
-     * generated against an out-of-date reducer and recorded a header with no metrics row.
+     * Without this the app consumes whatever was last built, so a stale build silently changes what
+     * the visual baselines capture. That happened once already: a set of baselines was generated
+     * against an out-of-date reducer and recorded a header with no metrics row.
+     *
+     * Declared by the packages themselves as a `development` export condition rather than listed
+     * here. A hand-maintained alias map only covers the packages someone remembered to add, and
+     * only in the tool it was written for.
      */
-    alias: {
-      "@comu/ui-state": resolve(__dirname, "../../packages/ui-state/src/index.ts"),
-      "@comu/protocol": resolve(__dirname, "../../packages/protocol/src/index.ts"),
-      "@comu/shared": resolve(__dirname, "../../packages/shared/src/index.ts")
-    }
+    conditions: ["development"]
   },
   build: {
     outDir: resolve(__dirname, "../vscode-extension/dist/webview"),

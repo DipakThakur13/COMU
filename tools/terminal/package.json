@@ -18,5 +18,12 @@
     "mocha": "^10.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }

@@ -50,11 +50,13 @@ export function renderMarkdown(run: BenchmarkRun): string {
   // that never does reports something true of neither.
   lines.push("## Per fixture");
   lines.push("");
-  lines.push("| Fixture | Tier | Correct |");
-  lines.push("|---|---|---|");
+  lines.push("| Fixture | Tier | Correct | Peak prompt, share of window | Gateway errors |");
+  lines.push("|---|---|---|---|---|");
   for (const entry of summary.perFixture) {
     const tier = TIER_NAMES[entry.tier as Tier] ?? entry.tier;
-    lines.push(`| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} |`);
+    lines.push(
+      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${entry.gatewayErrors} |`
+    );
   }
   lines.push("");
   lines.push(
@@ -75,6 +77,7 @@ export function renderMarkdown(run: BenchmarkRun): string {
     `| Prompt tokens per run, median (range) | ${summary.promptTokens.median.toLocaleString()} (${summary.promptTokens.min.toLocaleString()} to ${summary.promptTokens.max.toLocaleString()}) |`
   );
   lines.push(`| Largest prompt seen, as a share of the window | ${(summary.maxPeakContextRatio * 100).toFixed(1)}% |`);
+  lines.push(`| Gateway errors (502, 503, 504) | ${summary.gatewayErrors} |`);
   lines.push("");
 
   lines.push("## Failure classes");

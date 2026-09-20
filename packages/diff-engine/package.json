@@ -15,5 +15,12 @@
   },
   "devDependencies": {
     "@types/diff": "^8.0.0"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }
