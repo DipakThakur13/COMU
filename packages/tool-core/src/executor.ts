@@ -1,8 +1,8 @@
 import { ToolRegistry } from "./registry.js";
-import { ToolContext, CancellationSignal, PermissionDecision, ToolCapability } from "./interfaces.js";
+import { ToolContext, ToolCapability } from "./interfaces.js";
 import { ToolError, TimeoutError, TaskCancelledError, PermissionError } from "@comu/shared";
 
-import { CanonicalToolCallParser, ToolParseResult } from "./parser.js";
+import { CanonicalToolCallParser } from "./parser.js";
 
 export class ToolExecutor {
   private parser = new CanonicalToolCallParser();
@@ -35,7 +35,7 @@ export class ToolExecutor {
     const toolCall = parseResult.call;
     context.onTrace?.("TOOL_REQUEST", toolCall.id);
     context.onTrace?.("VALIDATION_STARTED", toolCall.id);
-    
+
     let tool;
     try {
       tool = this.registry.get(toolCall.name);
@@ -75,6 +75,12 @@ export class ToolExecutor {
 
   /**
    * Internal execution logic (bypasses model-specific parsing, assumes safe internal caller).
+   *
+   * Timeout semantics: when `context.limits.timeoutMs` elapses the call rejects with TimeoutError
+   * AND the tool is told to stop through a derived AbortSignal / CancellationSignal on the context
+   * it received. Tools that honour cancellation (terminal, validation) terminate their work;
+   * a tool that ignores the signal cannot be stopped from outside, and its eventual settlement is
+   * observed and discarded so it can never surface as an unhandled rejection.
    */
   async execute<TArgs, TResult>(
     toolName: string,
@@ -84,57 +90,75 @@ export class ToolExecutor {
     const tool = this.registry.get(toolName);
     if (!tool) throw new Error(`Unknown tool: ${toolName}`);
 
-    // Simple timeout mechanism if limits.timeoutMs is provided
-    let timeoutId: NodeJS.Timeout | undefined;
-    let isTimedOut = false;
+    if (context.cancellation?.isCancelled || context.abortSignal?.aborted) {
+      throw new TaskCancelledError(`Execution of tool ${toolName} cancelled before start`);
+    }
 
-    const executePromise = new Promise<TResult>(async (resolve, reject) => {
-      try {
-        if (context.cancellation?.isCancelled) {
-          throw new TaskCancelledError(`Execution of tool ${toolName} cancelled before start`);
+    if (context.permissions) {
+      for (const capability of tool.capabilities) {
+        const decision = context.permissions.capabilities[capability] || "DENY";
+        if (decision !== "ALLOW") {
+          throw new PermissionError(`Tool ${toolName} requires capability '${capability}', but permission is ${decision}`);
         }
-
-        if (context.permissions) {
-          for (const capability of tool.capabilities) {
-            const decision = context.permissions.capabilities[capability] || "DENY";
-            if (decision !== "ALLOW") {
-              throw new PermissionError(`Tool ${toolName} requires capability '${capability}', but permission is ${decision}`);
-            }
-          }
-        }
-
-        const result = await tool.execute(args, context);
-        
-        if (isTimedOut) return;
-        resolve(result);
-      } catch (error) {
-        if (isTimedOut) return;
-        reject(error);
-      }
-    });
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      if (context.limits?.timeoutMs) {
-        timeoutId = setTimeout(() => {
-          isTimedOut = true;
-          reject(new TimeoutError(`Tool ${toolName} execution timed out after ${context.limits.timeoutMs}ms`));
-        }, context.limits.timeoutMs);
-      }
-    });
-
-    try {
-      const result = await Promise.race([
-        executePromise,
-        ...(context.limits?.timeoutMs ? [timeoutPromise] : [])
-      ]);
-      return result;
-    } catch (error) {
-      if (error instanceof Error) throw error;
-      throw new ToolError(String(error));
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
       }
     }
+
+    const timeoutMs = context.limits?.timeoutMs;
+    if (!timeoutMs) {
+      try {
+        return await tool.execute(args, context);
+      } catch (error) {
+        throw ToolExecutor.normalizeError(error);
+      }
+    }
+
+    // Derive a per-call cancellation scope: parent cancellation and the timeout both abort it.
+    const scope = new AbortController();
+    const abortScope = () => scope.abort();
+    context.abortSignal?.addEventListener("abort", abortScope, { once: true });
+    context.cancellation?.onCancel(abortScope);
+
+    const scopedContext: ToolContext = {
+      ...context,
+      abortSignal: scope.signal,
+      cancellation: {
+        get isCancelled() {
+          return scope.signal.aborted;
+        },
+        onCancel: (cb: () => void) => {
+          if (scope.signal.aborted) {
+            cb();
+          } else {
+            scope.signal.addEventListener("abort", cb, { once: true });
+          }
+        }
+      }
+    };
+
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        scope.abort();
+        reject(new TimeoutError(`Tool ${toolName} execution timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    const work = Promise.resolve().then(() => tool.execute(args, scopedContext));
+    // If the timeout wins, the tool's own settlement is no longer observed by anyone.
+    work.catch(() => {});
+
+    try {
+      return await Promise.race([work, timeout]);
+    } catch (error) {
+      throw ToolExecutor.normalizeError(error);
+    } finally {
+      if (timer) clearTimeout(timer);
+      context.abortSignal?.removeEventListener("abort", abortScope);
+    }
+  }
+
+  private static normalizeError(error: unknown): Error {
+    if (error instanceof Error) return error;
+    return new ToolError(String(error));
   }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { ToolExecutor } from "../src/executor.js";
 import { ToolRegistry } from "../src/registry.js";
 import { AgentTool, ToolContext } from "../src/interfaces.js";
-import { TimeoutError, TaskCancelledError } from "@comu/shared";
+import { TimeoutError, TaskCancelledError, ToolError } from "@comu/shared";
 
 describe("ToolExecutor", () => {
   let registry: ToolRegistry;
@@ -67,6 +67,126 @@ describe("ToolExecutor", () => {
     };
 
     await expect(executor.execute("cancel_tool", {}, cancelledContext)).rejects.toThrow(TaskCancelledError);
+  });
+
+  describe("timeout and cancellation scope", () => {
+    it("normal path with a timeout configured returns the tool result and clears the timer", async () => {
+      registry.register({
+        name: "quick_tool",
+        description: "",
+        capabilities: [],
+        inputSchema: {},
+        execute: async () => "quick"
+      });
+      const result = await executor.execute("quick_tool", {}, { ...dummyContext, limits: { timeoutMs: 1000 } });
+      expect(result).toBe("quick");
+    });
+
+    it("on timeout the tool is told to stop through the context it received", async () => {
+      let sawAbort = false;
+      let sawCancellation = false;
+      registry.register({
+        name: "listening_tool",
+        description: "",
+        capabilities: [],
+        inputSchema: {},
+        execute: (_args, ctx) => new Promise((resolve) => {
+          ctx.abortSignal?.addEventListener("abort", () => { sawAbort = true; resolve("stopped"); });
+          ctx.cancellation?.onCancel(() => { sawCancellation = true; });
+        })
+      });
+
+      await expect(executor.execute("listening_tool", {}, { ...dummyContext, limits: { timeoutMs: 10 } })).rejects.toThrow(TimeoutError);
+      await new Promise(r => setTimeout(r, 5));
+      expect(sawAbort).toBe(true);
+      expect(sawCancellation).toBe(true);
+    });
+
+    it("a tool that ignores the timeout and later rejects never becomes an unhandled rejection", async () => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+      process.on("unhandledRejection", onUnhandled);
+      try {
+        registry.register({
+          name: "stubborn_tool",
+          description: "",
+          capabilities: [],
+          inputSchema: {},
+          execute: async () => {
+            await new Promise(r => setTimeout(r, 30));
+            throw new Error("late failure");
+          }
+        });
+        await expect(executor.execute("stubborn_tool", {}, { ...dummyContext, limits: { timeoutMs: 5 } })).rejects.toThrow(TimeoutError);
+        await new Promise(r => setTimeout(r, 60));
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
+    });
+
+    it("parent abort during execution propagates to the tool and rejects with the tool's error", async () => {
+      const parent = new AbortController();
+      registry.register({
+        name: "abortable_tool",
+        description: "",
+        capabilities: [],
+        inputSchema: {},
+        execute: (_args, ctx) => new Promise((_resolve, reject) => {
+          ctx.abortSignal?.addEventListener("abort", () => reject(new TaskCancelledError("tool saw abort")));
+        })
+      });
+      const pending = executor.execute("abortable_tool", {}, { ...dummyContext, abortSignal: parent.signal, limits: { timeoutMs: 5000 } });
+      setTimeout(() => parent.abort(), 10);
+      await expect(pending).rejects.toThrow(TaskCancelledError);
+    });
+
+    it("parent cancellation signal during execution propagates to the tool", async () => {
+      let cancel: (() => void) | undefined;
+      const parentCancellation = {
+        isCancelled: false,
+        onCancel: (cb: () => void) => { cancel = cb; }
+      };
+      registry.register({
+        name: "cancellable_tool",
+        description: "",
+        capabilities: [],
+        inputSchema: {},
+        execute: (_args, ctx) => new Promise((_resolve, reject) => {
+          ctx.cancellation?.onCancel(() => reject(new TaskCancelledError("tool saw cancellation")));
+        })
+      });
+      const pending = executor.execute("cancellable_tool", {}, { ...dummyContext, cancellation: parentCancellation, limits: { timeoutMs: 5000 } });
+      setTimeout(() => cancel?.(), 10);
+      await expect(pending).rejects.toThrow(TaskCancelledError);
+    });
+
+    it("an already-aborted parent signal rejects before the tool runs", async () => {
+      let ran = false;
+      registry.register({
+        name: "never_tool",
+        description: "",
+        capabilities: [],
+        inputSchema: {},
+        execute: async () => { ran = true; return "ran"; }
+      });
+      const parent = new AbortController();
+      parent.abort();
+      await expect(executor.execute("never_tool", {}, { ...dummyContext, abortSignal: parent.signal })).rejects.toThrow(TaskCancelledError);
+      expect(ran).toBe(false);
+    });
+
+    it("wraps non-Error throws in ToolError", async () => {
+      registry.register({
+        name: "string_thrower",
+        description: "",
+        capabilities: [],
+        inputSchema: {},
+        execute: async () => { throw "plain string"; }
+      });
+      await expect(executor.execute("string_thrower", {}, dummyContext)).rejects.toBeInstanceOf(ToolError);
+      await expect(executor.execute("string_thrower", {}, { ...dummyContext, limits: { timeoutMs: 1000 } })).rejects.toBeInstanceOf(ToolError);
+    });
   });
 
   it("should throw if permission denied", async () => {
