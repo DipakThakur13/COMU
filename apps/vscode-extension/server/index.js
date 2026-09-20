@@ -23152,7 +23152,7 @@ var require_dist2 = __commonJS({
         };
       }
     };
-    var ToolExecutor2 = class {
+    var ToolExecutor2 = class _ToolExecutor {
       constructor(registry) {
         this.registry = registry;
       }
@@ -23208,55 +23208,77 @@ var require_dist2 = __commonJS({
       }
       /**
        * Internal execution logic (bypasses model-specific parsing, assumes safe internal caller).
+       *
+       * Timeout semantics: when `context.limits.timeoutMs` elapses the call rejects with TimeoutError
+       * AND the tool is told to stop through a derived AbortSignal / CancellationSignal on the context
+       * it received. Tools that honour cancellation (terminal, validation) terminate their work;
+       * a tool that ignores the signal cannot be stopped from outside, and its eventual settlement is
+       * observed and discarded so it can never surface as an unhandled rejection.
        */
       async execute(toolName, args, context) {
         const tool = this.registry.get(toolName);
         if (!tool) throw new Error(`Unknown tool: ${toolName}`);
-        let timeoutId;
-        let isTimedOut = false;
-        const executePromise = new Promise(async (resolve2, reject) => {
-          try {
-            if (context.cancellation?.isCancelled) {
-              throw new import_shared2.TaskCancelledError(`Execution of tool ${toolName} cancelled before start`);
+        if (context.cancellation?.isCancelled || context.abortSignal?.aborted) {
+          throw new import_shared2.TaskCancelledError(`Execution of tool ${toolName} cancelled before start`);
+        }
+        if (context.permissions) {
+          for (const capability of tool.capabilities) {
+            const decision = context.permissions.capabilities[capability] || "DENY";
+            if (decision !== "ALLOW") {
+              throw new import_shared2.PermissionError(`Tool ${toolName} requires capability '${capability}', but permission is ${decision}`);
             }
-            if (context.permissions) {
-              for (const capability of tool.capabilities) {
-                const decision = context.permissions.capabilities[capability] || "DENY";
-                if (decision !== "ALLOW") {
-                  throw new import_shared2.PermissionError(`Tool ${toolName} requires capability '${capability}', but permission is ${decision}`);
-                }
-              }
-            }
-            const result = await tool.execute(args, context);
-            if (isTimedOut) return;
-            resolve2(result);
-          } catch (error) {
-            if (isTimedOut) return;
-            reject(error);
-          }
-        });
-        const timeoutPromise = new Promise((_, reject) => {
-          if (context.limits?.timeoutMs) {
-            timeoutId = setTimeout(() => {
-              isTimedOut = true;
-              reject(new import_shared2.TimeoutError(`Tool ${toolName} execution timed out after ${context.limits.timeoutMs}ms`));
-            }, context.limits.timeoutMs);
-          }
-        });
-        try {
-          const result = await Promise.race([
-            executePromise,
-            ...context.limits?.timeoutMs ? [timeoutPromise] : []
-          ]);
-          return result;
-        } catch (error) {
-          if (error instanceof Error) throw error;
-          throw new import_shared2.ToolError(String(error));
-        } finally {
-          if (timeoutId) {
-            clearTimeout(timeoutId);
           }
         }
+        const timeoutMs = context.limits?.timeoutMs;
+        if (!timeoutMs) {
+          try {
+            return await tool.execute(args, context);
+          } catch (error) {
+            throw _ToolExecutor.normalizeError(error);
+          }
+        }
+        const scope = new AbortController();
+        const abortScope = () => scope.abort();
+        context.abortSignal?.addEventListener("abort", abortScope, { once: true });
+        context.cancellation?.onCancel(abortScope);
+        const scopedContext = {
+          ...context,
+          abortSignal: scope.signal,
+          cancellation: {
+            get isCancelled() {
+              return scope.signal.aborted;
+            },
+            onCancel: (cb) => {
+              if (scope.signal.aborted) {
+                cb();
+              } else {
+                scope.signal.addEventListener("abort", cb, { once: true });
+              }
+            }
+          }
+        };
+        let timer;
+        const timeout = new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            scope.abort();
+            reject(new import_shared2.TimeoutError(`Tool ${toolName} execution timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        });
+        const work = Promise.resolve().then(() => tool.execute(args, scopedContext));
+        work.catch(() => {
+        });
+        try {
+          return await Promise.race([work, timeout]);
+        } catch (error) {
+          throw _ToolExecutor.normalizeError(error);
+        } finally {
+          if (timer) clearTimeout(timer);
+          context.abortSignal?.removeEventListener("abort", abortScope);
+        }
+      }
+      static normalizeError(error) {
+        if (error instanceof Error) return error;
+        return new import_shared2.ToolError(String(error));
       }
     };
   }
@@ -25594,7 +25616,7 @@ var require_dist9 = __commonJS({
     var index_exports = {};
     __export2(index_exports, {
       ASTRA_CAPABILITY_PROFILE: () => ASTRA_CAPABILITY_PROFILE2,
-      DEFAULT_OPENAI_CAPABILITY_PROFILE: () => DEFAULT_OPENAI_CAPABILITY_PROFILE2,
+      DEFAULT_OPENAI_CAPABILITY_PROFILE: () => DEFAULT_OPENAI_CAPABILITY_PROFILE,
       ModelRequestManager: () => ModelRequestManager,
       OLLAMA_CAPABILITY_PROFILE: () => OLLAMA_CAPABILITY_PROFILE,
       OllamaProvider: () => OllamaProvider2,
@@ -25798,7 +25820,7 @@ var require_dist9 = __commonJS({
         });
       }
     };
-    var DEFAULT_OPENAI_CAPABILITY_PROFILE2 = {
+    var DEFAULT_OPENAI_CAPABILITY_PROFILE = {
       id: "openai-standard",
       name: "OpenAI Compatible Standard",
       displayName: "OpenAI Compatible",
@@ -25943,7 +25965,7 @@ var require_dist9 = __commonJS({
         } else if (modelId?.toLowerCase().includes("astra") || endpoint?.toLowerCase().includes("experiential")) {
           this.profile = ASTRA_CAPABILITY_PROFILE2;
         } else {
-          this.profile = DEFAULT_OPENAI_CAPABILITY_PROFILE2;
+          this.profile = DEFAULT_OPENAI_CAPABILITY_PROFILE;
         }
         if (this.profile.id === "gpt-6-astra") {
           this.id = "experiential";
@@ -25968,7 +25990,7 @@ var require_dist9 = __commonJS({
         return !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0);
       }
       static async testConnection(apiKey, endpoint, timeoutMs = 15e3, model, profile) {
-        const activeProfile = profile || (model?.toLowerCase().includes("astra") || endpoint?.toLowerCase().includes("experiential") ? ASTRA_CAPABILITY_PROFILE2 : DEFAULT_OPENAI_CAPABILITY_PROFILE2);
+        const activeProfile = profile || (model?.toLowerCase().includes("astra") || endpoint?.toLowerCase().includes("experiential") ? ASTRA_CAPABILITY_PROFILE2 : DEFAULT_OPENAI_CAPABILITY_PROFILE);
         const providerName = activeProfile.id === "gpt-6-astra" ? "experiential" : "openai";
         const resolvedEndpoint = _OpenAICompatibleProvider.normalizeEndpoint(
           endpoint || activeProfile.defaultEndpoint,
@@ -27820,7 +27842,6 @@ var require_dist15 = __commonJS({
       }
       executor;
       async compile(request, workingSet, budget) {
-        const rootPath = request.workspace.rootPath;
         const compiled = {
           workspace: request.workspace,
           openFiles: []
@@ -28172,7 +28193,7 @@ var require_dist16 = __commonJS({
           /**
            * Generates a user-facing clarification message for an ambiguous request.
            */
-          generateClarificationRequest(message) {
+          generateClarificationRequest(_message) {
             return "What would you like me to do with it \u2014 explain it, review it, plan changes, or make changes?";
           }
           getOptions() {
@@ -32318,12 +32339,12 @@ var require_dist18 = __commonJS({
       MemoryFreshnessManager: () => MemoryFreshnessManager,
       MemoryRanker: () => MemoryRanker,
       MemoryRetriever: () => MemoryRetriever,
-      MemorySanitizer: () => MemorySanitizer2,
-      MemoryStorage: () => MemoryStorage2,
+      MemorySanitizer: () => MemorySanitizer,
+      MemoryStorage: () => MemoryStorage,
       MemoryTrustManager: () => MemoryTrustManager
     });
     module2.exports = __toCommonJS2(index_exports);
-    var MemorySanitizer2 = class {
+    var MemorySanitizer = class {
       static SECRET_PATTERNS = [
         {
           name: "PRIVATE_KEY",
@@ -32525,7 +32546,7 @@ var require_dist18 = __commonJS({
     var import_node_path = __toESM2(require("path"));
     var import_node_os = __toESM2(require("os"));
     var import_node_crypto = __toESM2(require("crypto"));
-    var MemoryStorage2 = class {
+    var MemoryStorage = class {
       baseDir;
       constructor(customStorageDir) {
         if (customStorageDir) {
@@ -32677,7 +32698,7 @@ var require_dist18 = __commonJS({
       options;
       constructor(options) {
         this.options = options || {};
-        this.storage = new MemoryStorage2(this.options.storageDir);
+        this.storage = new MemoryStorage(this.options.storageDir);
       }
       getFilenameForType(type) {
         switch (type) {
@@ -32690,7 +32711,7 @@ var require_dist18 = __commonJS({
         }
       }
       async record(entryInput) {
-        const sanitization = MemorySanitizer2.sanitize(entryInput.content);
+        const sanitization = MemorySanitizer.sanitize(entryInput.content);
         const sanitizedContent = sanitization.content;
         const contentHash = import_node_crypto2.default.createHash("sha256").update(sanitizedContent).digest("hex").substring(0, 16);
         const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -32746,7 +32767,7 @@ var require_dist18 = __commonJS({
         return finalEntry;
       }
       async recordEpisode(episode) {
-        const sanitization = MemorySanitizer2.sanitize(episode.summary);
+        const sanitization = MemorySanitizer.sanitize(episode.summary);
         const cleanEpisode = {
           ...episode,
           summary: sanitization.content
@@ -33490,6 +33511,7 @@ __export(server_exports, {
   AUTH_TOKEN_HEADER: () => AUTH_TOKEN_HEADER,
   DEFAULT_ALLOWED_ORIGIN: () => DEFAULT_ALLOWED_ORIGIN,
   LOOPBACK_HOST: () => LOOPBACK_HOST,
+  asyncRoute: () => asyncRoute,
   createAuthMiddleware: () => createAuthMiddleware,
   createLoopbackGuard: () => createLoopbackGuard,
   createRuntimeApp: () => createRuntimeApp,
@@ -33498,6 +33520,7 @@ __export(server_exports, {
   extractPresentedToken: () => extractPresentedToken,
   generateRuntimeToken: () => generateRuntimeToken,
   isLoopbackAddress: () => isLoopbackAddress,
+  jsonErrorHandler: () => jsonErrorHandler,
   resolveWorkspaceRoot: () => resolveWorkspaceRoot,
   safeEqual: () => safeEqual,
   selectProvider: () => selectProvider,
@@ -33601,6 +33624,20 @@ function createLoopbackGuard() {
     }
     next();
   };
+}
+function asyncRoute(handler) {
+  return (req, res, next) => {
+    handler(req, res, next).catch(next);
+  };
+}
+function jsonErrorHandler(err, _req, res, _next) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error("[COMU runtime] Unhandled route error:", err);
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res.status(500).json({ error: "INTERNAL_ERROR", code: "INTERNAL_ERROR", message });
 }
 function startRuntimeServer(app2, port, host = LOOPBACK_HOST) {
   return new Promise((resolvePromise, reject) => {
@@ -33762,7 +33799,7 @@ function createRuntimeApp(options = {}) {
       description: probe.status === "CONNECTED" ? "Local on-device inference through Ollama. No API key, no external network calls." : probe.message || "Ollama is not reachable."
     };
   }
-  app2.get("/v1/config/providers", async (req, res) => {
+  app2.get("/v1/config/providers", asyncRoute(async (req, res) => {
     const envNvidia = import_provider_nvidia.NvidiaProvider.detectEnvironmentCredential();
     const hasNvidiaKey = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || envNvidia);
     const envExperiential = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
@@ -33818,8 +33855,8 @@ function createRuntimeApp(options = {}) {
       await describeOllama()
     ];
     res.status(200).json({ providers });
-  });
-  app2.get("/v1/config/providers/:providerId/status", async (req, res) => {
+  }));
+  app2.get("/v1/config/providers/:providerId/status", asyncRoute(async (req, res) => {
     const { providerId } = req.params;
     if (providerId === "nvidia") {
       const envNvidia = import_provider_nvidia.NvidiaProvider.detectEnvironmentCredential();
@@ -33863,8 +33900,8 @@ function createRuntimeApp(options = {}) {
       });
     }
     res.status(404).json({ error: `Provider '${providerId}' not found` });
-  });
-  app2.post("/v1/config/providers/:providerId/test", async (req, res) => {
+  }));
+  app2.post("/v1/config/providers/:providerId/test", asyncRoute(async (req, res) => {
     const { providerId } = req.params;
     if (providerId === "nvidia") {
       const key = req.body?.apiKey || runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY;
@@ -33908,11 +33945,11 @@ function createRuntimeApp(options = {}) {
       return res.status(200).json(testResult);
     }
     res.status(404).json({ error: `Provider '${providerId}' not testable` });
-  });
+  }));
   app2.get("/v1/health", (req, res) => {
     res.json({ status: "ok" });
   });
-  app2.post("/v1/tasks", async (req, res) => {
+  app2.post("/v1/tasks", asyncRoute(async (req, res) => {
     const taskReq = req.body || {};
     const modelId = taskReq.modelId || "nvidia-nemotron-3-ultra";
     const selection = selectProvider(modelId);
@@ -34018,7 +34055,7 @@ function createRuntimeApp(options = {}) {
         finishedTasks.delete(taskId);
       }, 5 * 60 * 1e3);
     };
-    setTimeout(async () => {
+    const runTask = async () => {
       try {
         const model = providerFactory(selection, runtimeConfig.providers);
         const orchestrator = new import_agent_core.AgentOrchestrator(model, registry, executor, diffEngine, {
@@ -34076,8 +34113,11 @@ function createRuntimeApp(options = {}) {
         closeStreams();
         scheduleCleanup();
       }
+    };
+    setTimeout(() => {
+      void runTask();
     }, 0);
-  });
+  }));
   app2.post("/v1/tasks/:id/cancel", (req, res) => {
     const taskId = req.params.id;
     const controller = taskControllers.get(taskId);
@@ -34196,7 +34236,7 @@ function createRuntimeApp(options = {}) {
       res.status(400).json({ error: "Failed to resolve interaction" });
     }
   });
-  app2.get("/v1/workspace/memory", async (req, res) => {
+  app2.get("/v1/workspace/memory", asyncRoute(async (req, res) => {
     try {
       const workspaceId = req.query.workspaceId;
       if (!workspaceId) {
@@ -34215,8 +34255,8 @@ function createRuntimeApp(options = {}) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
-  });
-  app2.post("/v1/workspace/memory", async (req, res) => {
+  }));
+  app2.post("/v1/workspace/memory", asyncRoute(async (req, res) => {
     try {
       const { workspaceId, type, content, source, trustLevel, confidence, scope, evidence } = req.body;
       if (!workspaceId || !type || !content) {
@@ -34242,8 +34282,8 @@ function createRuntimeApp(options = {}) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
-  });
-  app2.delete("/v1/workspace/memory/:id", async (req, res) => {
+  }));
+  app2.delete("/v1/workspace/memory/:id", asyncRoute(async (req, res) => {
     try {
       const memoryId = req.params.id;
       const workspaceId = req.query.workspaceId || req.body?.workspaceId;
@@ -34256,7 +34296,7 @@ function createRuntimeApp(options = {}) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
-  });
+  }));
   app2.get("/v1/tasks/:taskId/subagents", (req, res) => {
     const { taskId } = req.params;
     const events = eventStore.getEvents(taskId);
@@ -34266,6 +34306,7 @@ function createRuntimeApp(options = {}) {
       subagents: subagentEvents
     });
   });
+  app2.use(jsonErrorHandler);
   return app2;
 }
 function resolveStartupToken() {
@@ -34293,6 +34334,7 @@ var server_default = app;
   AUTH_TOKEN_HEADER,
   DEFAULT_ALLOWED_ORIGIN,
   LOOPBACK_HOST,
+  asyncRoute,
   createAuthMiddleware,
   createLoopbackGuard,
   createRuntimeApp,
@@ -34300,6 +34342,7 @@ var server_default = app;
   extractPresentedToken,
   generateRuntimeToken,
   isLoopbackAddress,
+  jsonErrorHandler,
   resolveWorkspaceRoot,
   safeEqual,
   selectProvider,
