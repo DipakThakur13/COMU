@@ -28,6 +28,8 @@ is usually the most useful part.
 | [0011](0011-retry-depends-on-why-the-request-failed.md) | How many times a request is retried depends on why it failed | Model requests |
 | [0012](0012-commands-are-allowed-by-name-and-git-by-subcommand.md) | Commands are allowed by name, git is allowed by subcommand and caller | Command execution |
 | [0013](0013-no-shell-and-windows-shims.md) | No shell, ever — and what that costs on Windows | Command execution |
+| [0014](0014-a-credential-never-reaches-the-shell.md) | The credential never reaches a command line, and everything written is checked first | Measurement |
+| [0015](0015-a-measurement-that-takes-hours-must-survive-hours.md) | A measurement that takes hours has to survive hours | Measurement |
 
 ## What belongs here
 
