@@ -1,5 +1,8 @@
 # COMU Architecture Specification
 
+> This document describes what the system *is*. For why several of its less obvious structures were
+> chosen, and what was rejected, see the [decision records](decisions/README.md).
+
 ## 1. System Overview
 
 COMU is an Autonomous AI Software Engineer designed for VS Code, built with a TypeScript monorepo managed with PNPM workspaces.
