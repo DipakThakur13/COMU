@@ -119,6 +119,7 @@ describe("Runtime task workspace root (Phase 0.1)", () => {
       body: JSON.stringify({
         prompt: "Add a note file describing the workspace",
         modelId: "scripted-test-model",
+        autonomy: "auto",
         workspace: { rootPath: fixtureRoot, workspaceId: "fixture-ws" }
       })
     });

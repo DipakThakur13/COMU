@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { WebviewMessage, ExtensionMessage } from '../protocol/messages';
+import { TaskAutonomy, TASK_AUTONOMY_LEVELS } from '@comu/protocol';
 import { RuntimeClient } from '../runtime/runtime_client';
 import { SSEClient } from '../runtime/sse_client';
 import { TaskSessionStore } from '../sessions/task_session_store';
@@ -63,6 +64,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         // Fast-path: immediately post state and providers to webview to eliminate loading latency
         this.sendStateToWebview();
+        this.sendSettingsToWebview();
         this.sendProvidersToWebview().catch(() => {});
 
         webviewView.webview.onDidReceiveMessage(async (data: WebviewMessage) => {
@@ -71,13 +73,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'webview_ready':
                     console.log('[COMU STARTUP] T7: Extension Host ready signal received from webview');
                     this.sendStateToWebview();
+                    this.sendSettingsToWebview();
                     this.sendProvidersToWebview().catch(() => {});
                     break;
                 case 'telemetry_metric':
                     console.log(`[COMU WEBVIEW] Telemetry metric: ${data.name} = ${data.value}ms ${data.details ? '(' + data.details + ')' : ''}`);
                     break;
                 case 'submit_prompt':
-                    await this.handleSubmitPrompt(data.prompt, data.modelId, data.mode);
+                    await this.handleSubmitPrompt(data.prompt, data.modelId, data.mode, data.autonomy);
                     break;
                 case 'cancel_task':
                     await this.handleCancelTask();
@@ -172,8 +175,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this.runtimeClient.pushConfig(config);
     }
 
-    private async handleSubmitPrompt(prompt: string, modelId: string, mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT") {
+    /** The user's default autonomy from settings, validated. */
+    public getDefaultAutonomy(): TaskAutonomy {
+        const configured = String(vscode.workspace.getConfiguration('comu').get<string>('defaultAutonomy') || 'ask').toLowerCase();
+        return (TASK_AUTONOMY_LEVELS as readonly string[]).includes(configured) ? (configured as TaskAutonomy) : 'ask';
+    }
+
+    private sendSettingsToWebview() {
+        if (this._view) {
+            const msg: ExtensionMessage = { type: 'settings_update', defaultAutonomy: this.getDefaultAutonomy() };
+            void this._view.webview.postMessage(msg);
+        }
+    }
+
+    private async handleSubmitPrompt(prompt: string, modelId: string, mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT", autonomy?: TaskAutonomy) {
         if (!prompt) return;
+        const effectiveAutonomy: TaskAutonomy = autonomy && (TASK_AUTONOMY_LEVELS as readonly string[]).includes(autonomy)
+            ? autonomy
+            : this.getDefaultAutonomy();
 
         // Task-Start Guard: Verify provider configuration before proceeding
         const check = await this.providerManager.isProviderConfigured(modelId);
@@ -203,6 +222,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 prompt,
                 modelId,
                 mode: mode || 'AUTO',
+                autonomy: effectiveAutonomy,
                 workspace: workspaceCtx,
                 editor: editorCtx
             });

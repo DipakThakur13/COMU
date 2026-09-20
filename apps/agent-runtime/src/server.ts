@@ -24,7 +24,7 @@ import {
   OllamaProvider,
   ASTRA_CAPABILITY_PROFILE
 } from '@comu/model-core';
-import { AgentEvent, ProviderConfig, TaskMode, TASK_MODES } from '@comu/protocol';
+import { AgentEvent, ProviderConfig, TaskMode, TASK_MODES, TaskAutonomy, TASK_AUTONOMY_LEVELS } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
 
 export type ProviderFactory = (selection: ProviderSelection, config: Record<string, any>) => ModelProvider;
@@ -39,6 +39,8 @@ export interface RuntimeServerOptions {
   authToken?: string;
   /** Browser origins allowed by CORS. Defaults to VS Code webview origins only. */
   allowedOriginPattern?: RegExp;
+  /** Bounded wait for approval decisions; expiry is a denial. Defaults to COMU_APPROVAL_TIMEOUT_MS or 10 minutes. */
+  approvalTimeoutMs?: number;
 }
 
 export const AUTH_HEADER = 'authorization';
@@ -205,6 +207,8 @@ export function defaultProviderFactory(selection: ProviderSelection, providers: 
 
 export function createRuntimeApp(options: RuntimeServerOptions = {}): Express {
 const providerFactory: ProviderFactory = options.providerFactory || defaultProviderFactory;
+const approvalTimeoutMs = options.approvalTimeoutMs
+  ?? (Number(process.env.COMU_APPROVAL_TIMEOUT_MS) > 0 ? Number(process.env.COMU_APPROVAL_TIMEOUT_MS) : 10 * 60 * 1000);
 
 const allowedOrigin = options.allowedOriginPattern || DEFAULT_ALLOWED_ORIGIN;
 
@@ -563,6 +567,20 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
     mode = requested as TaskMode;
   }
 
+  // Autonomy Guard: readonly | ask | auto, defaulting to ask.
+  let autonomy: TaskAutonomy = 'ask';
+  if (taskReq.autonomy !== undefined && taskReq.autonomy !== null) {
+    const requested = String(taskReq.autonomy).toLowerCase();
+    if (!(TASK_AUTONOMY_LEVELS as readonly string[]).includes(requested)) {
+      return res.status(400).json({
+        error: 'INVALID_AUTONOMY',
+        code: 'INVALID_AUTONOMY',
+        message: `autonomy must be one of ${TASK_AUTONOMY_LEVELS.join(', ')} (received '${taskReq.autonomy}').`
+      });
+    }
+    autonomy = requested as TaskAutonomy;
+  }
+
   const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
   const controller = new AbortController();
@@ -615,6 +633,9 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
         workspaceRoot,
         workspaceId,
         mode,
+        autonomy,
+        // A human can only approve what they can see: an attached event stream is the signal.
+        hasHumanObserver: () => (eventStreams.get(taskId)?.length ?? 0) > 0,
         systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
         userPrompt: taskReq.description || taskReq.prompt || "",
         limits: {
@@ -624,7 +645,8 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
           maxRepairAttempts: 3,
           maxValidationRuns: 6,
           maxRepairFiles: 5,
-          maxRepairTimeMs: 180000
+          maxRepairTimeMs: 180000,
+          approvalTimeoutMs
         },
         onEvent: (event: AgentEvent) => {
           console.log(`[Event ${event.type}]`, event);
@@ -777,8 +799,15 @@ app.post('/v1/tasks/:taskId/interactions/:interactionId/respond', (req, res) => 
     return res.status(400).json({ error: "Invalid response type for INPUT interaction" });
   }
 
-  if (pending.type === "APPROVAL" && response.type !== "APPROVE" && response.type !== "DENY") {
+  if (pending.type === "APPROVAL" && response.type !== "APPROVE" && response.type !== "APPROVE_SESSION" && response.type !== "DENY") {
     return res.status(400).json({ error: "Invalid response type for APPROVAL interaction" });
+  }
+  if (response.type === "APPROVE_SESSION") {
+    const scopeKey = typeof response.scopeKey === "string" ? response.scopeKey : "";
+    const offered = (pending.approval?.scopes || []).map(s => s.key);
+    if (!scopeKey || !offered.includes(scopeKey)) {
+      return res.status(400).json({ error: "APPROVE_SESSION requires a scopeKey offered by the interaction", offered });
+    }
   }
 
   const success = interactionManager.resolveInteraction(taskId, interactionId, response, (event) => {

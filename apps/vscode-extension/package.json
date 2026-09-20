@@ -86,6 +86,17 @@
           "default": "http://127.0.0.1:3456",
           "description": "Base URL of the COMU Agent Runtime. The runtime binds to the loopback interface only and requires the per-session token the extension generates."
         },
+        "comu.defaultAutonomy": {
+          "type": "string",
+          "enum": ["ask", "auto", "readonly"],
+          "enumDescriptions": [
+            "Ask before every file write and command (an approval card with the diff or the exact command).",
+            "Run without approvals. Git push still always asks.",
+            "Never write files or run commands, whatever the mode."
+          ],
+          "default": "ask",
+          "description": "Default autonomy level preselected in the composer."
+        },
         "comu.ollama.endpoint": {
           "type": "string",
           "default": "http://127.0.0.1:11434",

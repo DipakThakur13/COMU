@@ -2,6 +2,7 @@ import {
   AgentEvent,
   AgentLimits,
   TaskMode,
+  TaskAutonomy,
   TaskPlan,
   VerificationResult,
   FailureDiagnosis,
@@ -33,11 +34,18 @@ export interface OrchestratorContext {
   workspaceId?: string;
   /** User-selected interaction mode. Omitted or AUTO means the kernel classifies the prompt. */
   mode?: TaskMode;
+  /** Autonomy level. Omitted means ask: every write or command needs a human decision. */
+  autonomy?: TaskAutonomy;
   systemPrompt: string;
   userPrompt: string;
   limits: AgentLimits;
   onEvent: (event: AgentEvent) => void;
   abortSignal?: AbortSignal;
+  /**
+   * Reports whether a human can currently see this task (an event stream subscriber is attached).
+   * When it returns false, approvals are denied immediately instead of blocking a headless run.
+   */
+  hasHumanObserver?: () => boolean;
   gitConfig?: {
     autoCommitVerifiedTasks?: boolean;
     autoBranchOnTask?: boolean;

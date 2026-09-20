@@ -264,6 +264,7 @@
     const submitBtn = document.getElementById('submit-btn');
     const cancelBtn = document.getElementById('cancel-btn');
     const modeSelect = document.getElementById('mode-select');
+    const autonomySelect = document.getElementById('autonomy-select');
     const modelSelect = document.getElementById('model-select');
     const configureModelBtn = document.getElementById('configure-model-btn');
     const attachmentBar = document.getElementById('composer-attachment-bar');
@@ -314,6 +315,16 @@
         // @ts-ignore
         state.requestedMode = e.target.value;
     });
+
+    // Autonomy selection (readonly | ask | auto)
+    if (autonomySelect) {
+        // @ts-ignore
+        autonomySelect.addEventListener('change', (e) => {
+            // @ts-ignore
+            state.autonomy = e.target.value;
+            state.autonomyTouched = true;
+        });
+    }
 
     // @ts-ignore
     modelSelect.addEventListener('change', (e) => {
@@ -412,6 +423,15 @@
             case 'provider_test_result':
                 handleProviderTestResult(message.providerId, message.result);
                 break;
+            case 'settings_update': {
+                // Preselect the user's configured default unless they already changed it this session.
+                if (message.defaultAutonomy && !state.autonomyTouched) {
+                    state.autonomy = message.defaultAutonomy;
+                    // @ts-ignore
+                    if (autonomySelect) autonomySelect.value = message.defaultAutonomy;
+                }
+                break;
+            }
             case 'open_settings':
                 openSettingsView(message.targetProviderId);
                 break;
@@ -495,6 +515,7 @@
         // Send typed WebviewMessage to extension host
         vscode.postMessage({
             type: 'submit_prompt',
+            autonomy: state.autonomy || 'ask',
             prompt: text,
             modelId: state.selectedModelId,
             mode: state.requestedMode
@@ -1186,9 +1207,27 @@
                 });
                 html += `</div><div class="interaction-actions"><button id="btn-submit-choice" class="primary">Submit</button></div>`;
             } else if (pi.type === 'APPROVAL') {
-                html += `<div class="interaction-actions">
-                    <button id="btn-approve" class="primary">✓ Approve</button>
-                    <button id="btn-deny" class="danger">✕ Deny</button>
+                const ap = pi.approval;
+                if (ap && ap.file) {
+                    const f = ap.file;
+                    html += `<div class="approval-meta"><span class="approval-kind">${f.operation === 'CREATE' ? 'Create file' : 'Modify file'}</span> <code>${escapeHtml(f.path)}</code> <span class="approval-counts"><span class="add">+${f.additions}</span> <span class="del">-${f.deletions}</span></span>${f.truncated ? ' <span class="approval-note">(diff truncated)</span>' : ''}</div>`;
+                    if (f.note) html += `<div class="approval-note">⚠ ${escapeHtml(f.note)}</div>`;
+                    html += `<pre class="approval-diff" tabindex="0" aria-label="Proposed diff">${renderDiffLines(f.diff)}</pre>`;
+                } else if (ap && ap.command) {
+                    const c = ap.command;
+                    html += `<div class="approval-meta"><span class="approval-kind">Run command</span> in <code>${escapeHtml(c.cwd)}</code></div>`;
+                    html += `<pre class="approval-command" tabindex="0" aria-label="Exact command">${escapeHtml(JSON.stringify([c.executable].concat(c.args || [])))}</pre>`;
+                    html += `<div class="approval-note">Executed without a shell: this exact argument vector.</div>`;
+                } else if (ap && ap.details) {
+                    html += `<pre class="approval-command">${escapeHtml(JSON.stringify(ap.details, null, 2))}</pre>`;
+                }
+                const scopeButtons = (ap && ap.scopes ? ap.scopes : []).map(s =>
+                    `<button class="secondary btn-approve-scope" data-scope-key="${escapeHtml(s.key)}" title="${escapeHtml(s.key)}">${escapeHtml(s.label)}</button>`
+                ).join('');
+                html += `<div class="interaction-actions approval-actions">
+                    <button id="btn-approve" class="primary" title="Approve this action once">✓ Approve</button>
+                    ${scopeButtons}
+                    <button id="btn-deny" class="danger" title="Deny; the agent is told and can adapt">✕ Deny</button>
                 </div>`;
             }
             card.innerHTML = html;
@@ -1675,6 +1714,18 @@
         promptInput.disabled = isRunning || isWaiting || isCancelling || isOffline;
         // @ts-ignore
         modeSelect.disabled = isRunning || isWaiting || isCancelling;
+        if (autonomySelect) autonomySelect.disabled = isRunning || isWaiting || isCancelling;
+    }
+
+    function renderDiffLines(diffText) {
+        return String(diffText || '').split('\n').map(line => {
+            let cls = 'ctx';
+            if (line.startsWith('+++') || line.startsWith('---')) cls = 'hdr';
+            else if (line.startsWith('@@')) cls = 'hunk';
+            else if (line.startsWith('+')) cls = 'add';
+            else if (line.startsWith('-')) cls = 'del';
+            return `<span class="dl ${cls}">${escapeHtml(line)}</span>`;
+        }).join('\n');
     }
 
     function respondInteraction(response) {
@@ -2096,6 +2147,11 @@
         // Interactive approval / deny buttons
         if (target.closest('#btn-approve')) {
             respondInteraction({ type: 'APPROVE' });
+            return;
+        }
+        const scopeBtn = target.closest('.btn-approve-scope');
+        if (scopeBtn) {
+            respondInteraction({ type: 'APPROVE_SESSION', scopeKey: scopeBtn.getAttribute('data-scope-key') || '' });
             return;
         }
         if (target.closest('#btn-deny')) {

@@ -4,7 +4,7 @@ import { TaskContract } from "./interaction/task_contract.js";
 import { ClarificationHandler } from "./interaction/clarification_handler.js";
 import { ModelIntentClassifier } from "./interaction/model_intent_classifier.js";
 import { AgentResult } from "./interfaces.js";
-import { AgentLimits, TaskMode, TASK_MODES } from "@comu/protocol";
+import { AgentLimits, TaskMode, TASK_MODES, TaskAutonomy } from "@comu/protocol";
 import { ToolCapability } from "@comu/tool-core";
 import { ModelRequestManager } from "@comu/model-core";
 import { ProviderCancelledError } from "@comu/shared";
@@ -22,6 +22,8 @@ export interface AgentKernelInput {
   runId: string;
   /** Explicit mode from the composer. Omitted or AUTO means classify. */
   mode?: TaskMode;
+  /** Autonomy level. readonly forces a read-only contract regardless of mode. */
+  autonomy?: TaskAutonomy;
   systemPrompt: string;
   userPrompt: string;
   workspaceRoot: string;
@@ -30,6 +32,8 @@ export interface AgentKernelInput {
   abortSignal?: AbortSignal;
   onEvent: (event: any) => void;
   gitConfig?: any;
+  /** Whether a human can currently see the task; consulted by the approval gate. */
+  hasHumanObserver?: () => boolean;
 }
 
 export class AgentKernel {
@@ -390,6 +394,13 @@ export class AgentKernel {
       allowedCapabilities = ["read", "write", "execute", "network"];
       expectedMutation = true;
       verificationRequired = true;
+    }
+
+    if (input.autonomy === "readonly") {
+      // readonly autonomy wins over the mode: nothing may mutate or run, whatever was classified.
+      allowedCapabilities = allowedCapabilities.filter(c => c === "read" || c === "network");
+      expectedMutation = false;
+      verificationRequired = false;
     }
 
     return {

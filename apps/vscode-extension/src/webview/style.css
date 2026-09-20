@@ -3143,3 +3143,52 @@ textarea::placeholder {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* ── Approval cards (autonomy: ask) ─────────────────────────────────── */
+.approval-meta {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin: 6px 0 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+.approval-kind {
+    font-weight: 600;
+    color: var(--vscode-foreground);
+}
+.approval-counts .add { color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-testing-iconPassed)); }
+.approval-counts .del { color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-errorForeground)); }
+.approval-note {
+    font-size: 11px;
+    color: var(--vscode-editorWarning-foreground, var(--vscode-descriptionForeground));
+    margin: 2px 0 4px;
+}
+.approval-diff,
+.approval-command {
+    max-height: 280px;
+    overflow: auto;
+    margin: 4px 0 8px;
+    padding: 8px;
+    font-family: var(--vscode-editor-font-family);
+    font-size: 11px;
+    line-height: 1.4;
+    background: var(--vscode-textCodeBlock-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    white-space: pre;
+}
+.approval-diff .dl { display: block; }
+.approval-diff .dl.add { color: var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-testing-iconPassed)); }
+.approval-diff .dl.del { color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-errorForeground)); }
+.approval-diff .dl.hunk { color: var(--vscode-textLink-foreground); }
+.approval-diff .dl.hdr { color: var(--vscode-descriptionForeground); }
+.approval-actions { flex-wrap: wrap; }
+.interaction-actions button.secondary {
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+.interaction-actions button.secondary:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}

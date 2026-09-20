@@ -46,6 +46,7 @@ describe("Agent Orchestrator M6", () => {
     const ctx: OrchestratorContext = {
       taskId: "t1",
       workspaceRoot: "/fake",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Update the README.md documentation",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -108,6 +109,7 @@ describe("Agent Orchestrator M6", () => {
     const ctx: OrchestratorContext = {
       taskId: "t2",
       workspaceRoot: "/fake",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Implement calculator in src/calc.ts",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -135,6 +137,7 @@ describe("Agent Orchestrator M6", () => {
     const ctx: OrchestratorContext = {
       taskId: "t3",
       workspaceRoot: "/fake",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Fix the failing tests",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -192,6 +195,7 @@ describe("Agent Orchestrator M6", () => {
     const ctx: OrchestratorContext = {
       taskId: "t-cpp",
       workspaceRoot: "/fake",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "give a sample code of C++",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },

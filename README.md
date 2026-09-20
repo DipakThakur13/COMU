@@ -32,7 +32,7 @@
 | **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI-compatible, Ollama (local, keyless) |
 | **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
 | **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck, Lint & Build |
-| **Automated Test Suite** | **42 Test Files · 377 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
+| **Automated Test Suite** | **46 Test Files ·  Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
 | **VS Code Package** | `comu-ai-0.2.4.vsix` | Built & Ready to Install |
 
 ---
@@ -139,6 +139,8 @@ Bring Your Own Key directly to VS Code. COMU does not resell inference credits o
   - When tests fail, COMU performs root cause diagnosis and initiates bounded self-repair cycles.
 - **Human-in-the-Loop Git Governance**:
   - Proposes structured Git commit messages and requires interactive user approval before committing or pushing to remotes.
+- **Autonomy Levels & Approval Cards**:
+  - Choose **Ask before changes** (default), **Auto** or **Read-only** in the composer (default via `comu.defaultAutonomy`). In *Ask*, every file write, edit and command pauses the task at `WAITING_FOR_USER` and renders an inline approval card carrying the **proposed unified diff** (computed before anything is written) or the **exact command argument vector and working directory** (never a shell string). Approve once, approve with an explicit scope for the session (this file, this directory, all writes; for commands the exact normalised command), or deny. A denial is returned to the model as a tool error so it can adapt; it does not fail the task. Waiting for a human does not count against the execution time budget. With no COMU panel attached, or after a bounded wait, the answer is a denial, never an implicit approval. Every decision is journaled as an `approval.decided` event with its scope key. *Edit before approve* is not yet available.
 - **Locked-Down Local Runtime**:
   - The agent runtime binds to `127.0.0.1` only, requires a random per-session bearer token on every route (constant-time checked), and scopes CORS to VS Code webview origins. Every task carries the workspace root it may operate on; the runtime never falls back to its own working directory.
 

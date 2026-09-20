@@ -56,6 +56,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 - **Fail-Safe Expiration**:
   - A timeout on an `APPROVAL` interaction is treated as **NOT GRANTED**.
   - Silent or implicit permissions are strictly forbidden.
+- **Approval Gate (`ApprovalGate`)**: in autonomy `ask`, every model-originated tool call carrying a `write` or `execute` capability (and, in every autonomy, tools marked `requiresApproval: "always"`) is held at `WAITING_FOR_USER` until a human decides. The card carries a reviewable payload: for file tools the proposed unified diff against the pre-mutation content (reusing the baseline read), for commands the exact executable, argument vector and resolved cwd. "Approve for session" is scoped explicitly and each breadth is a distinct grant key: `file:<path>`, `dir:<dir>/`, `writes:*`; for commands `cmd:<executable> <full normalised argv>` (long vectors keep the first two arguments and the count), so `npm run build` never covers `npm run deploy`. Grants live only for the task. Denials are returned to the model as `APPROVAL_DENIED` tool errors. The no-human case is defined: with no event stream subscriber attached, or after the bounded `approvalTimeoutMs`, the decision is a denial. Every decision, including session grants and automatic denials, is journaled as `approval.decided` with its scope key.
 
 ---
 

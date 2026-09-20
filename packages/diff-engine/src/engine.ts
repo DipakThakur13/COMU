@@ -48,19 +48,11 @@ export class ComuDiffEngine implements DiffEngine {
   getUnifiedDiff(changeSet: ChangeSet, path: string): string | undefined {
     const change = changeSet.changes.get(path);
     if (!change) return undefined;
+    return this.createUnifiedDiff(path, change.originalContent ?? "", change.newContent);
+  }
 
-    const oldText = change.originalContent ?? "";
-    const newText = change.newContent;
-    
-    const patch = diff.createPatch(
-      path,
-      oldText,
-      newText,
-      "original",
-      "modified"
-    );
-    
-    return patch;
+  createUnifiedDiff(path: string, original: string, proposed: string): string {
+    return diff.createPatch(path, original, proposed, "original", "modified");
   }
 
   getDiffs(changeSet: ChangeSet): Map<string, string> {

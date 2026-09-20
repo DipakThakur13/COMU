@@ -129,6 +129,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const result = await orchestrator.run({
       taskId: "sc1-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "You are an AI software engineer.",
       userPrompt: "Find the bug causing the failing test in the user-profile service. Fix the bug, run relevant tests and typecheck.",
       limits: { maxSteps: 10, maxToolCalls: 20, maxExecutionTimeMs: 15000 },
@@ -237,6 +238,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const result = await orchestrator.run({
       taskId: "sc2-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "Python engineer",
       userPrompt: "Fix the failing authentication test without changing intended authentication behavior.",
       limits: { maxSteps: 8, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -351,6 +353,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const result = await orchestrator.run({
       taskId: "sc3-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "React engineer",
       userPrompt: "Fix the broken settings form so that validation errors display correctly and the existing test suite passes.",
       limits: { maxSteps: 8, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -466,6 +469,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const result = await orchestrator.run({
       taskId: "sc4-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "Monorepo engineer",
       userPrompt: "Fix the failing shared-types package and make sure dependent packages remain healthy.",
       limits: { maxSteps: 8, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -579,6 +583,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const result = await orchestrator.run({
       taskId: "sc5-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "API engineer",
       userPrompt: "Fix the API endpoint that returns the wrong status code for invalid input. Preserve existing behavior for valid requests.",
       limits: { maxSteps: 8, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -710,6 +715,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const result = await orchestrator.run({
       taskId: "sc6-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "Database engineer",
       userPrompt: "Fix the bug causing the user lookup query to fail for existing records. Do not drop or reset the database.",
       limits: { maxSteps: 8, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -819,6 +825,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const result = await orchestrator.run({
       taskId: "sc7-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "Architect",
       userPrompt: "Investigate calculateInvoiceTotal in the billing subsystem.",
       limits: { maxSteps: 5, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -936,6 +943,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc8-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "Legacy expert",
       userPrompt: "Fix the production bug in the legacy payment validation path without performing a broad refactor.",
       limits: { maxSteps: 6, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -1050,6 +1058,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc9-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "System",
       userPrompt: "Fix the notification preference bug.",
       limits: { maxSteps: 5, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -1217,6 +1226,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc11-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "Security Architect",
       userPrompt: "Fix the failing authorization test while preserving intended system behavior.",
       limits: { maxSteps: 6, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -1330,6 +1340,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc12-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "Math engineer",
       userPrompt: "Fix addition function in calculator.",
       limits: { maxSteps: 8, maxToolCalls: 10, maxExecutionTimeMs: 10000, maxRepairAttempts: 3 },
@@ -1486,6 +1497,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc14-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "System",
       userPrompt: "Fix the failing feature.",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -1990,6 +2002,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc23-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "System",
       userPrompt: "Update version in shared_config.json.",
       limits: { maxSteps: 4, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -2072,6 +2085,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc24-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "System",
       userPrompt: "Fix the validation bug in validator.ts if present.",
       limits: { maxSteps: 10, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -2185,6 +2199,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc25-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "System",
       userPrompt: "Fix the failing discount test.",
       limits: { maxSteps: 6, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -2297,6 +2312,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc26-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "System",
       userPrompt: "Fix this one failing clamp function.",
       limits: { maxSteps: 6, maxToolCalls: 10, maxExecutionTimeMs: 10000 },
@@ -2446,6 +2462,7 @@ function unusedHelper_v2() { return 42; }
     const result = await orchestrator.run({
       taskId: "sc27-task",
       workspaceRoot: fixtureDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       workspaceId: fixtureDir,
       systemPrompt: "Senior Architect",
       userPrompt: "Fix the failing SDK integration tests and commit the verified fix.",

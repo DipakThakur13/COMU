@@ -58,6 +58,7 @@ function run(mode: "ASK" | "AGENT" | "PLAN", prompt: string, responses: ModelRes
     taskId: `t-${mode}`,
     workspaceRoot: "/repo",
     mode,
+    autonomy: "auto", // contract enforcement is independent of the approval gate
     systemPrompt: "sys",
     userPrompt: prompt,
     limits: { maxSteps: 10, maxToolCalls: 10, maxExecutionTimeMs: 10000 },

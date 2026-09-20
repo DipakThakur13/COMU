@@ -118,6 +118,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const ctx: OrchestratorContext = {
       taskId: "e2e-scen-1",
       workspaceRoot: "/workspace",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Fix the failing tests in tests/auth.test.ts",
       limits: { maxSteps: 20, maxToolCalls: 20, maxExecutionTimeMs: 10000 },
@@ -187,6 +188,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const ctx: OrchestratorContext = {
       taskId: "e2e-dup-rep",
       workspaceRoot: "/workspace",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Fix syntax error in tests/syntax.test.ts",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -253,6 +255,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const ctx: OrchestratorContext = {
       taskId: "e2e-limit",
       workspaceRoot: "/workspace",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Fix fatal error in tests/fatal.test.ts",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000, maxRepairAttempts: 1 },
@@ -281,6 +284,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const ctx: OrchestratorContext = {
       taskId: "e2e-unavail",
       workspaceRoot: "/workspace",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Fix the failing tests in src/index.ts",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -308,6 +312,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const ctx: OrchestratorContext = {
       taskId: "e2e-docs",
       workspaceRoot: "/workspace",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Update documentation in README.md",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },
@@ -378,6 +383,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const ctx: OrchestratorContext = {
       taskId: "e2e-integ-fail",
       workspaceRoot: "/workspace",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Update src/data.ts",
       limits: { maxSteps: 20, maxToolCalls: 20, maxExecutionTimeMs: 5000 },
@@ -486,6 +492,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const ctx: OrchestratorContext = {
       taskId: "e2e-cancel",
       workspaceRoot: "/workspace",
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "sys",
       userPrompt: "Do long running work",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 5000 },

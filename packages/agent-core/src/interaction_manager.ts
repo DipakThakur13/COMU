@@ -1,8 +1,16 @@
 import {
   InteractionRequest,
   InteractionResponse,
-  AgentEvent
+  AgentEvent,
+  ApprovalPayload
 } from "@comu/protocol";
+
+export interface ApprovalDecision {
+  approved: boolean;
+  reason: "APPROVED" | "APPROVED_SESSION" | "DENIED" | "TIMEOUT";
+  scopeKey?: string;
+  interactionId: string;
+}
 
 interface PendingDeferred {
   request: InteractionRequest;
@@ -125,14 +133,30 @@ export class InteractionManager {
     });
   }
 
+  /** Boolean convenience wrapper. Expiry resolves false (never an implicit approval). */
   public async requestApproval(
     taskId: string,
     title: string,
     message: string,
     timeoutMs?: number,
     onEvent?: (e: AgentEvent) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    approval?: ApprovalPayload
   ): Promise<boolean> {
+    const decision = await this.requestApprovalDecision(taskId, title, message, timeoutMs, onEvent, signal, approval);
+    return decision.approved;
+  }
+
+  /** Full decision including session-scope grants. Expiry resolves as a TIMEOUT denial. */
+  public async requestApprovalDecision(
+    taskId: string,
+    title: string,
+    message: string,
+    timeoutMs?: number,
+    onEvent?: (e: AgentEvent) => void,
+    signal?: AbortSignal,
+    approval?: ApprovalPayload
+  ): Promise<ApprovalDecision> {
     const interactionId = `act-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const effectiveTimeout = timeoutMs ?? this.defaultTimeoutMs;
     const expiresAt = new Date(Date.now() + effectiveTimeout).toISOString();
@@ -143,12 +167,13 @@ export class InteractionManager {
       type: "APPROVAL",
       title,
       message,
+      approval,
       status: "PENDING",
       createdAt: new Date().toISOString(),
       expiresAt
     };
 
-    return new Promise<boolean>((resolve, reject) => {
+    return new Promise<ApprovalDecision>((resolve, reject) => {
       let abortHandler: (() => void) | undefined;
 
       const timer = setTimeout(() => {
@@ -169,7 +194,7 @@ export class InteractionManager {
         }
 
         // Implicit denial on expiration
-        resolve(false);
+        resolve({ approved: false, reason: "TIMEOUT", interactionId });
       }, effectiveTimeout);
 
       if (signal) {
@@ -189,7 +214,7 @@ export class InteractionManager {
 
       this.pendingInteractions.set(interactionId, {
         request,
-        resolve: (val: boolean) => {
+        resolve: (val: ApprovalDecision) => {
           clearTimeout(timer);
           if (signal && abortHandler) {
             signal.removeEventListener("abort", abortHandler);
@@ -263,9 +288,11 @@ export class InteractionManager {
       }
     } else if (item.request.type === "APPROVAL") {
       if (response.type === "APPROVE") {
-        item.resolve(true);
+        item.resolve({ approved: true, reason: "APPROVED", interactionId });
+      } else if (response.type === "APPROVE_SESSION") {
+        item.resolve({ approved: true, reason: "APPROVED_SESSION", scopeKey: response.scopeKey, interactionId });
       } else {
-        item.resolve(false);
+        item.resolve({ approved: false, reason: "DENIED", interactionId });
       }
     }
 

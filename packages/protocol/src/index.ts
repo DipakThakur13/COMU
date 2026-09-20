@@ -11,12 +11,23 @@ export interface SelectionContext {
 export type TaskMode = "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT";
 export const TASK_MODES: readonly TaskMode[] = ["AUTO", "CHAT", "ASK", "PLAN", "AGENT"];
 
+/**
+ * How much the agent may do without asking.
+ *  - readonly: read-only contract regardless of mode
+ *  - ask: every write or command needs a human decision (default for AGENT tasks)
+ *  - auto: no approvals except tools that always require one (git push)
+ */
+export type TaskAutonomy = "readonly" | "ask" | "auto";
+export const TASK_AUTONOMY_LEVELS: readonly TaskAutonomy[] = ["readonly", "ask", "auto"];
+
 export interface TaskRequest {
   taskId: string;
   prompt: string;
   modelId: string;
   /** Explicit mode. Omitted or AUTO means the runtime classifies the prompt. */
   mode?: TaskMode;
+  /** Autonomy level. Omitted means ask. */
+  autonomy?: TaskAutonomy;
   workspace: {
     rootPath: string;
     workspaceId?: string;
@@ -398,8 +409,49 @@ export type InteractionStatus = "PENDING" | "RESOLVED" | "EXPIRED";
 
 export type InteractionResponse =
   | { type: "APPROVE" }
+  | { type: "APPROVE_SESSION"; scopeKey: string }
   | { type: "DENY" }
   | { type: "INPUT"; value: string };
+
+export type ApprovalKind = "file_write" | "file_edit" | "command" | "git_push" | "git_commit" | "tool";
+
+/** One "approve for session" breadth the user may choose. Each has its own key and label. */
+export interface ApprovalScopeOption {
+  key: string;
+  label: string;
+}
+
+/** Reviewable content of an approval card: the proposed diff, or the exact command. */
+export interface ApprovalPayload {
+  kind: ApprovalKind;
+  tool: string;
+  summary: string;
+  file?: {
+    path: string;
+    operation: "CREATE" | "MODIFY";
+    diff: string;
+    additions: number;
+    deletions: number;
+    truncated?: boolean;
+    note?: string;
+  };
+  command?: {
+    executable: string;
+    args: string[];
+    cwd: string;
+  };
+  details?: Record<string, unknown>;
+  scopes: ApprovalScopeOption[];
+}
+
+export type ApprovalDecisionReason =
+  | "APPROVED"
+  | "APPROVED_SESSION"
+  | "SESSION_GRANT"
+  | "DENIED"
+  | "TIMEOUT"
+  | "NO_HUMAN_OBSERVER"
+  | "NO_INTERACTION_CHANNEL";
 
 export interface InteractionRequest {
   interactionId: string;
@@ -408,6 +460,8 @@ export interface InteractionRequest {
   title: string;
   message: string;
   options?: string[];
+  /** Present on APPROVAL interactions raised by the approval gate. */
+  approval?: ApprovalPayload;
   status: InteractionStatus;
   createdAt: string;
   expiresAt: string;
@@ -520,6 +574,20 @@ export interface InteractionExpiredEvent extends AgentEventBase {
   interactionId: string;
 }
 
+/** Journal entry for every approval decision, including session grants and automatic denials. */
+export interface ApprovalDecidedEvent extends AgentEventBase {
+  type: "approval.decided";
+  interactionId?: string;
+  tool: string;
+  kind: ApprovalKind;
+  summary: string;
+  approved: boolean;
+  decision: ApprovalDecisionReason;
+  scopeKey?: string;
+  path?: string;
+  command?: { executable: string; args: string[]; cwd: string };
+}
+
 export type AgentEvent =
   | TaskStartedEvent
   | AgentStatusEvent
@@ -552,6 +620,7 @@ export type AgentEvent =
   | InteractionRequestedEvent
   | InteractionRespondedEvent
   | InteractionExpiredEvent
+  | ApprovalDecidedEvent
   // Phase 8 additions:
   | ExecutionTraceEvent
   | ModelRequestCreatedEvent
@@ -585,7 +654,10 @@ export type AgentEvent =
 export interface AgentLimits {
   maxSteps: number;
   maxToolCalls: number;
+  /** Execution budget. Time spent waiting for a human decision does not count against it. */
   maxExecutionTimeMs: number;
+  /** Bounded wait for an approval decision; expiry is a denial. Defaults to 10 minutes. */
+  approvalTimeoutMs?: number;
   maxRepairAttempts?: number;
   maxValidationRuns?: number;
   maxRepairFiles?: number;

@@ -37,10 +37,17 @@ export interface ToolContext {
   ) => void;
 }
 
+/**
+ * "always": a human must approve every call regardless of autonomy (git push).
+ * "byAutonomy" (default): approval is required only when the autonomy level says so.
+ */
+export type ToolApprovalRequirement = "always" | "byAutonomy";
+
 export interface AgentTool<TArgs = any, TResult = any> {
   name: string;
   description: string;
   capabilities: ToolCapability[];
+  requiresApproval?: ToolApprovalRequirement;
   inputSchema: any; // JSON Schema for arguments
   execute(args: TArgs, context: ToolContext): Promise<TResult>;
 }

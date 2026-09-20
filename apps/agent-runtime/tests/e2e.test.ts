@@ -54,6 +54,7 @@ describe("E2E Agent Workflows", () => {
     await orchestrator.run({
       taskId: "e2e-1",
       workspaceRoot: root,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "",
       userPrompt: "Create a file named hello.txt",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 10000 },
@@ -98,6 +99,7 @@ describe("E2E Agent Workflows", () => {
     await orchestrator.run({
       taskId: "e2e-2",
       workspaceRoot: root,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "",
       userPrompt: "Update modify.txt",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 10000 },
@@ -141,6 +143,7 @@ describe("E2E Agent Workflows", () => {
     await orchestrator.run({
       taskId: "e2e-3",
       workspaceRoot: root,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "",
       userPrompt: "Update conflict.txt",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 10000 },
@@ -191,6 +194,7 @@ describe("E2E Agent Workflows", () => {
     const result = await orchestrator.run({
       taskId: "e2e-4",
       workspaceRoot: root,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "",
       userPrompt: "Break it",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 10000 },
@@ -240,6 +244,7 @@ describe("E2E Agent Workflows", () => {
     await orchestrator.run({
       taskId: "e2e-term-safe",
       workspaceRoot: root,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "",
       userPrompt: "Check node version",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 10000 },
@@ -267,6 +272,7 @@ describe("E2E Agent Workflows", () => {
     await orchestrator.run({
       taskId: "e2e-term-danger",
       workspaceRoot: root,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "",
       userPrompt: "Delete all files",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 10000 },
@@ -297,6 +303,7 @@ describe("E2E Agent Workflows", () => {
     await orchestrator.run({
       taskId: "e2e-val",
       workspaceRoot: root,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "",
       userPrompt: "Run tests",
       limits: { maxSteps: 5, maxToolCalls: 5, maxExecutionTimeMs: 10000 },

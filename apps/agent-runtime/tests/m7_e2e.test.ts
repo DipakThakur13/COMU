@@ -110,6 +110,7 @@ describe("Milestone 7: Persistent Intelligence, Git Governance, Workers & Web Do
     const result = await orchestrator.run({
       taskId: "task-mem-1",
       workspaceRoot: tempDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       workspaceId,
       systemPrompt: "System",
       userPrompt: "Add a new export to the library adhering to exports convention",
@@ -370,6 +371,7 @@ describe("Milestone 7: Persistent Intelligence, Git Governance, Workers & Web Do
     const result = await orchestrator.run({
       taskId: "task-git-8",
       workspaceRoot: tempDir,
+      autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "System",
       userPrompt: "Task prompt",
       limits: { maxSteps: 5, maxToolCalls: 10, maxExecutionTimeMs: 10000 },

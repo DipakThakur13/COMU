@@ -4,3 +4,4 @@ export * from "./interaction_manager.js";
 export * from "./subagent_manager.js";
 export * from "./interaction/index.js";
 export * from "./agent_kernel.js";
+export * from "./approval/approval_gate.js";

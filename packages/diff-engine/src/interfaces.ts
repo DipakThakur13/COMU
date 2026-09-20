@@ -30,4 +30,6 @@ export interface DiffEngine {
   ): void;
   getUnifiedDiff(changeSet: ChangeSet, path: string): string | undefined;
   getDiffs(changeSet: ChangeSet): Map<string, string>;
+  /** Unified diff between arbitrary contents, used for approval previews before anything is written. */
+  createUnifiedDiff(path: string, original: string, proposed: string): string;
 }

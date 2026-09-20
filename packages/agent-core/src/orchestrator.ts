@@ -1,6 +1,7 @@
 import { AgentState, OrchestratorContext, AgentResult } from "./interfaces.js";
 import { TaskContract, permissionsFromContract, toolAllowedByContract, validateTaskContract } from "./interaction/task_contract.js";
-import { SubagentType } from "@comu/protocol";
+import { SubagentType, TaskAutonomy } from "@comu/protocol";
+import { ApprovalGate } from "./approval/approval_gate.js";
 import { ModelProvider, ModelMessage, ToolDefinition, ModelRequestManager, RequestManagerConfig } from "@comu/model-core";
 import { ProviderCancelledError } from "@comu/shared";
 import { ToolExecutor, ToolRegistry, ToolContext, ToolCapability } from "@comu/tool-core";
@@ -109,12 +110,12 @@ export class AgentOrchestrator {
       ANALYZING: ["PLANNING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       PLANNING: ["THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       THINKING: ["TOOL_CALLING", "OBSERVING", "VERIFYING", "THINKING", "WAITING_FOR_USER", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
-      TOOL_CALLING: ["OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
+      TOOL_CALLING: ["WAITING_FOR_USER", "OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       OBSERVING: ["VERIFYING", "THINKING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       VERIFYING: ["DIAGNOSING", "THINKING", "VERIFYING", "COMPLETED", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       DIAGNOSING: ["REPAIRING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
       REPAIRING: ["VERIFYING", "THINKING", "FAILED", "CANCELLED", "LIMIT_REACHED"],
-      WAITING_FOR_USER: ["CLASSIFYING", "ANALYZING", "THINKING", "CANCELLED", "FAILED"],
+      WAITING_FOR_USER: ["CLASSIFYING", "ANALYZING", "THINKING", "TOOL_CALLING", "OBSERVING", "CANCELLED", "FAILED", "LIMIT_REACHED"],
       COMPLETED: [],
       FAILED: [],
       CANCELLED: [],
@@ -151,6 +152,7 @@ export class AgentOrchestrator {
       taskId: ctx.taskId,
       runId: ctx.taskId,
       mode: ctx.mode,
+      autonomy: ctx.autonomy,
       systemPrompt: ctx.systemPrompt,
       userPrompt: ctx.userPrompt,
       workspaceRoot: ctx.workspaceRoot,
@@ -158,7 +160,8 @@ export class AgentOrchestrator {
       limits: ctx.limits,
       abortSignal: ctx.abortSignal,
       onEvent: ctx.onEvent,
-      gitConfig: ctx.gitConfig
+      gitConfig: ctx.gitConfig,
+      hasHumanObserver: ctx.hasHumanObserver
     });
   }
 
@@ -205,6 +208,22 @@ export class AgentOrchestrator {
       ...toolCtx,
       permissions: { capabilities: { read: "ALLOW", write: "DENY", execute: "ALLOW", network: "DENY" } }
     };
+
+    // Human approval gate. Time spent waiting for a human is excluded from the execution budget.
+    const autonomy: TaskAutonomy = ctx.autonomy || "ask";
+    let waitingMs = 0;
+    const elapsedMs = () => Date.now() - startTime - waitingMs;
+    const approvalGate = new ApprovalGate({
+      taskId: ctx.taskId,
+      autonomy,
+      workspaceRoot: ctx.workspaceRoot,
+      interactionManager: this.interactionManager,
+      onEvent: ctx.onEvent,
+      abortSignal: ctx.abortSignal,
+      hasHumanObserver: ctx.hasHumanObserver,
+      timeoutMs: ctx.limits.approvalTimeoutMs ?? 10 * 60 * 1000,
+      createUnifiedDiff: (path, original, proposed) => this.diffEngine.createUnifiedDiff(path, original, proposed)
+    });
 
     // CHAT and PLAN never enter TOOL_CALLING (state-machine invariant): offer no tools at all.
     const toolsEnabled = contract.mode !== "CHAT" && contract.mode !== "PLAN";
@@ -361,7 +380,7 @@ export class AgentOrchestrator {
         return { status: "limit_reached", steps, changeSet, plan: planManager.getPlan() };
       }
 
-      if (Date.now() - startTime > ctx.limits.maxExecutionTimeMs) {
+      if (elapsedMs() > ctx.limits.maxExecutionTimeMs) {
         this.transition(ctx, "LIMIT_REACHED", "Max execution time reached");
         ctx.onEvent({
           type: "agent.limit_reached",
@@ -405,7 +424,7 @@ export class AgentOrchestrator {
             planManager,
             changeSet,
             lastVerification,
-            startTime,
+            startTime + waitingMs,
             steps,
             runtimeToolCtx,
             lastAssistantText
@@ -480,7 +499,7 @@ export class AgentOrchestrator {
               planManager,
               changeSet,
               lastVerification,
-              startTime,
+              startTime + waitingMs,
               steps,
               runtimeToolCtx,
               lastAssistantText
@@ -526,7 +545,7 @@ export class AgentOrchestrator {
               diagnosis: lastDiagnosis,
               proposedTargetFiles: lastDiagnosis.affectedFiles,
               existingChangedFiles: Array.from(changeSet.changes.keys()),
-              startTimeMs: startTime,
+              startTimeMs: startTime + waitingMs,
               totalValidationRuns,
               limits: {
                 maxRepairAttempts: ctx.limits.maxRepairAttempts,
@@ -735,7 +754,7 @@ export class AgentOrchestrator {
           planManager,
           changeSet,
           lastVerification,
-          startTime,
+          startTime + waitingMs,
           steps,
           runtimeToolCtx,
           lastAssistantText
@@ -887,17 +906,61 @@ export class AgentOrchestrator {
               return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
             }
 
-            // The single enforcement point for model-originated calls: parse, contract, permissions, execute.
             let toolError: any = null;
+
+            // Human approval gate (autonomy 'ask', or tools marked requiresApproval: "always").
+            // The baseline read above supplies the pre-mutation content for the diff.
+            let registeredTool: { name: string; capabilities: ToolCapability[]; requiresApproval?: "always" | "byAutonomy" } | undefined;
             try {
-              const outcome = await this.executor.processModelToolCall(tc, validateContract, toolCtx);
-              if (outcome.type === "success") {
-                result = outcome.result;
-              } else {
-                toolError = new Error(outcome.error || `Tool ${tc.name} returned ${outcome.type}`);
+              registeredTool = this.registry.get(tc.name);
+            } catch {
+              registeredTool = undefined; // unknown tool: processModelToolCall reports it
+            }
+            if (registeredTool && approvalGate.requiresApproval(registeredTool)) {
+              const payload = approvalGate.buildPayload(registeredTool, tc.arguments, { exists: baselineExists, content: baselineContent });
+              const covered = approvalGate.findGrant(payload);
+              if (!covered) {
+                this.transition(ctx, "WAITING_FOR_USER", `Waiting for approval: ${payload.summary}`);
               }
-            } catch (e) {
-              toolError = e;
+              const waitStart = Date.now();
+              let decision;
+              try {
+                decision = await approvalGate.decide(payload);
+              } catch (e: any) {
+                waitingMs += Date.now() - waitStart;
+                if (ctx.abortSignal?.aborted || /cancel/i.test(e?.message || "")) {
+                  this.transition(ctx, "CANCELLED", "Task was cancelled");
+                  ctx.onEvent({
+                    type: "task.cancelled",
+                    eventId: `evt-${Date.now()}`,
+                    taskId: ctx.taskId,
+                    timestamp: new Date().toISOString()
+                  });
+                  return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
+                }
+                decision = { approved: false, reason: "DENIED", message: e?.message || String(e) };
+              }
+              waitingMs += Date.now() - waitStart;
+              if (!covered) {
+                this.transition(ctx, "TOOL_CALLING", "Executing tools...", contract);
+              }
+              if (!decision.approved) {
+                toolError = new Error(`APPROVAL_DENIED: ${decision.message} You may propose a different approach or ask the user how to proceed.`);
+              }
+            }
+
+            // The single enforcement point for model-originated calls: parse, contract, permissions, execute.
+            if (!toolError) {
+              try {
+                const outcome = await this.executor.processModelToolCall(tc, validateContract, toolCtx);
+                if (outcome.type === "success") {
+                  result = outcome.result;
+                } else {
+                  toolError = new Error(outcome.error || `Tool ${tc.name} returned ${outcome.type}`);
+                }
+              } catch (e) {
+                toolError = e;
+              }
             }
 
             if (ctx.abortSignal?.aborted || (toolError && (toolError.name === "AbortError" || String(toolError).includes("COMMAND_CANCELLED") || String(toolError).includes("CANCELLED")))) {

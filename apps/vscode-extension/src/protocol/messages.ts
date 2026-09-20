@@ -1,5 +1,6 @@
 import {
   AgentEvent,
+  TaskAutonomy,
   TaskPlan,
   VerificationResult,
   FailureDiagnosis,
@@ -28,7 +29,7 @@ export interface SubagentSummaryUI {
 export type WebviewMessage =
   | { type: "ready" }
   | { type: "webview_ready" }
-  | { type: "submit_prompt"; prompt: string; modelId: string; mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT" }
+  | { type: "submit_prompt"; prompt: string; modelId: string; mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT"; autonomy?: TaskAutonomy }
   | { type: "cancel_task" }
   | { type: "request_diff"; path: string }
   | { type: "open_file"; path: string; line?: number }
@@ -56,6 +57,7 @@ export type ExtensionMessage =
   | { type: "provider_test_result"; providerId: string; result: ProviderTestResult }
   | { type: "open_settings"; targetProviderId?: string }
   | { type: "memory_update"; entries: WorkspaceMemoryEntry[] }
+  | { type: "settings_update"; defaultAutonomy: TaskAutonomy }
   | { type: "agent_event"; event: AgentEvent };
 
 export interface WorkingSetUI {
