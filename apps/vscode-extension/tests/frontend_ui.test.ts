@@ -365,26 +365,27 @@ describe("Phase 9: Frontend Architecture & UI Test Suite (UI-01 through UI-30)",
     expect(state.requestedMode).toBe("AGENT");
   });
 
-  // UI-26: Reduced motion works
-  it("UI-26: Reduced motion rules are defined in style.css", () => {
-    const cssPath = path.resolve(__dirname, "../src/webview/style.css");
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).toContain("prefers-reduced-motion: reduce");
+  // UI-26 to UI-28 asserted theming against the deleted style.css. They now read the token layer
+  // that replaced it, and the stronger versions of these checks live in the webview's own
+  // theming suite, which proves no component contains a literal colour at all.
+  const tokens = () => fs.readFileSync(path.resolve(__dirname, "../../webview/src/styles/tokens.css"), "utf8");
+
+  it("UI-26: Reduced motion is respected", () => {
+    expect(tokens()).toContain("prefers-reduced-motion: reduce");
   });
 
-  // UI-27: Dark theme works
-  it("UI-27: Dark theme uses VS Code theme variables", () => {
-    const cssPath = path.resolve(__dirname, "../src/webview/style.css");
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).toContain("var(--vscode-editor-background");
-    expect(css).toContain("var(--vscode-editor-foreground");
+  it("UI-27: Dark theme comes from VS Code theme variables", () => {
+    // The panel is a sidebar, so it follows the sidebar background and the generic foreground
+    // rather than the editor's. The editor background remains the fallback.
+    expect(tokens()).toContain("var(--vscode-sideBar-background, var(--vscode-editor-background))");
+    expect(tokens()).toContain("var(--vscode-foreground)");
   });
 
-  // UI-28: Light theme works
-  it("UI-28: Light theme works transparently through VS Code theme tokens", () => {
-    const cssPath = path.resolve(__dirname, "../src/webview/style.css");
-    const css = fs.readFileSync(cssPath, "utf8");
-    expect(css).toContain("var(--vscode-panel-border");
+  it("UI-28: Light theme works through the same tokens, with no separate palette", () => {
+    expect(tokens()).toContain("var(--vscode-panel-border");
+    // One palette, driven by the host. A second hardcoded set is how the old panel got light mode
+    // wrong, so there must not be one.
+    expect(tokens()).not.toMatch(/\[data-theme=["']light["']\]\s*\{[^}]*#[0-9a-fA-F]{3,6}/);
   });
 
   // UI-29: Large activity lists remain responsive

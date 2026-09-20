@@ -42,10 +42,9 @@ export function activate(context: vscode.ExtensionContext) {
   const sseClient = new SSEClient(
       (event) => {
           if (!chatProvider) return;
-          const added = chatProvider.handleAgentEvent(event);
-          if (added) {
-              chatProvider.sendStateToWebview();
-          }
+          // handleAgentEvent feeds both the session store and the replica; the replica is what
+          // reaches the panel, so there is nothing further to push here.
+          chatProvider.handleAgentEvent(event);
       },
       (error) => {
           console.error("SSE Error:", error);
@@ -64,7 +63,6 @@ export function activate(context: vscode.ExtensionContext) {
           const config = await providerManager.getRawConfig();
           await runtimeClient.pushConfig(config);
       }
-      chatProvider.sendStateToWebview();
   });
 
   healthMonitor.start();

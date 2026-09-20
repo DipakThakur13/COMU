@@ -94,18 +94,19 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
 - **First-Class Instant Cancellation (`■ Stop`)**:
   - Non-blocking, instant transition to `◌ Cancelling…` (<5ms response). Immediately stops agent execution without freezing the editor.
 
-### 2. Interface (rebuild in progress)
-The panel is being rebuilt as a React 18 + TypeScript application (`apps/webview`) built by Vite, with a Zustand store fed by a pure, unit-tested event reducer (`@comu/ui-state`) shared with the extension host. Enable it with the `comu.ui.experimental` setting; the current interface remains the default until the rebuild reaches parity.
+### 2. Interface
+The panel is a React 18 + TypeScript application (`apps/webview`) built by Vite, with a Zustand store fed by a pure, unit-tested event reducer (`@comu/ui-state`) shared with the extension host. It is the only interface: the previous hand-written panel has been removed, and `comu.ui.experimental` no longer does anything.
 
-Landed so far:
 - **Token-level streaming**: the assistant's reply renders as it is generated (`model.token_delta`), with worker turns kept on their own channel so they never interleave into the main stream.
 - **Live cost and usage**: tokens and, where the model has a published price, spend, both of which the runtime previously computed and discarded. A model with no published price shows tokens only rather than an invented figure.
 - **Virtualised activity timeline**: thousands of events render a bounded number of rows; earlier activity beyond the runtime's own 5000-event ceiling is elided with an explicit affordance rather than lost silently.
 - **Every colour resolves from a VS Code theme variable**, enforced by a test, so light, dark and high contrast are all correct. Icons are inline Codicons drawing with `currentColor`; no emoji.
 - **Strict CSP**: the host document is generated in TypeScript with a per-load nonce, so `script-src` needs no `unsafe-inline` and `connect-src` is gone entirely.
 - **Standalone harness** at `http://127.0.0.1:3000` replaying recorded fixtures in any theme at any panel width, so the interface can be built without reloading an extension host.
-
-Still to come in this phase: the approval card, plan ribbon, aggregate diff review, drawer surfaces and the settings rebuild.
+- **Approval card** showing the actual diff, the exact argument vector for a command, and separately labelled grant scopes, with a countdown that states in words that expiry means denial.
+- **Plan ribbon and read-only change review**, the latter deliberately without an accept or revert control, because the engine has no revert and a button that does nothing is worse than none.
+- **Drawer surfaces** for the task overview, verification checks, background workers, workspace memory and the working set, each appearing only when it has content.
+- **Visual regression** over every fixture in three themes at three panel widths, with committed baselines, which is the only check that can see a colour that ignores the theme or a control that overflows a 280px sidebar.
 
 ### 3. High-Performance Startup & Runtime Stabilization
 - **Instant First Paint (<20ms)**: Renders the full workspace shell, navigation tabs, and composer immediately from local static defaults.

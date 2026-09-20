@@ -113,8 +113,9 @@
         },
         "comu.ui.experimental": {
           "type": "boolean",
-          "default": false,
-          "description": "Use the rebuilt React interface. In development while the remaining surfaces are ported; the current interface stays the default until it reaches parity."
+          "default": true,
+          "description": "No longer used. The rebuilt interface is the only interface.",
+          "deprecationMessage": "The rebuilt interface reached parity and is now the only one, so this setting no longer does anything. It is kept so existing settings files do not report an unknown key, and will be removed in a later release."
         }
       }
     }

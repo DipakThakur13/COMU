@@ -45,15 +45,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         try {
             webviewView.webview.options = {
                 enableScripts: true,
-                localResourceRoots: [
-                    this._extensionUri,
-                    vscode.Uri.joinPath(this._extensionUri, 'src', 'webview')
-                ]
+                // Only the built bundle. The panel loads nothing from source and nothing remote.
+                localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview')]
             };
 
-            webviewView.webview.html = this.useReactUi()
-                ? buildReactWebviewHtml(webviewView.webview, this._extensionUri)
-                : this._getHtmlForWebview(webviewView.webview);
+            webviewView.webview.html = buildReactWebviewHtml(webviewView.webview, this._extensionUri);
             this.replica.attach(webviewView.webview);
             const t1 = Date.now();
             console.log(`[COMU WEBVIEW] T1: HTML returned in ${t1 - t0}ms`);
@@ -70,8 +66,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 </html>`;
         }
 
-        // Fast-path: immediately post state and providers to webview to eliminate loading latency
-        this.sendStateToWebview();
+        // Settings and providers go out immediately; session state reaches the panel through the
+        // replica, which the panel asks for as soon as it is ready.
         this.sendSettingsToWebview();
         this.sendProvidersToWebview().catch(() => {});
 
@@ -80,7 +76,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'ready':
                 case 'webview_ready':
                     console.log('[COMU STARTUP] T7: Extension Host ready signal received from webview');
-                    this.sendStateToWebview();
                     this.sendSettingsToWebview();
                     this.sendProvidersToWebview().catch(() => {});
                     break;
@@ -192,14 +187,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this.runtimeClient.pushConfig(config);
     }
 
-    /** True when the rebuilt React interface is enabled. */
-    public useReactUi(): boolean {
-        return vscode.workspace.getConfiguration('comu').get<boolean>('ui.experimental') === true;
-    }
-
     /**
-     * Single entry point for a runtime event. The legacy store and the React replica are both fed,
-     * so the interface can be switched without the event path changing.
+     * Single entry point for a runtime event. The session store still projects state for the diff
+     * viewer and the tests; the replica is what the panel actually renders from.
      */
     public handleAgentEvent(event: any): boolean {
         const added = this.sessionStore.addEvent(event);
@@ -228,8 +218,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const msg: ExtensionMessage = {
                 type: 'settings_update',
                 defaultAutonomy: this.getDefaultAutonomy(),
-                defaultModelId: vscode.workspace.getConfiguration('comu').get<string>('defaultModel'),
-                experimentalUi: this.useReactUi()
+                defaultModelId: vscode.workspace.getConfiguration('comu').get<string>('defaultModel')
             };
             void this._view.webview.postMessage(msg);
         }
@@ -282,7 +271,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 autonomy: effectiveAutonomy,
                 mode
             });
-            this.sendStateToWebview();
 
             const url = this.runtimeClient.getEventStreamUrl(taskInfo.taskId);
             const headers = await this.runtimeClient.getHeaders();
@@ -366,7 +354,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (state.taskId && (state.status === 'running' || state.status === 'waiting_for_user')) {
             try {
                 state.status = 'cancelling';
-                this.sendStateToWebview();
+                // The panel already shows "cancelling" the moment the button is pressed, and the
+                // runtime's own task.cancelled event confirms it.
                 await this.runtimeClient.cancelTask(state.taskId);
             } catch (e: any) {
                 void vscode.window.showErrorMessage(`Cancel failed: ${e.message}`);
@@ -381,13 +370,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    public sendStateToWebview() {
-        if (this._view) {
-            const msg: ExtensionMessage = { type: 'state_update', state: this.sessionStore.getState() };
-            void this._view.webview.postMessage(msg);
-        }
-    }
-
     public sendErrorToWebview(message: string) {
         if (this._view) {
             const msg: ExtensionMessage = { type: 'error', message };
@@ -395,37 +377,4 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
-        const candidatePaths = [
-            path.join(this._extensionUri.fsPath, 'src', 'webview', 'index.html'),
-            path.join(this._extensionUri.fsPath, 'dist', 'webview', 'index.html'),
-            path.join(this._extensionUri.fsPath, 'webview', 'index.html')
-        ];
-
-        let htmlPath = candidatePaths.find(p => fs.existsSync(p));
-        if (!htmlPath) {
-            htmlPath = candidatePaths[0];
-        }
-
-        let html = fs.readFileSync(htmlPath, 'utf8');
-
-        // Replace resource paths
-        const styleUri = vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'style.css');
-        const scriptUri = vscode.Uri.joinPath(this._extensionUri, 'src', 'webview', 'main.js');
-
-        const stylePath = webview.asWebviewUri(styleUri);
-        const scriptPath = webview.asWebviewUri(scriptUri);
-
-        html = html.replace('href="style.css"', `href="${stylePath}"`);
-        html = html.replace('src="main.js"', `src="${scriptPath}"`);
-
-        // Inject dynamic CSP supporting local webview resources, VS Code CDN, and Google Fonts
-        const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline' https://fonts.googleapis.com; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https://fonts.gstatic.com https://fonts.googleapis.com; connect-src ${webview.cspSource} http: https: ws:;`;
-        html = html.replace(
-            /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
-            `<meta http-equiv="Content-Security-Policy" content="${csp}">`
-        );
-        
-        return html;
-    }
 }

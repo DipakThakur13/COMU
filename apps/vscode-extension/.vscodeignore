@@ -14,7 +14,8 @@ src/runtime/**
 src/security/**
 src/sessions/**
 src/workspace/**
-!src/webview/**
+src/webview/**
+!dist/webview/**
 !dist/extension.js
 !server/index.js
 !package.json

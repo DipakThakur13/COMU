@@ -468,13 +468,27 @@ describe("Performance & Startup Stabilization Hotfix Test Suite (PERF-01 through
   // SECURITY TESTS (PERF-33 through PERF-35)
   // ═══════════════════════════════════════════════════════════
 
-  it("PERF-33: No provider secret in DOM", () => {
-    const htmlPath = path.resolve(__dirname, "../src/webview/index.html");
-    const html = fs.readFileSync(htmlPath, "utf8");
+  it("PERF-33: No provider secret is baked into the panel", () => {
+    // The old check read index.html. The panel is now generated from source, so this walks every
+    // file that can reach the bundle instead of the single document that used to be shipped.
+    const root = path.resolve(__dirname, "../../webview/src");
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/\.(tsx?|css|html)$/.test(entry.name)) files.push(full);
+      }
+    };
+    walk(root);
+    expect(files.length).toBeGreaterThan(0);
 
-    expect(html).not.toMatch(/nvapi-[A-Za-z0-9_-]{20,}/);
-    expect(html).not.toMatch(/sk-[A-Za-z0-9_-]{20,}/);
-    expect(html).not.toMatch(/exp-[A-Za-z0-9_-]{20,}/);
+    for (const file of files) {
+      const text = fs.readFileSync(file, "utf8");
+      expect(text, file).not.toMatch(/nvapi-[A-Za-z0-9_-]{20,}/);
+      expect(text, file).not.toMatch(/sk-[A-Za-z0-9_-]{20,}/);
+      expect(text, file).not.toMatch(/exp-[A-Za-z0-9_-]{20,}/);
+    }
   });
 
   it("PERF-34: No provider secret in frontend state", () => {

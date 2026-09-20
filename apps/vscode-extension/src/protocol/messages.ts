@@ -64,7 +64,6 @@ export type WebviewMessage =
   | { type: "telemetry_metric"; name: string; value: number; details?: string };
 
 export type ExtensionMessage =
-  | { type: "state_update"; state: ChatSessionStateUI }
   | { type: "error"; message: string }
   | { type: "providers_update"; providers: ProviderConfig[] }
   | { type: "provider_test_result"; providerId: string; result: ProviderTestResult }
