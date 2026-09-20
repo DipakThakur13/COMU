@@ -103,13 +103,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     }
                     await this.sendProvidersToWebview();
                     await this.pushConfigToRuntime();
-                    vscode.window.showInformationMessage(`Configuration for ${data.providerId} saved.`);
+                    void vscode.window.showInformationMessage(`Configuration for ${data.providerId} saved.`);
                     break;
                 case 'remove_provider_key':
                     await this.providerManager.setProviderKey(data.providerId, '');
                     await this.sendProvidersToWebview();
                     await this.pushConfigToRuntime();
-                    vscode.window.showInformationMessage(`API key for ${data.providerId} removed.`);
+                    void vscode.window.showInformationMessage(`API key for ${data.providerId} removed.`);
                     break;
                 case 'test_provider': {
                     const result = await this.providerManager.testConnection(data.providerId, data.key, data.endpoint);
@@ -119,14 +119,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             providerId: data.providerId,
                             result
                         };
-                        this._view.webview.postMessage(msg);
+                        void this._view.webview.postMessage(msg);
                     }
                     if (result.status === 'CONNECTED') {
-                        vscode.window.showInformationMessage(`Connection to ${data.providerId} successful!${result.latencyMs ? ` (${result.latencyMs}ms)` : ''}`);
+                        void vscode.window.showInformationMessage(`Connection to ${data.providerId} successful!${result.latencyMs ? ` (${result.latencyMs}ms)` : ''}`);
                         await this.sendProvidersToWebview();
                         await this.pushConfigToRuntime();
                     } else {
-                        vscode.window.showErrorMessage(`Connection test failed for ${data.providerId}: ${result.message || 'Unknown error'}`);
+                        void vscode.window.showErrorMessage(`Connection test failed for ${data.providerId}: ${result.message || 'Unknown error'}`);
                     }
                     break;
                 }
@@ -137,7 +137,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     try {
                         await this.runtimeClient.respondInteraction(data.taskId, data.interactionId, data.response);
                     } catch (e: any) {
-                        vscode.window.showErrorMessage(`Failed to respond to interaction: ${e.message}`);
+                        void vscode.window.showErrorMessage(`Failed to respond to interaction: ${e.message}`);
                     }
                     break;
             }
@@ -147,7 +147,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     public openSettings(targetProviderId?: string) {
         if (this._view) {
             const msg: ExtensionMessage = { type: 'open_settings', targetProviderId };
-            this._view.webview.postMessage(msg);
+            void this._view.webview.postMessage(msg);
         }
     }
 
@@ -156,13 +156,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             // Fast-path: immediately send cached provider catalog for zero-delay UI rendering
             const cached = this.providerManager.getCachedProvidersState();
             if (cached && cached.length > 0) {
-                this._view.webview.postMessage({ type: 'providers_update', providers: cached });
+                void this._view.webview.postMessage({ type: 'providers_update', providers: cached });
             }
             // Asynchronously resolve credentials without blocking first paint
             const providers = await this.providerManager.getProvidersState(forceRefresh);
             if (this._view) {
                 const msg: ExtensionMessage = { type: 'providers_update', providers };
-                this._view.webview.postMessage(msg);
+                void this._view.webview.postMessage(msg);
             }
         }
     }
@@ -181,7 +181,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const errMsg = check.message || `Provider for model "${modelId}" is not configured. Please add your API key in Settings.`;
             this.sendErrorToWebview(errMsg);
             this.openSettings(check.providerId);
-            vscode.window.showWarningMessage(`${errMsg} Please configure it in Provider Settings.`, 'Open Settings').then(selection => {
+            void vscode.window.showWarningMessage(`${errMsg} Please configure it in Provider Settings.`, 'Open Settings').then(selection => {
                 if (selection === 'Open Settings') {
                     this.openSettings(check.providerId);
                 }
@@ -191,7 +191,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         const workspaceCtx = await getWorkspaceContext();
         if (!workspaceCtx) {
-            vscode.window.showErrorMessage("Open a workspace or select a valid workspace folder to use COMU.");
+            void vscode.window.showErrorMessage("Open a workspace or select a valid workspace folder to use COMU.");
             return;
         }
 
@@ -244,7 +244,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private async handleSaveCode(content: string, suggestedPath?: string) {
         const workspaceCtx = await getWorkspaceContext();
         if (!workspaceCtx?.rootPath) {
-            vscode.window.showErrorMessage('Open a workspace folder before saving code.');
+            void vscode.window.showErrorMessage('Open a workspace folder before saving code.');
             return;
         }
 
@@ -271,7 +271,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const target = path.resolve(root, filePath.trim());
         const relative = path.relative(root, target);
         if (relative.startsWith('..') || path.isAbsolute(relative)) {
-            vscode.window.showErrorMessage('COMU can only save code inside the open workspace.');
+            void vscode.window.showErrorMessage('COMU can only save code inside the open workspace.');
             return;
         }
 
@@ -280,9 +280,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await fs.promises.writeFile(target, content, 'utf8');
             const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
             await vscode.window.showTextDocument(doc, { preview: false });
-            vscode.window.showInformationMessage(`Saved COMU code to ${relative}.`);
+            void vscode.window.showInformationMessage(`Saved COMU code to ${relative}.`);
         } catch (e: any) {
-            vscode.window.showErrorMessage(`Unable to save COMU code: ${e.message}`);
+            void vscode.window.showErrorMessage(`Unable to save COMU code: ${e.message}`);
         }
     }
 
@@ -295,7 +295,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.sendStateToWebview();
                 await this.runtimeClient.cancelTask(state.taskId);
             } catch (e: any) {
-                vscode.window.showErrorMessage(`Cancel failed: ${e.message}`);
+                void vscode.window.showErrorMessage(`Cancel failed: ${e.message}`);
             }
         }
     }
@@ -310,14 +310,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     public sendStateToWebview() {
         if (this._view) {
             const msg: ExtensionMessage = { type: 'state_update', state: this.sessionStore.getState() };
-            this._view.webview.postMessage(msg);
+            void this._view.webview.postMessage(msg);
         }
     }
 
     public sendErrorToWebview(message: string) {
         if (this._view) {
             const msg: ExtensionMessage = { type: 'error', message };
-            this._view.webview.postMessage(msg);
+            void this._view.webview.postMessage(msg);
         }
     }
 

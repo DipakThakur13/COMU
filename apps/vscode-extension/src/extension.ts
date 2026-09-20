@@ -76,7 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
       vscode.commands.registerCommand('comu.openChat', () => {
-          vscode.commands.executeCommand('workbench.view.extension.comu-sidebar');
+          return vscode.commands.executeCommand('workbench.view.extension.comu-sidebar');
       })
   );
 
@@ -98,9 +98,9 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.registerCommand('comu.testProviderConnection', async () => {
           const result = await providerManager.testConnection('nvidia');
           if (result.status === 'CONNECTED') {
-              vscode.window.showInformationMessage(`NVIDIA Connection Successful! (${result.latencyMs ?? 0}ms)`);
+              void vscode.window.showInformationMessage(`NVIDIA Connection Successful! (${result.latencyMs ?? 0}ms)`);
           } else {
-              vscode.window.showErrorMessage(`NVIDIA Connection Failed: ${result.message || 'Unknown error'}`);
+              void vscode.window.showErrorMessage(`NVIDIA Connection Failed: ${result.message || 'Unknown error'}`);
           }
       })
   );

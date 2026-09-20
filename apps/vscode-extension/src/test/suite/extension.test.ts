@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { getWorkspaceContext } from '../../workspace/workspace_context';
 
 suite('Extension Test Suite', () => {
-    vscode.window.showInformationMessage('Start all tests.');
+    void vscode.window.showInformationMessage('Start all tests.');
 
     test('Extension should be present', () => {
         const ext = vscode.extensions.getExtension('DipakKumarBoswasGroup.comu-ai') || vscode.extensions.getExtension('comu.comu-ai');

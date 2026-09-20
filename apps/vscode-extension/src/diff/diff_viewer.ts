@@ -34,6 +34,6 @@ export async function openDiff(client: RuntimeClient, taskId: string, targetPath
         const title = `COMU Diff: ${path.basename(targetPath)}`;
         await vscode.commands.executeCommand('vscode.diff', originalUri, newUri, title);
     } catch (err: any) {
-        vscode.window.showErrorMessage(`Failed to open diff: ${err.message}`);
+        void vscode.window.showErrorMessage(`Failed to open diff: ${err.message}`);
     }
 }
