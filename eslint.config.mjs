@@ -18,6 +18,10 @@ export default tseslint.config(
       "**/dist/**",
       "**/node_modules/**",
       "**/.vscode-test/**",
+      // Benchmark fixtures are pinned sample repositories with deliberate defects. Linting them
+      // would flag the bug the fixture exists to contain.
+      "benchmarks/fixtures/**",
+      "benchmarks/results/**",
       "**/*.js",
       "**/*.cjs",
       "**/*.mjs",

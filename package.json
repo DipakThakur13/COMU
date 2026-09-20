@@ -8,7 +8,9 @@
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
-    "dev": "pnpm -r run dev"
+    "dev": "pnpm -r run dev",
+    "bench": "pnpm --filter @comu/benchmark bench",
+    "bench:selftest": "pnpm --filter @comu/benchmark selftest"
   },
   "devDependencies": {
     "@types/chai": "4",

@@ -1,0 +1,21 @@
+{
+  "name": "@comu/benchmark",
+  "version": "0.2.4",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "tsx src/cli.ts",
+    "selftest": "tsx src/cli.ts --selftest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@comu/agent-runtime": "workspace:*",
+    "@comu/model-core": "workspace:*",
+    "@comu/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

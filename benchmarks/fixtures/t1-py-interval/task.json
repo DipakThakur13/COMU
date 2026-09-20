@@ -1,0 +1,31 @@
+{
+  "id": "t1-py-interval",
+  "tier": "T1",
+  "ecosystem": "python",
+  "description": "An inclusive date range is counted exclusively, so every billing period is one day short.",
+  "prompt": "The tests in billing/test_periods.py are failing. Find and fix the bug in this repository so that every test passes. Do not change the tests.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "setup": {
+    "commands": [
+      { "executable": "python", "args": ["-m", "venv", ".venv"] },
+      { "executable": "{PYTHON}", "args": ["-m", "pip", "install", "--quiet", "--disable-pip-version-check", "pytest==9.1.1"] }
+    ]
+  },
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "{PYTHON}",
+      "args": ["-m", "pytest", "-q", "--junit-xml=reports/junit.xml"]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "test_a_single_day_period_covers_one_day",
+      "test_a_week_counts_seven_days",
+      "test_period_lengths_match_the_requested_length",
+      "test_the_periods_cover_the_whole_range_without_gaps"
+    ]
+  },
+  "allowedPaths": ["billing/periods.py"],
+  "notes": "days_in_period subtracts the dates without the inclusive +1. This fixture deliberately carries a root package.json for unrelated front-end tooling: COMU's ProjectDetector checks package.json before pyproject.toml, so it classifies this repository as Node and never reaches the Python toolchain. That misclassification is left visible on purpose rather than designed around, so the baseline shows it."
+}

@@ -1,0 +1,8 @@
+{
+  "name": "billing-tooling",
+  "private": true,
+  "description": "Front-end tooling for the billing dashboard. The library itself is Python.",
+  "scripts": {
+    "lint:css": "echo \"no stylesheets yet\""
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "id": "t1-ts-pagination",
+  "tier": "T1",
+  "ecosystem": "typescript",
+  "description": "An off-by-one in a pagination helper drops the last item of every page.",
+  "prompt": "The tests in src/pagination.test.ts are failing. Find and fix the bug in this repository so that every test passes. Do not change the tests.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "node",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "--test-reporter=junit",
+        "--test-reporter-destination=reports/junit.xml"
+      ]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "a full page contains every item in the page",
+      "the second page starts where the first ended",
+      "a trailing partial page returns only what is left",
+      "every item appears exactly once across all pages"
+    ]
+  },
+  "allowedPaths": ["src/pagination.ts"],
+  "notes": "pageSlice computes its end index as start + size - 1, so each page is one item short. The visible test only covers the first page; the withheld tests cover later pages, the trailing partial page and the out-of-range page, so a fix that special-cases page zero does not pass."
+}

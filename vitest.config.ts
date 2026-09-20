@@ -51,7 +51,11 @@ export default defineConfig({
       "**/.vscode-test/**",
       "apps/vscode-extension/src/test/**",
       // Playwright owns the visual suite; vitest would try to run it as unit tests.
-      "apps/webview/tests/visual/**"
+      "apps/webview/tests/visual/**",
+      // Benchmark fixtures are pinned sample repositories. Their tests belong to the fixture and
+      // are run by the fixture's own runner inside a temporary workspace; several are meant to
+      // fail, because that is the defect the fixture exists to contain.
+      "benchmarks/fixtures/**"
     ]
   }
 });
