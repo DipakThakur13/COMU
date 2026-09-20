@@ -197,6 +197,20 @@ describe("ApprovalGate: decisions and the no-human case", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(70);
   });
 
+  it("caches the headless verdict so a headless run pays the observer wait only once", async () => {
+    const im = new InteractionManager(5000);
+    const { g } = gate({ interactionManager: im, hasHumanObserver: () => false, observerGraceMs: 120 });
+    const first = Date.now();
+    expect((await g.decide(g.buildPayload(writeTool, { path: "a.ts", content: "x" }, { exists: false }))).reason).toBe("NO_HUMAN_OBSERVER");
+    const firstMs = Date.now() - first;
+    expect(firstMs).toBeGreaterThanOrEqual(100);
+    expect(g.isHeadless()).toBe(true);
+
+    const second = Date.now();
+    expect((await g.decide(g.buildPayload(writeTool, { path: "b.ts", content: "x" }, { exists: false }))).reason).toBe("NO_HUMAN_OBSERVER");
+    expect(Date.now() - second).toBeLessThan(50);
+  });
+
   it("denies after the bounded wait and records TIMEOUT", async () => {
     const im = new InteractionManager(5000);
     const { g, events } = gate({ interactionManager: im, timeoutMs: 40 });
