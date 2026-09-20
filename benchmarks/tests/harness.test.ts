@@ -14,6 +14,7 @@ import {
 } from "../src/fixture.js";
 import { executeFixture } from "../src/execute.js";
 import { gradeRubric, parseJUnit, resetBaselineCache } from "../src/graders.js";
+import { SecretLeakError, assertNoSecret, assertNoSecretInArgv } from "../src/secrets.js";
 import { classifyFailure, summarise } from "../src/metrics.js";
 import { renderMarkdown } from "../src/report.js";
 import { configureProvider, startRuntime, type TaskOutcome } from "../src/runner.js";
@@ -67,6 +68,50 @@ describe("JUnit parsing", () => {
     const a = parseJUnit('<testcase classname="suite" name="case one" time="0"/>');
     const b = parseJUnit('<testcase name="case one" time="0" classname="suite"/>');
     expect([...a.keys()]).toEqual([...b.keys()]);
+  });
+});
+
+describe("Keeping the credential out of what is written", () => {
+  const env = { NVIDIA_API_KEY: "nvapi-REALKEYREALKEYREALKEY123" } as NodeJS.ProcessEnv;
+
+  it("refuses a credential passed on the command line", () => {
+    expect(() => assertNoSecretInArgv(["--label", "B0", "nvapi-REALKEYREALKEYREALKEY123"], env)).toThrow(SecretLeakError);
+    expect(() => assertNoSecretInArgv(["--api-key", "anything"], env)).toThrow(SecretLeakError);
+    expect(() => assertNoSecretInArgv(["--key=abc"], env)).toThrow(SecretLeakError);
+  });
+
+  it("accepts the arguments a real run uses", () => {
+    expect(() => assertNoSecretInArgv(["--label", "B0", "--reps", "5", "--model", "nvidia/nemotron-3-ultra-550b-a55b"], env)).not.toThrow();
+  });
+
+  it("refuses to write anything containing the credential", () => {
+    expect(() => assertNoSecret({ note: "auth nvapi-REALKEYREALKEYREALKEY123" }, "a result", env)).toThrow(SecretLeakError);
+  });
+
+  it("refuses anything merely shaped like a key, even from another environment", () => {
+    expect(() => assertNoSecret("Authorization: sk-abcdefghijklmnopqrstuvwxyz", "a result", {})).toThrow(SecretLeakError);
+  });
+
+  it("names the location without printing the match", () => {
+    try {
+      assertNoSecret("x nvapi-REALKEYREALKEYREALKEY123", "the journal", env);
+      throw new Error("expected a throw");
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("the journal");
+      expect(message).not.toContain("nvapi-REALKEY");
+    }
+  });
+
+  it("does not mistake a task id for a key", () => {
+    // Regression. "sk-" matches inside "task-1789916599421-4luq1c", so without a leading boundary
+    // every single run refused to write its own result.
+    expect(() => assertNoSecret({ taskId: "task-1789916599421-4luq1c" }, "a record", {})).not.toThrow();
+    expect(() => assertNoSecret({ id: "evt-1789916599421-abcdefghijkl" }, "a record", {})).not.toThrow();
+  });
+
+  it("ignores an environment variable too short to be a credential", () => {
+    expect(() => assertNoSecret("the value is x", "a record", { NVIDIA_API_KEY: "x" })).not.toThrow();
   });
 });
 

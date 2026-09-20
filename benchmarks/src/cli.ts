@@ -10,6 +10,7 @@ import { summarise } from "./metrics.js";
 import { writeRun } from "./report.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
+import { assertNoSecretInArgv } from "./secrets.js";
 import type { BenchmarkRun, RunRecord, Tier } from "./types.js";
 
 /**
@@ -73,6 +74,10 @@ function gitCommit(): string {
 }
 
 async function main(): Promise<void> {
+  // Before anything else: a credential on the command line is visible to every process on the
+  // machine and lands in shell history.
+  assertNoSecretInArgv(process.argv.slice(2));
+
   const args = parseArgs(process.argv.slice(2));
   const root = fixturesRoot();
   const fixtures = loadFixtures(root, { tier: args.tier, ids: args.ids });

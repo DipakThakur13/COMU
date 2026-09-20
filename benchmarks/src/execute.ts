@@ -8,6 +8,7 @@ import {
 import { grade, setupWorkspace } from "./graders.js";
 import { assembleRecord } from "./metrics.js";
 import { runTask } from "./runner.js";
+import { assertNoSecret } from "./secrets.js";
 import type { RunRecord } from "./types.js";
 
 /**
@@ -52,10 +53,14 @@ export async function executeFixture(input: ExecuteInput): Promise<RunRecord> {
     // grader-only test belongs, or the grader would silently overwrite its work.
     assertWithheldAbsent(fixture, workspace.root, "after the run");
 
+    // The journal is the largest thing a run produces and the likeliest place for a credential to
+    // surface, because a provider echoes the request back in some error messages.
+    assertNoSecret(outcome.events, `the event journal for ${fixture.spec.id}`);
+
     const changed = changedFiles(workspace);
     const verdict = await grade(fixture, workspace, outcome.finalText);
 
-    return assembleRecord({
+    const record = assembleRecord({
       fixtureId: fixture.spec.id,
       tier: fixture.spec.tier,
       ecosystem: fixture.spec.ecosystem,
@@ -69,6 +74,9 @@ export async function executeFixture(input: ExecuteInput): Promise<RunRecord> {
       filesChanged: changed,
       unnecessary: unnecessaryChanges(changed, fixture.spec.allowedPaths)
     });
+
+    assertNoSecret(record, `the run record for ${fixture.spec.id}`);
+    return record;
   } finally {
     workspace.dispose();
   }

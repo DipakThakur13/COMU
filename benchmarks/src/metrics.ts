@@ -21,6 +21,9 @@ const OVERFLOW_SIGNATURES = [
   "prompt is too long"
 ];
 
+/** Enough of an answer to judge it, bounded so a result file stays readable. */
+const MAX_ANSWER_CHARS = 20_000;
+
 const TRUNCATION_SIGNATURES = ["max steps", "max tool calls", "execution time", "limit was reached"];
 
 function errorTextOf(events: AgentEvent[], outcome: TaskOutcome): string {
@@ -119,6 +122,7 @@ export function assembleRecord(input: AssembleInput): RunRecord {
     startedAt: input.startedAt,
     durationMs: input.durationMs,
     comuStatus: outcome.status,
+    finalAnswer: outcome.finalText.slice(0, MAX_ANSWER_CHARS),
     grader: verdict,
     falseCompletion,
     falseFailure,
@@ -148,18 +152,41 @@ export function assembleRecord(input: AssembleInput): RunRecord {
   };
 }
 
+/** Median with the observed range, which is what a noise judgement needs. A mean hides spread. */
+export interface Spread {
+  median: number;
+  min: number;
+  max: number;
+}
+
 export interface Summary {
   runs: number;
   correct: number;
-  successRate: number;
   falseCompletions: number;
   falseFailures: number;
-  meanDurationMs: number;
-  meanPromptTokens: number;
+  durationMs: Spread;
+  promptTokens: Spread;
   maxPeakContextRatio: number;
   failureCounts: Record<string, number>;
-  /** Per fixture, how many of its repetitions were correct. Variance matters more than the mean. */
+  /**
+   * Per fixture, how many of its repetitions were correct.
+   *
+   * The primary result. A pooled rate averages a fixture that always works with one that never
+   * does and reports something true of neither, and it hides the case this benchmark most needs to
+   * see: a fixture that succeeds three times in five is a different product from one that succeeds
+   * five in five.
+   */
   perFixture: Array<{ fixtureId: string; tier: string; correct: number; of: number }>;
+  /** Fixtures that always, sometimes and never produced correct work. */
+  reliability: { always: number; sometimes: number; never: number };
+}
+
+function spread(values: number[]): Spread {
+  if (values.length === 0) return { median: 0, min: 0, max: 0 };
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
+  return { median, min: sorted[0], max: sorted[sorted.length - 1] };
 }
 
 export function summarise(records: RunRecord[]): Summary {
@@ -177,20 +204,24 @@ export function summarise(records: RunRecord[]): Summary {
     byFixture.set(record.fixtureId, entry);
   }
 
-  const mean = (values: number[]) => (values.length === 0 ? 0 : Math.round(values.reduce((a, b) => a + b, 0) / values.length));
+  const perFixture = [...byFixture.entries()]
+    .map(([fixtureId, v]) => ({ fixtureId, tier: v.tier, correct: v.correct, of: v.of }))
+    .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId));
 
   return {
     runs: records.length,
     correct: correct.length,
-    successRate: records.length === 0 ? 0 : Number((correct.length / records.length).toFixed(3)),
     falseCompletions: records.filter(r => r.falseCompletion).length,
     falseFailures: records.filter(r => r.falseFailure).length,
-    meanDurationMs: mean(records.map(r => r.durationMs)),
-    meanPromptTokens: mean(records.map(r => r.promptTokens)),
+    durationMs: spread(records.map(r => r.durationMs)),
+    promptTokens: spread(records.map(r => r.promptTokens)),
     maxPeakContextRatio: records.reduce((max, r) => Math.max(max, r.peakContextRatio), 0),
     failureCounts,
-    perFixture: [...byFixture.entries()]
-      .map(([fixtureId, v]) => ({ fixtureId, tier: v.tier, correct: v.correct, of: v.of }))
-      .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId))
+    perFixture,
+    reliability: {
+      always: perFixture.filter(f => f.correct === f.of).length,
+      sometimes: perFixture.filter(f => f.correct > 0 && f.correct < f.of).length,
+      never: perFixture.filter(f => f.correct === 0).length
+    }
   };
 }

@@ -149,6 +149,13 @@ export interface RunRecord {
 
   /** What COMU said about itself. Never used to decide correctness. */
   comuStatus: string;
+  /**
+   * The agent's final message, verbatim and bounded.
+   *
+   * Recorded so a human can spot check the quality of an onboarding answer without the score
+   * depending on that reading. The rubric grade stays deterministic; this is for the reader.
+   */
+  finalAnswer: string;
   /** What running the code says. */
   grader: GraderVerdict;
 

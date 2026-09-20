@@ -159,6 +159,27 @@ async function gradeTests(fixture: LoadedFixture, spec: TestsGrader, workspace: 
     };
   }
 
+  /*
+   * Tests that were in the baseline and are now absent entirely.
+   *
+   * A change that stops a module importing does not produce failing tests, it produces no tests:
+   * Node reports one failing case for the whole file and pytest reports a collection error, and in
+   * both the individual cases simply disappear. Calling that "the required tests still fail" would
+   * put it in the wrong failure class and read as a wrong fix rather than a broken workspace.
+   *
+   * The threshold is half, so deleting one test file is still graded as deleting a test file.
+   */
+  const baselineIds = [...before.tests.keys()];
+  const vanished = baselineIds.filter(id => !after.tests.has(id));
+  if (baselineIds.length > 0 && vanished.length >= Math.ceil(baselineIds.length / 2)) {
+    return {
+      correct: false,
+      reason: `The test suite could not be run after the change: ${vanished.length} of ${baselineIds.length} tests no longer report at all.`,
+      regressions: [],
+      stillFailing: []
+    };
+  }
+
   const regressions = [...after.tests.entries()]
     .filter(([id, outcome]) => outcome === "failed" && before.tests.get(id) === "passed")
     .map(([id]) => id)

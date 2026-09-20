@@ -23,11 +23,19 @@ most dangerous outcome this product has.
 A real API key is required. The harness will not substitute a small local model, because that
 measures the model rather than COMU.
 
+The credential comes from the environment and only from the environment. Passing one as a command
+line argument is refused, because an argument is visible to every other process on the machine and
+lands in shell history. Before anything is written, the run record, the event journal and both
+result files are checked for the credential and for anything shaped like one; a match aborts the
+write rather than redacting it, so a broken path cannot quietly keep producing clean-looking output.
+
 ```bash
 export NVIDIA_API_KEY=...            # or EXPERIENTIAL_API_KEY / OPENAI_API_KEY
 pnpm bench --label B0 --reps 5
 pnpm bench --label smoke --tier T1 --reps 1
 ```
+
+Repetitions: five for B0, B1 and the final run; three for intermediate checks.
 
 Without a key, everything except the model call can still be exercised:
 
@@ -64,3 +72,27 @@ Two metrics deserve naming because they point in opposite directions:
 - **False completion**: COMU reported success, the grader disagrees. Trust-destroying.
 - **False failure**: COMU reported failure, the grader says the work was correct. Wasteful, and
   usually a verification or completion-gate defect rather than an agent defect.
+
+Results are reported per fixture as k of n, never as a pooled rate. Averaging a fixture that always
+works with one that never does produces a number true of neither, and hides the distinction the
+benchmark exists to show: succeeding three times in five is a different product from five in five.
+
+The agent's final message is recorded verbatim, bounded, on every run. It is there so a human can
+judge the quality of an onboarding answer by reading it, while the score stays deterministic and
+independent of that reading.
+
+## What counts as a change
+
+Committed before any result exists, so it cannot be chosen afterwards to suit a number.
+
+A delta smaller than the run to run spread is no detected change.
+
+- A fixture moving by one repetition out of five is noise.
+- A fixture moving by two or more is a signal for that fixture.
+- A suite level claim needs two or more fixtures moving by two or more in the same direction.
+- A continuous metric such as tokens or wall clock has moved only when the two runs' ranges do not
+  overlap. Medians are reported with their range for exactly this comparison.
+- A failure class has moved only when its count changes by more than the number of fixtures that
+  moved, since one fixture flipping necessarily moves some class.
+
+Anything smaller is reported as "no detected change", not as an improvement.
