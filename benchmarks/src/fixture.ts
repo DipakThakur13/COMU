@@ -67,8 +67,15 @@ const RUNNER_ARTEFACTS = [".git", "node_modules", ".venv", "__pycache__", ".pyte
  * ordinary name for a source directory, though, so skipping it at every depth would make a real
  * `src/reports/` invisible to the pristine check, to change detection and to the forbidden-string
  * scan: a refactor could leave the old symbol there and be graded as complete.
+ *
+ * Compiled output belongs here for the same reason and was found the same way. A T7 onboarding
+ * question is answered, not edited, and two of them were recorded as making thirty-three
+ * unnecessary changes: `npm run build` had emitted `dist/*.js`, and every generated file counted as
+ * the agent touching something outside the golden set. None of them is the agent's work. They are
+ * root-only because a package's own `src/dist/` is a plausible source directory and hiding it would
+ * repeat the mistake this list exists to prevent.
  */
-const ROOT_ONLY_ARTEFACTS = ["reports"];
+const ROOT_ONLY_ARTEFACTS = ["reports", "dist", "build", "coverage"];
 
 export function listFiles(root: string, skip: Set<string> = new Set(RUNNER_ARTEFACTS)): string[] {
   const out: string[] = [];

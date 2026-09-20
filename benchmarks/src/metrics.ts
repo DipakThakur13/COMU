@@ -94,6 +94,21 @@ export function classifyFailure({ outcome, verdict, unnecessary, peakContextRati
 }
 
 /**
+ * Paths that are a tool's output rather than the agent's work.
+ *
+ * Applied when reading a record, not only when writing one. A run takes hours, so a correction to
+ * what counts as a change cannot reach records already written, and B0's were all written before
+ * compiled output was excluded: two T7 onboarding questions, which are answered rather than edited,
+ * were each recorded as making thirty-three unnecessary changes because a build had emitted
+ * `dist/*.js`.
+ */
+const GENERATED_PREFIXES = ["dist/", "build/", "coverage/", "reports/", "node_modules/", ".venv/"];
+
+export function agentAuthored(paths: string[]): string[] {
+  return paths.filter(p => !GENERATED_PREFIXES.some(prefix => p.startsWith(prefix)));
+}
+
+/**
  * The class a record should have carried, decided from what was stored rather than from the event
  * text.
  *
@@ -125,6 +140,11 @@ export function refineFailureClass(record: RunRecord): FailureClass | null {
   // A budget ran out. The agent did not fail at the work; it was not allowed to continue.
   if (/REPAIR_TIMEOUT|REPAIR_LIMIT_REACHED|VALIDATION_LIMIT_REACHED|LIMIT_REACHED/.test(error)) {
     return "loop_truncation";
+  }
+
+  // Filed as touching files outside the golden set, when every one of them was compiled output.
+  if (record.failureClass === "unnecessary_changes" && agentAuthored(record.unnecessaryChanges).length === 0) {
+    return record.comuStatus === "completed" ? "planning_miss" : "grader_failed_other";
   }
 
   return record.failureClass;

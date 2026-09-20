@@ -16,7 +16,7 @@ import {
 import { executeFixture } from "../src/execute.js";
 import { gradeRubric, parseJUnit, resetBaselineCache } from "../src/graders.js";
 import { SecretLeakError, assertNoSecret, assertNoSecretInArgv } from "../src/secrets.js";
-import { classifyFailure, refineFailureClass, summarise } from "../src/metrics.js";
+import { agentAuthored, classifyFailure, refineFailureClass, summarise } from "../src/metrics.js";
 import { acquireRunLock, killedByProvider, latestPerCell, renderMarkdown } from "../src/report.js";
 import { configureProvider, createCounters, fold, startRuntime, type TaskOutcome } from "../src/runner.js";
 import { SelfTestModel } from "../src/selftest_model.js";
@@ -400,6 +400,35 @@ describe("Summarising", () => {
       grader: { correct: false, reason: "wrong", regressions: [], stillFailing: [] }
     });
     expect(refineFailureClass(ordinary)).toBe("planning_miss");
+  });
+
+  it("does not call compiled output an unnecessary change", () => {
+    /*
+     * The regression this exists for.
+     *
+     * A T7 onboarding question is answered, not edited. Two of them were recorded as making
+     * thirty-three unnecessary changes each, every one a dist/*.js file emitted by a build. The
+     * fixtures ship no dist/ at all.
+     */
+    expect(agentAuthored(["dist/src/main.js", "src/real.ts", "coverage/lcov.info"])).toEqual(["src/real.ts"]);
+
+    const built = record({
+      comuStatus: "failed",
+      failureClass: "unnecessary_changes",
+      unnecessaryChanges: ["dist/src/main.js", "dist/test/a.test.js"],
+      grader: { correct: false, reason: "Scored 0 of 10 rubric points.", regressions: [], stillFailing: [] }
+    });
+    expect(refineFailureClass(built)).not.toBe("unnecessary_changes");
+  });
+
+  it("still counts a real change outside the golden set", () => {
+    const real = record({
+      comuStatus: "failed",
+      failureClass: "unnecessary_changes",
+      unnecessaryChanges: ["src/test-getuserorders.ts"],
+      grader: { correct: false, reason: "The test suite exits 1.", regressions: [], stillFailing: [] }
+    });
+    expect(refineFailureClass(real)).toBe("unnecessary_changes");
   });
 
   it("counts the two directions of disagreement separately", () => {
