@@ -201,5 +201,13 @@ export interface BenchmarkRun {
   model: { id: string; provider: string };
   gitCommit: string;
   reps: number;
+  /**
+   * How many runs executed at once.
+   *
+   * Recorded because it changes how one metric should be read: concurrent runs contend for the
+   * provider, so wall clock becomes an upper bound. Correctness, tokens, failure classes and peak
+   * context are unaffected, since every run has its own runtime and its own workspace.
+   */
+  concurrency: number;
   records: RunRecord[];
 }

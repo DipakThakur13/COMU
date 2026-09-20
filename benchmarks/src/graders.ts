@@ -117,22 +117,35 @@ export async function runSuite(spec: TestsGrader, workspace: string): Promise<Su
  * Computed once per fixture and reused across repetitions, because the starting tree is identical
  * every time. Without it there is no way to tell a test the agent broke from one that never passed.
  */
-const baselineCache = new Map<string, SuiteResult>();
+/*
+ * Holds the promise rather than the result.
+ *
+ * Runs execute concurrently, so two repetitions of the same fixture can ask for the baseline at the
+ * same moment. Caching the finished result would let both start their own copy: two virtual
+ * environments, two suite runs, and a race over which answer is kept. Caching the promise means the
+ * first caller does the work and the rest wait on it.
+ */
+const baselineCache = new Map<string, Promise<SuiteResult>>();
 
-export async function baselineSuite(fixture: LoadedFixture, spec: TestsGrader): Promise<SuiteResult> {
+export function baselineSuite(fixture: LoadedFixture, spec: TestsGrader): Promise<SuiteResult> {
   const cached = baselineCache.get(fixture.spec.id);
   if (cached) return cached;
 
-  const pristine = materialise(fixture);
-  try {
-    installWithheld(fixture, pristine);
-    await setupWorkspace(fixture, pristine);
-    const result = await runSuite(spec, pristine.root);
-    baselineCache.set(fixture.spec.id, result);
-    return result;
-  } finally {
-    pristine.dispose();
-  }
+  const pending = (async () => {
+    const pristine = materialise(fixture);
+    try {
+      installWithheld(fixture, pristine);
+      await setupWorkspace(fixture, pristine);
+      return await runSuite(spec, pristine.root);
+    } finally {
+      pristine.dispose();
+    }
+  })();
+
+  baselineCache.set(fixture.spec.id, pending);
+  // A failed baseline must not be cached as the answer for every later run of this fixture.
+  pending.catch(() => baselineCache.delete(fixture.spec.id));
+  return pending;
 }
 
 /** Runs a fixture's declared setup commands, for example creating a pinned Python environment. */

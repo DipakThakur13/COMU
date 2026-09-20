@@ -328,10 +328,28 @@ describe("Summarising", () => {
       model: { id: "m", provider: "p" },
       gitCommit: "abc1234",
       reps: 1,
+      concurrency: 1,
       records: [record({})]
     });
     expect(markdown).toContain("# Benchmark run: test");
     expect(markdown).toContain("False completions");
+    // A sequential run says nothing about concurrency; only a parallel one needs the caveat.
+    expect(markdown).not.toContain("upper bound");
+  });
+
+  it("warns that wall clock is an upper bound when runs were parallel", () => {
+    const markdown = renderMarkdown({
+      label: "parallel",
+      startedAt: "2026-09-20T00:00:00.000Z",
+      finishedAt: "2026-09-20T00:10:00.000Z",
+      model: { id: "m", provider: "p" },
+      gitCommit: "abc1234",
+      reps: 1,
+      concurrency: 4,
+      records: [record({})]
+    });
+    expect(markdown).toContain("concurrency 4");
+    expect(markdown).toContain("upper bound");
   });
 });
 

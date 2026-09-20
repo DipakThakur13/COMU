@@ -32,6 +32,8 @@ interface Args {
   outDir: string;
   /** Budget override applied to every fixture that does not set its own. Recorded with the run. */
   limits?: Record<string, number>;
+  /** How many runs execute at once. Recorded, because it makes wall clock an upper bound. */
+  concurrency: number;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -50,7 +52,8 @@ function parseArgs(argv: string[]): Args {
     selftest: argv.includes("--selftest"),
     timeoutMs: Number(get("timeout") ?? 1_800_000),
     outDir: get("out") ?? path.resolve(path.dirname(fixturesRoot()), "results"),
-    limits: parseLimits(get("limits"))
+    limits: parseLimits(get("limits")),
+    concurrency: Math.max(1, Number(get("concurrency") ?? 1))
   };
 }
 
@@ -111,7 +114,6 @@ async function main(): Promise<void> {
   }
 
   let model = { id: args.modelId, provider: "selftest" };
-  let providerFactory: ((selection: unknown) => unknown) | undefined;
   let credentials: Record<string, { apiKey?: string }> = {};
 
   if (args.selftest) {
@@ -150,11 +152,30 @@ async function main(): Promise<void> {
   const records: RunRecord[] = [...previous];
   const startedAt = new Date().toISOString();
 
-  for (const fixture of fixtures) {
-    for (let rep = 1; rep <= args.reps; rep++) {
-      if (done.has(`${fixture.spec.id}#${rep}`)) continue;
+  /*
+   * Every run still to do.
+   *
+   * Flattened so a pool can take them, and ordered rep-major rather than fixture-major: with
+   * concurrency the workers then spread across different fixtures instead of all queueing behind
+   * one fixture's virtual environment.
+   */
+  const jobs: Array<{ fixture: (typeof fixtures)[number]; rep: number }> = [];
+  for (let rep = 1; rep <= args.reps; rep++) {
+    for (const fixture of fixtures) {
+      if (!done.has(`${fixture.spec.id}#${rep}`)) jobs.push({ fixture, rep });
+    }
+  }
 
+  let started = 0;
+  let finished = 0;
+
+  const runJob = async ({ fixture, rep }: { fixture: (typeof fixtures)[number]; rep: number }) => {
+    const label = `${fixture.spec.id} rep ${rep}/${args.reps}`;
+    console.log(`[${++started}/${jobs.length}] start ${label}`);
+
+    {
       // A fresh runtime per run, so no state, cache or session grant crosses between measurements.
+      let providerFactory: (() => unknown) | undefined;
       if (args.selftest) {
         const golden = path.join(fixture.dir, "golden");
         const answerFile = path.join(fixture.dir, "golden", "ANSWER.txt");
@@ -176,7 +197,6 @@ async function main(): Promise<void> {
         if (!args.selftest) await configureProvider(runtime.baseUrl, runtime.headers, credentials);
         else await configureProvider(runtime.baseUrl, runtime.headers, { [model.id]: { apiKey: "selftest" } });
 
-        process.stdout.write(`${fixture.spec.id} rep ${rep}/${args.reps} ... `);
         const record = await executeFixture({
           fixture,
           rep,
@@ -191,7 +211,9 @@ async function main(): Promise<void> {
         // Written the moment it exists, not at the end of a run that may not reach the end.
         if (!args.selftest) appendRecord(record, args.outDir, args.label);
         console.log(
+          `[${++finished}/${jobs.length}] ${label}:`,
           record.grader.correct ? "correct" : `incorrect (${record.failureClass ?? "unclassified"})`,
+          `${Math.round(record.durationMs / 1000)}s`,
           record.harnessError ? `[harness: ${record.harnessError}]` : ""
         );
         if (!record.grader.correct) {
@@ -203,14 +225,31 @@ async function main(): Promise<void> {
           }
         }
       } catch (error) {
-        console.log("harness error");
+        console.log(`[${++finished}/${jobs.length}] ${label}: harness error`);
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 1;
       } finally {
         await runtime.stop();
       }
     }
-  }
+  };
+
+  /*
+   * A fixed pool of workers over the job list.
+   *
+   * Each run has its own runtime on its own port and its own temporary workspace, so nothing is
+   * shared and correctness, tokens and failure classes are unaffected by running several at once.
+   * Wall clock is the exception: concurrent runs contend for the provider, so per-run latency is an
+   * upper bound rather than a clean measurement. The level used is recorded with the result so a
+   * reader knows which it is looking at.
+   */
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(args.concurrency, jobs.length || 1)) }, async () => {
+    while (next < jobs.length) {
+      await runJob(jobs[next++]);
+    }
+  });
+  await Promise.all(workers);
 
   const summary = summarise(records);
   console.log("");
@@ -232,6 +271,7 @@ async function main(): Promise<void> {
     model,
     gitCommit: gitCommit(),
     reps: args.reps,
+    concurrency: args.concurrency,
     records
   };
   const written = writeRun(run, args.outDir);

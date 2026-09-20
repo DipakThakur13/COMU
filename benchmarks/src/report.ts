@@ -80,6 +80,14 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push("");
   lines.push(`Model \`${run.model.id}\` via ${run.model.provider}. Commit \`${run.gitCommit}\`.`);
   lines.push(`${run.reps} repetitions per fixture, ${summary.runs} runs, started ${run.startedAt}.`);
+  if (run.concurrency > 1) {
+    lines.push("");
+    lines.push(
+      `Run with concurrency ${run.concurrency}, so the wall clock below is an upper bound: concurrent ` +
+        "runs contend for the provider. Correctness, tokens, peak context and failure classes are " +
+        "unaffected, because every run has its own runtime and its own workspace."
+    );
+  }
   lines.push("");
 
   // Per fixture first, and no pooled rate anywhere. Averaging a fixture that always works with one
