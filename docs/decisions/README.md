@@ -22,6 +22,10 @@ is usually the most useful part.
 | [0005](0005-development-export-condition.md) | Workspace packages resolve to source through an export condition | Build |
 | [0006](0006-benchmark-grading-contract.md) | The benchmark grades the workspace, never COMU's own report | Measurement |
 | [0007](0007-a-stand-in-must-behave-like-the-thing-it-replaces.md) | A stand-in that does not behave like the thing it replaces tests nothing | Testing practice |
+| [0008](0008-the-runtime-is-a-private-local-service.md) | The runtime is a private local service, and every layer assumes the others failed | Runtime boundary |
+| [0009](0009-every-task-ends-with-exactly-one-terminal-event.md) | Every task ends with exactly one terminal event, guaranteed by the runtime | Runtime ↔ clients |
+| [0010](0010-budgets-are-per-task-and-reported-back.md) | A budget is a per-task parameter with a ceiling, and the resolved budget is reported back | Runtime limits |
+| [0011](0011-retry-depends-on-why-the-request-failed.md) | How many times a request is retried depends on why it failed | Model requests |
 
 ## What belongs here
 
