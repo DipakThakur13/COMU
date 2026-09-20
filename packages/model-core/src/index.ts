@@ -55,6 +55,12 @@ export interface ModelResponse {
   };
 }
 
+/** A chunk of generated text handed to the caller as the provider reads it off the wire. */
+export interface ModelStreamDelta {
+  kind: "text" | "reasoning";
+  text: string;
+}
+
 export interface ModelRequestContext {
   requestId: string;
   taskId: string;
@@ -64,6 +70,11 @@ export interface ModelRequestContext {
   attempt: number;
   maxAttempts: number;
   startedAt: number;
+  /**
+   * Called by streaming providers for each chunk. Must never throw into the read loop: providers
+   * wrap the call, so a failing consumer cannot corrupt the response being accumulated.
+   */
+  onDelta?: (delta: ModelStreamDelta) => void;
 }
 
 export interface ModelProvider {

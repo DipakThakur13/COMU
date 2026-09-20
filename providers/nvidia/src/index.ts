@@ -403,9 +403,12 @@ export class NvidiaProvider implements ModelProvider {
             const delta = data.choices[0].delta;
             if (delta.content) {
               fullText += delta.content;
+              NvidiaProvider.emitDelta(context, "text", delta.content);
             }
             if (delta.reasoning_content || delta.reasoning) {
-              fullReasoning += (delta.reasoning_content || delta.reasoning);
+              const reasoning = delta.reasoning_content || delta.reasoning;
+              fullReasoning += reasoning;
+              NvidiaProvider.emitDelta(context, "reasoning", reasoning);
             }
 
             if (delta.tool_calls) {
@@ -461,6 +464,16 @@ export class NvidiaProvider implements ModelProvider {
       toolCalls,
       usage: { promptTokens, completionTokens, totalTokens }
     };
+  }
+
+  /** Hands a chunk to the caller; a throwing consumer never breaks generation. */
+  private static emitDelta(context: ModelRequestContext | undefined, kind: "text" | "reasoning", text: string) {
+    if (!context?.onDelta || !text) return;
+    try {
+      context.onDelta({ kind, text });
+    } catch {
+      // ignored on purpose
+    }
   }
 
   public static extractThinking(content: string, reasoningContent?: string): { text: string; thinking?: string } {

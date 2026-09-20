@@ -27,6 +27,8 @@ export const OLLAMA_CAPABILITY_PROFILE: ProviderCapabilityProfile = {
   supportsVision: false,
   maxContextTokens: 8_192,
   maxOutputTokens: 4_096,
+  // Local inference: no per-token cost.
+  pricePerMillionTokens: { input: 0, output: 0 },
   requiresApiKey: false,
   defaultEndpoint: "http://127.0.0.1:11434/v1",
   allowedModels: []

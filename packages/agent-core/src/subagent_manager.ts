@@ -5,7 +5,7 @@ import {
   AgentEvent
 } from "@comu/protocol";
 import { ToolRegistry, ToolExecutor, ToolContext, ToolCapability, PermissionDecision } from "@comu/tool-core";
-import { ModelProvider, ModelMessage, ToolDefinition } from "@comu/model-core";
+import { ModelProvider, ModelMessage, ToolDefinition, ModelRequestContext } from "@comu/model-core";
 
 export interface SubagentManagerOptions {
   maxSubagentsPerTask?: number;
@@ -210,12 +210,45 @@ export class SubagentManager {
           };
         }
 
+        // Worker turns stream on their own channel, tagged with the worker id, so the interface
+        // can show them against the worker and never interleaves them into the assistant's stream.
+        const workerRequestId = `req-${subagentId}-${steps}`;
+        const deltaCounters = new Map<string, number>();
+        const workerModelContext: ModelRequestContext = {
+          requestId: workerRequestId,
+          taskId: params.parentTaskId,
+          runId: subagentId,
+          timeoutMs: subagentTask.budget.maxExecutionTimeMs,
+          signal: controller.signal,
+          attempt: 1,
+          maxAttempts: 1,
+          startedAt: Date.now(),
+          onDelta: (delta) => {
+            const kind = delta.kind === "reasoning" ? "reasoning" : "text";
+            const index = deltaCounters.get(kind) ?? 0;
+            deltaCounters.set(kind, index + 1);
+            params.onEvent({
+              type: "model.token_delta",
+              eventId: `evt-${Date.now()}-${workerRequestId}-${kind}-${index}`,
+              taskId: params.parentTaskId,
+              timestamp: new Date().toISOString(),
+              requestId: workerRequestId,
+              runId: subagentId,
+              channel: "subagent",
+              subagentId,
+              kind,
+              delta: delta.text,
+              index
+            } as AgentEvent);
+          }
+        };
+
         const response = await params.model.generate({
           prompt: params.goal,
           systemPrompt: `You are a bounded ${params.type} subagent. Execute read-only tools or provide findings.`,
           messages,
           tools: workerTools
-        });
+        }, workerModelContext);
 
         messages.push({
           role: "assistant",
@@ -291,6 +324,26 @@ export class SubagentManager {
 
       return result;
     } catch (err: any) {
+      // The provider now sees the worker's abort signal, so a cancelled worker reports CANCELLED
+      // rather than surfacing the provider's cancellation as a worker failure.
+      if (controller.signal.aborted) {
+        params.onEvent({
+          type: "subagent.cancelled",
+          eventId: `evt-${Date.now()}`,
+          taskId: params.parentTaskId,
+          timestamp: new Date().toISOString(),
+          subagentId,
+          subagentType: params.type
+        });
+        return {
+          subagentId,
+          parentTaskId: params.parentTaskId,
+          type: params.type,
+          status: "CANCELLED",
+          summary: "Worker was cancelled.",
+          usage: { steps, toolCalls, durationMs: Date.now() - startTime }
+        };
+      }
       const failResult: SubagentResult = {
         subagentId,
         parentTaskId: params.parentTaskId,

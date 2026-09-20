@@ -1,4 +1,4 @@
-import { ModelProvider, ModelRequest, ModelResponse, ModelRequestContext } from "./index.js";
+import { ModelProvider, ModelRequest, ModelResponse, ModelRequestContext, ModelStreamDelta } from "./index.js";
 import { 
   ProviderError, 
   ProviderTimeoutError, 
@@ -16,6 +16,8 @@ import {
   ModelRequestTimedOutEvent, 
   ModelRequestCancelledEvent, 
   ModelRequestRetryingEvent,
+  ModelTokenDeltaEvent,
+  ModelStreamChannel,
   AgentEvent
 } from "@comu/protocol";
 
@@ -25,6 +27,14 @@ export interface RequestManagerConfig {
   maxRetryTimeMs?: number;
   retryBaseDelayMs?: number;
   retryMaxDelayMs?: number;
+  /**
+   * Stream channel for the token deltas this manager emits. "main" is the assistant's own turn;
+   * a subagent's manager tags its channel so the interface never interleaves the two.
+   */
+  streamChannel?: ModelStreamChannel;
+  subagentId?: string;
+  /** Price per million tokens for cost reporting. Absent means token counts only. */
+  pricePerMillionTokens?: { input: number; output: number };
 }
 
 export class ModelRequestManager {
@@ -40,7 +50,44 @@ export class ModelRequestManager {
       maxAttempts: config?.maxAttempts ?? 3,
       maxRetryTimeMs: config?.maxRetryTimeMs ?? 60_000,
       retryBaseDelayMs: config?.retryBaseDelayMs ?? 500,
-      retryMaxDelayMs: config?.retryMaxDelayMs ?? 8_000
+      retryMaxDelayMs: config?.retryMaxDelayMs ?? 8_000,
+      streamChannel: config?.streamChannel ?? "main",
+      subagentId: config?.subagentId ?? "",
+      pricePerMillionTokens: config?.pricePerMillionTokens ?? undefined as any
+    };
+  }
+
+  /** Cost for a usage report, or undefined when this model has no known price. */
+  private computeCost(usage?: { promptTokens: number; completionTokens: number }): number | undefined {
+    const price = this.config.pricePerMillionTokens;
+    if (!price || !usage) return undefined;
+    return (usage.promptTokens * price.input + usage.completionTokens * price.output) / 1_000_000;
+  }
+
+  /**
+   * Builds the per-attempt delta emitter. Indices are monotonic per (requestId, kind) so a
+   * consumer can detect a dropped delta; a retry starts a fresh request context but keeps the
+   * requestId, so the index continues rather than restarting.
+   */
+  private makeDeltaEmitter(taskId: string, runId: string, requestId: string, counters: Map<string, number>) {
+    return (delta: ModelStreamDelta) => {
+      if (!delta || !delta.text) return;
+      const kind = delta.kind === "reasoning" ? "reasoning" : "text";
+      const index = counters.get(kind) ?? 0;
+      counters.set(kind, index + 1);
+      this.onEvent({
+        type: "model.token_delta",
+        eventId: `evt-${Date.now()}-${requestId}-${kind}-${index}`,
+        taskId,
+        timestamp: new Date().toISOString(),
+        requestId,
+        runId,
+        channel: this.config.streamChannel,
+        subagentId: this.config.subagentId || undefined,
+        kind,
+        delta: delta.text,
+        index
+      } as ModelTokenDeltaEvent);
     };
   }
 
@@ -86,6 +133,8 @@ export class ModelRequestManager {
   ): Promise<ModelResponse> {
     const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const startTime = Date.now();
+    const deltaCounters = new Map<string, number>();
+    const emitDelta = this.makeDeltaEmitter(taskId, runId, requestId, deltaCounters);
     let attempt = 1;
 
     this.onEvent({
@@ -132,7 +181,8 @@ export class ModelRequestManager {
         signal: controller.signal,
         attempt,
         maxAttempts: this.config.maxAttempts,
-        startedAt: attemptStartTime
+        startedAt: attemptStartTime,
+        onDelta: emitDelta
       };
 
       try {
@@ -155,7 +205,10 @@ export class ModelRequestManager {
           requestId,
           runId,
           attempt,
-          latencyMs
+          latencyMs,
+          usage: response.usage,
+          costUsd: this.computeCost(response.usage),
+          model: (this.provider as { selectedModel?: string }).selectedModel
         } as ModelRequestSucceededEvent);
 
         return response;

@@ -72,9 +72,49 @@ export interface ModelRequestStartedEvent extends ModelRequestEventBase {
   type: "model_request.started";
 }
 
+export interface ModelTokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface ModelRequestSucceededEvent extends ModelRequestEventBase {
   type: "model_request.succeeded";
   latencyMs: number;
+  /**
+   * Tokens the provider reported for this request. Present whenever the provider returns usage;
+   * the interface accumulates these to show budget burn while a task runs.
+   */
+  usage?: ModelTokenUsage;
+  /** Cost in USD when the model's profile carries a price. Absent means unknown, never zero. */
+  costUsd?: number;
+  model?: string;
+}
+
+/**
+ * Which stream a token delta belongs to. Subagent turns are a separate channel and must never be
+ * interleaved into the main assistant stream: the interface routes them to that worker's entry.
+ */
+export type ModelStreamChannel = "main" | "subagent";
+
+export type ModelDeltaKind = "text" | "reasoning";
+
+/**
+ * A chunk of generated text as it arrives. Additive only: the accumulated final text still arrives
+ * through task.completed.finalText, and a consumer that ignores deltas loses nothing.
+ */
+export interface ModelTokenDeltaEvent extends AgentEventBase {
+  type: "model.token_delta";
+  requestId: string;
+  runId: string;
+  channel: ModelStreamChannel;
+  /** Set when channel is "subagent". */
+  subagentId?: string;
+  kind: ModelDeltaKind;
+  /** Text appended since the previous delta for this requestId and kind. */
+  delta: string;
+  /** Monotonic per (requestId, kind), starting at 0, so a consumer can detect a gap. */
+  index: number;
 }
 
 export interface ModelRequestFailedEvent extends ModelRequestEventBase {
@@ -630,6 +670,7 @@ export type AgentEvent =
   | ModelRequestTimedOutEvent
   | ModelRequestCancelledEvent
   | ModelRequestRetryingEvent
+  | ModelTokenDeltaEvent
   // Milestone 7 additions:
   | MemoryRecordedEvent
   | MemoryUpdatedEvent

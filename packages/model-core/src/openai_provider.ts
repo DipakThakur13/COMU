@@ -456,9 +456,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
             const delta = data.choices[0].delta;
             if (delta.content) {
               fullText += delta.content;
+              OpenAICompatibleProvider.emitDelta(context, "text", delta.content);
             }
             if (delta.reasoning_content || delta.reasoning) {
-              fullReasoning += (delta.reasoning_content || delta.reasoning);
+              const reasoning = delta.reasoning_content || delta.reasoning;
+              fullReasoning += reasoning;
+              OpenAICompatibleProvider.emitDelta(context, "reasoning", reasoning);
             }
 
             if (delta.tool_calls) {
@@ -516,6 +519,19 @@ export class OpenAICompatibleProvider implements ModelProvider {
       toolCalls,
       usage: { promptTokens, completionTokens, totalTokens }
     };
+  }
+
+  /**
+   * Hands a chunk to the caller. A throwing consumer must not corrupt the response we are
+   * accumulating, so failures here are swallowed deliberately.
+   */
+  protected static emitDelta(context: ModelRequestContext | undefined, kind: "text" | "reasoning", text: string) {
+    if (!context?.onDelta || !text) return;
+    try {
+      context.onDelta({ kind, text });
+    } catch {
+      // A broken delta consumer never breaks generation.
+    }
   }
 
   public static extractThinking(content: string, reasoningContent?: string): { text: string; thinking?: string } {
