@@ -16,7 +16,7 @@ import {
 import { executeFixture } from "../src/execute.js";
 import { gradeRubric, parseJUnit, resetBaselineCache } from "../src/graders.js";
 import { SecretLeakError, assertNoSecret, assertNoSecretInArgv } from "../src/secrets.js";
-import { classifyFailure, summarise } from "../src/metrics.js";
+import { classifyFailure, refineFailureClass, summarise } from "../src/metrics.js";
 import { acquireRunLock, renderMarkdown } from "../src/report.js";
 import { configureProvider, createCounters, fold, startRuntime, type TaskOutcome } from "../src/runner.js";
 import { SelfTestModel } from "../src/selftest_model.js";
@@ -359,6 +359,47 @@ describe("Summarising", () => {
     expect(summarise([legacy]).providerFailures).toEqual({ timeouts: 0, rateLimits: 0, gateway: 0, other: 0 });
   });
 
+  it("files a task the provider killed as a provider error, whatever the message says", () => {
+    /*
+     * The regression this exists for.
+     *
+     * classifyFailure decides "provider" by looking for that word in the error text. NVIDIA says
+     * "NVIDIA API Error: 504 - ", so a task the gateway killed after the agent had edited six files
+     * was filed as an unexplained grader failure. Three of the first four failures in B0 landed in
+     * that class, which is where a class distribution stops being informative.
+     */
+    const killed = record({
+      falseFailure: false,
+      comuStatus: "failed",
+      comuError: "NVIDIA API Error: 504 - ",
+      failureClass: "grader_failed_other",
+      providerFailures: { timeouts: 0, rateLimits: 0, gateway: 1, other: 0 },
+      grader: { correct: false, reason: "The test suite could not be run.", regressions: [], stillFailing: [] }
+    });
+    expect(refineFailureClass(killed)).toBe("provider_error");
+    expect(summarise([killed]).failureCounts).toEqual({ provider_error: 1 });
+  });
+
+  it("files an exhausted budget as truncation, not as an unexplained grader failure", () => {
+    const starved = record({
+      comuStatus: "failed",
+      comuError: "REPAIR_TIMEOUT: Maximum repair time (180000ms) exceeded.",
+      failureClass: "grader_failed_other",
+      grader: { correct: false, reason: "Required tests still failing.", regressions: [], stillFailing: ["t"] }
+    });
+    expect(refineFailureClass(starved)).toBe("loop_truncation");
+  });
+
+  it("leaves a correct run unclassified and an ordinary failure alone", () => {
+    expect(refineFailureClass(record({}))).toBeNull();
+    const ordinary = record({
+      comuStatus: "completed",
+      failureClass: "planning_miss",
+      grader: { correct: false, reason: "wrong", regressions: [], stillFailing: [] }
+    });
+    expect(refineFailureClass(ordinary)).toBe("planning_miss");
+  });
+
   it("counts the two directions of disagreement separately", () => {
     const summary = summarise([record({ falseCompletion: true }), record({ falseFailure: true }), record({})]);
     expect(summary.falseCompletions).toBe(1);
@@ -395,6 +436,24 @@ describe("Summarising", () => {
     });
     expect(markdown).toContain("concurrency 4");
     expect(markdown).toContain("upper bound");
+  });
+
+  it("groups digits the same way wherever it is rendered", () => {
+    // toLocaleString() with no locale follows the host: 174,779 came out as "1,74,779" on the
+    // machine this was run on. A committed result is compared against later runs and read
+    // elsewhere, so its numbers cannot change shape with the reader.
+    const markdown = renderMarkdown({
+      label: "digits",
+      startedAt: "2026-09-20T00:00:00.000Z",
+      finishedAt: "2026-09-20T00:10:00.000Z",
+      model: { id: "m", provider: "p" },
+      gitCommit: "abc1234",
+      reps: 1,
+      concurrency: 1,
+      records: [record({ promptTokens: 174779 })]
+    });
+    expect(markdown).toContain("174,779");
+    expect(markdown).not.toContain("1,74,779");
   });
 
   it("names the cause of each false failure, not just the count", () => {

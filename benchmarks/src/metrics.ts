@@ -93,6 +93,43 @@ export function classifyFailure({ outcome, verdict, unnecessary, peakContextRati
   return "grader_failed_other";
 }
 
+/**
+ * The class a record should have carried, decided from what was stored rather than from the event
+ * text.
+ *
+ * `classifyFailure` runs while a task is still in memory and reaches its provider verdict by
+ * looking for the word "provider" in the error text. NVIDIA says "NVIDIA API Error: 504", which
+ * contains no such word, so a task the provider killed mid-refactor was filed as an unexplained
+ * grader failure. A repair budget exhausted at "REPAIR_TIMEOUT" landed in the same place. Three of
+ * the first four failures in B0 were filed there, which makes the class distribution useless
+ * exactly where it is supposed to be informative.
+ *
+ * This runs at report time instead of at record time on purpose. A run takes hours, so the
+ * classifier cannot be corrected mid-flight without leaving one journal holding records sorted by
+ * two different rules. The stored class stays in the journal for audit; the report uses this.
+ */
+export function refineFailureClass(record: RunRecord): FailureClass | null {
+  if (record.grader.correct) return null;
+
+  const failures = record.providerFailures;
+  const error = record.comuError ?? "";
+
+  // The provider ended the task. Whatever the agent had done by then is not what is being measured.
+  if (record.comuStatus === "failed" && failures) {
+    if (failures.gateway > 0 || failures.rateLimits > 0 || failures.other > 0) return "provider_error";
+    // A timeout is the one cause the benchmark can create for itself under concurrency, so it is
+    // named as a provider error rather than blamed on the agent.
+    if (failures.timeouts > 0) return "provider_error";
+  }
+
+  // A budget ran out. The agent did not fail at the work; it was not allowed to continue.
+  if (/REPAIR_TIMEOUT|REPAIR_LIMIT_REACHED|VALIDATION_LIMIT_REACHED|LIMIT_REACHED/.test(error)) {
+    return "loop_truncation";
+  }
+
+  return record.failureClass;
+}
+
 export interface AssembleInput {
   fixtureId: string;
   tier: RunRecord["tier"];
@@ -214,7 +251,8 @@ export function summarise(records: RunRecord[]): Summary {
   const correct = records.filter(r => r.grader.correct);
   const failureCounts: Record<string, number> = {};
   for (const record of records) {
-    if (record.failureClass) failureCounts[record.failureClass] = (failureCounts[record.failureClass] ?? 0) + 1;
+    const cls = refineFailureClass(record);
+    if (cls) failureCounts[cls] = (failureCounts[cls] ?? 0) + 1;
   }
 
   const byFixture = new Map<string, { tier: string; correct: number; of: number; peakContextRatio: number; providerFailures: ProviderFailureCounts }>();

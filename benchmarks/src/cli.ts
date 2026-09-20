@@ -34,6 +34,8 @@ interface Args {
   limits?: Record<string, number>;
   /** How many runs execute at once. Recorded, because it makes wall clock an upper bound. */
   concurrency: number;
+  /** Re-render the report from the journal without measuring anything. */
+  reportOnly: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -53,7 +55,8 @@ function parseArgs(argv: string[]): Args {
     timeoutMs: Number(get("timeout") ?? 1_800_000),
     outDir: get("out") ?? path.resolve(path.dirname(fixturesRoot()), "results"),
     limits: parseLimits(get("limits")),
-    concurrency: Math.max(1, Number(get("concurrency") ?? 1))
+    concurrency: Math.max(1, Number(get("concurrency") ?? 1)),
+    reportOnly: argv.includes("--report-only")
   };
 }
 
@@ -111,6 +114,39 @@ async function main(): Promise<void> {
   if (fixtures.length === 0) {
     console.error(`No fixtures matched under ${root}.`);
     process.exit(1);
+  }
+
+  /*
+   * Re-render a finished run from its journal.
+   *
+   * The journal is the real result and the rendered files are a view of it, so a report can be
+   * rebuilt without paying for the runs again. That matters when the reading of a record improves
+   * after it was written: the failure classifier reached its provider verdict by looking for the
+   * word "provider" in the error text, which NVIDIA's "504" message does not contain, and a run
+   * takes hours so it cannot be corrected in flight. This re-reads the record and applies the
+   * current reading to all of it at once.
+   */
+  if (args.reportOnly) {
+    const records = readJournal(args.outDir, args.label);
+    if (records.length === 0) {
+      console.error(`No journal for '${args.label}' in ${args.outDir}.`);
+      process.exit(1);
+    }
+    const run: BenchmarkRun = {
+      label: args.label,
+      startedAt: records.map(r => r.startedAt).sort()[0],
+      finishedAt: new Date().toISOString(),
+      model: records[0].model,
+      gitCommit: gitCommit(),
+      reps: args.reps,
+      concurrency: args.concurrency,
+      records
+    };
+    const written = writeRun(run, args.outDir);
+    console.log(`Re-rendered ${records.length} records from the journal.`);
+    console.log(`Wrote ${written.jsonPath}`);
+    console.log(`Wrote ${written.markdownPath}`);
+    return;
   }
 
   let model = { id: args.modelId, provider: "selftest" };

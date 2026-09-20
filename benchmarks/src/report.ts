@@ -122,6 +122,17 @@ function fmtFailures(f: { timeouts: number; rateLimits: number; gateway: number;
   return `${f.timeouts}/${f.rateLimits}/${f.gateway}/${f.other}`;
 }
 
+/**
+ * Thousands separators that do not depend on where the machine is.
+ *
+ * `toLocaleString()` with no locale follows the host, which rendered 174,779 as "1,74,779" on the
+ * machine this was run on. A committed result is compared against later runs and read by people
+ * elsewhere, so its numbers cannot change shape with the reader.
+ */
+function fmtCount(value: number): string {
+  return value.toLocaleString("en-US");
+}
+
 function fmtSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
@@ -172,7 +183,7 @@ export function renderMarkdown(run: BenchmarkRun): string {
     `| Wall clock, median (range) | ${fmtSeconds(summary.durationMs.median)} (${fmtSeconds(summary.durationMs.min)} to ${fmtSeconds(summary.durationMs.max)}) |`
   );
   lines.push(
-    `| Prompt tokens per run, median (range) | ${summary.promptTokens.median.toLocaleString()} (${summary.promptTokens.min.toLocaleString()} to ${summary.promptTokens.max.toLocaleString()}) |`
+    `| Prompt tokens per run, median (range) | ${fmtCount(summary.promptTokens.median)} (${fmtCount(summary.promptTokens.min)} to ${fmtCount(summary.promptTokens.max)}) |`
   );
   lines.push(`| Largest prompt seen, as a share of the window | ${(summary.maxPeakContextRatio * 100).toFixed(1)}% |`);
   const pf = summary.providerFailures;
