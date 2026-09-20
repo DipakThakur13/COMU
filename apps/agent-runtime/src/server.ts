@@ -25,7 +25,7 @@ import {
   ASTRA_CAPABILITY_PROFILE, 
   DEFAULT_OPENAI_CAPABILITY_PROFILE 
 } from '@comu/model-core';
-import { AgentEvent, ProviderConfig, ProviderTestResult } from '@comu/protocol';
+import { AgentEvent, ProviderConfig, ProviderTestResult, TaskMode, TASK_MODES } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
 
 export type ProviderFactory = (selection: ProviderSelection, config: Record<string, any>) => ModelProvider;
@@ -246,6 +246,7 @@ const eventStreams = new Map<string, express.Response[]>();
 const eventStore = new InMemoryTaskEventStore({ maxEventsPerTask: 5000 });
 const taskChangeSets = new Map<string, any>();
 const taskControllers = new Map<string, AbortController>();
+const finishedTasks = new Set<string>();
 
 app.post(['/v1/config/providers', '/v1/config'], (req, res) => {
   const providers = req.body.providers || req.body.config;
@@ -526,6 +527,20 @@ app.post('/v1/tasks', async (req, res) => {
   const workspaceRoot = workspace.rootPath;
   const workspaceId = workspace.workspaceId;
 
+  // Mode Guard: honour the composer's choice; only AUTO (or absent) is classified by the kernel.
+  let mode: TaskMode = 'AUTO';
+  if (taskReq.mode !== undefined && taskReq.mode !== null) {
+    const requested = String(taskReq.mode).toUpperCase();
+    if (!(TASK_MODES as readonly string[]).includes(requested)) {
+      return res.status(400).json({
+        error: 'INVALID_MODE',
+        code: 'INVALID_MODE',
+        message: `mode must be one of ${TASK_MODES.join(', ')} (received '${taskReq.mode}').`
+      });
+    }
+    mode = requested as TaskMode;
+  }
+
   const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
   const controller = new AbortController();
@@ -544,6 +559,7 @@ app.post('/v1/tasks', async (req, res) => {
   };
 
   const closeStreams = () => {
+    finishedTasks.add(taskId);
     const streams = eventStreams.get(taskId) || [];
     streams.forEach(stream => stream.end());
     eventStreams.delete(taskId);
@@ -554,6 +570,7 @@ app.post('/v1/tasks', async (req, res) => {
       eventStore.clear(taskId);
       taskChangeSets.delete(taskId);
       taskControllers.delete(taskId);
+      finishedTasks.delete(taskId);
     }, 5 * 60 * 1000);
   };
 
@@ -575,6 +592,7 @@ app.post('/v1/tasks', async (req, res) => {
         taskId,
         workspaceRoot,
         workspaceId,
+        mode,
         systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
         userPrompt: taskReq.description || taskReq.prompt || "",
         limits: {
@@ -672,6 +690,13 @@ app.get('/v1/tasks/:id/events', (req, res) => {
     res.write(`id: ${event.eventId}\n`);
     res.write(`event: ${event.type}\n`);
     res.write(`data: ${JSON.stringify(event)}\n\n`);
+  }
+
+  // 2b. A task that already finished will never publish again: end the stream after the replay.
+  if (finishedTasks.has(taskId)) {
+    eventStreams.set(taskId, (eventStreams.get(taskId) || []).filter(s => s !== res));
+    res.end();
+    return;
   }
 
   // 3. Clean up on disconnect

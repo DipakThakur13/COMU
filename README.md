@@ -85,7 +85,7 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
   - **Workers (`🤖`)**: Active subagents (Research Worker, Verification Worker) collaborating on multi-step workflows.
 - **Context Drawer (`🗂`)**:
   - Displays the active working set: current active file, recently inspected files, modified files, active diagnostics, and token context estimates.
-- **Mode-Aware Composer**:
+- **Mode-Aware Composer** (the selected mode travels with the task request and is honoured as-is; only **Auto** classifies):
   - **Auto**: Automatically classifies user intent into optimal mode.
   - **Agent**: Full autonomous multi-step execution, testing, and self-repair.
   - **Plan**: Generates comprehensive architectural designs and checklists without modifying code.

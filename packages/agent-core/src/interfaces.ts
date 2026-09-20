@@ -1,6 +1,7 @@
 import {
   AgentEvent,
   AgentLimits,
+  TaskMode,
   TaskPlan,
   VerificationResult,
   FailureDiagnosis,
@@ -30,6 +31,8 @@ export interface OrchestratorContext {
   taskId: string;
   workspaceRoot: string;
   workspaceId?: string;
+  /** User-selected interaction mode. Omitted or AUTO means the kernel classifies the prompt. */
+  mode?: TaskMode;
   systemPrompt: string;
   userPrompt: string;
   limits: AgentLimits;

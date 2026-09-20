@@ -3,12 +3,14 @@ import { IntentRouter, IntentClassification } from "./interaction/intent_router.
 import { TaskContract, WorkspaceScope } from "./interaction/task_contract.js";
 import { ClarificationHandler } from "./interaction/clarification_handler.js";
 import { OrchestratorContext, AgentResult, AgentState } from "./interfaces.js";
-import { AgentLimits } from "@comu/protocol";
+import { AgentLimits, TaskMode, TASK_MODES } from "@comu/protocol";
 import { ToolCapability } from "@comu/tool-core";
 
 export interface AgentKernelInput {
   taskId: string;
   runId: string;
+  /** Explicit mode from the composer. Omitted or AUTO means classify. */
+  mode?: TaskMode;
   systemPrompt: string;
   userPrompt: string;
   workspaceRoot: string;
@@ -80,8 +82,17 @@ export class AgentKernel {
       };
     }
 
-    const classification = this.router.route(input.userPrompt, {
-      activeTaskId: input.taskId
+    const classification = this.resolveClassification(input);
+
+    input.onEvent({
+      type: "task.mode_resolved",
+      eventId: `evt-${Date.now()}-mode`,
+      taskId: input.taskId,
+      timestamp: new Date().toISOString(),
+      mode: classification.mode,
+      source: classification.source,
+      confidence: classification.confidence,
+      reasons: classification.reasons
     });
 
     if (classification.mode === "AMBIGUOUS") {
@@ -149,6 +160,27 @@ export class AgentKernel {
     
     // Delegate to orchestrator but pass the contract along
     return this.orchestrator.runWithContract(input, taskContract);
+  }
+
+  /**
+   * An explicit mode from the user is authoritative: no regex, no model, no clarification.
+   * Only AUTO (or an absent mode) goes through the IntentRouter.
+   */
+  private resolveClassification(input: AgentKernelInput): IntentClassification {
+    const requested = input.mode;
+    if (requested && requested !== "AUTO") {
+      if (!TASK_MODES.includes(requested)) {
+        throw new Error(`INVALID_MODE: '${requested}' is not one of ${TASK_MODES.join(", ")}`);
+      }
+      return {
+        mode: requested,
+        confidence: 1.0,
+        source: "explicit",
+        reasons: ["mode selected by user"],
+        requiresClarification: false
+      };
+    }
+    return this.router.route(input.userPrompt, { activeTaskId: input.taskId });
   }
 
   private createContract(input: AgentKernelInput, classification: IntentClassification): TaskContract {

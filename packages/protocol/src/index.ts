@@ -7,10 +7,16 @@ export interface SelectionContext {
   text: string;
 }
 
+/** Interaction mode chosen in the composer. AUTO asks the runtime to classify the prompt. */
+export type TaskMode = "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT";
+export const TASK_MODES: readonly TaskMode[] = ["AUTO", "CHAT", "ASK", "PLAN", "AGENT"];
+
 export interface TaskRequest {
   taskId: string;
   prompt: string;
   modelId: string;
+  /** Explicit mode. Omitted or AUTO means the runtime classifies the prompt. */
+  mode?: TaskMode;
   workspace: {
     rootPath: string;
     workspaceId?: string;
@@ -94,6 +100,15 @@ export interface TaskStartedEvent extends AgentEventBase {
 export interface AgentStatusEvent extends AgentEventBase {
   type: "agent.status";
   status: string;
+}
+
+/** Published once per task when the interaction mode is settled, whether chosen by the user or classified. */
+export interface TaskModeResolvedEvent extends AgentEventBase {
+  type: "task.mode_resolved";
+  mode: "CHAT" | "ASK" | "PLAN" | "AGENT" | "AMBIGUOUS";
+  source: "explicit" | "deterministic" | "context" | "model" | "fallback";
+  confidence: number;
+  reasons?: string[];
 }
 
 export interface ToolStartedEvent extends AgentEventBase {
@@ -508,6 +523,7 @@ export interface InteractionExpiredEvent extends AgentEventBase {
 export type AgentEvent =
   | TaskStartedEvent
   | AgentStatusEvent
+  | TaskModeResolvedEvent
   | ToolStartedEvent
   | ToolCompletedEvent
   | ChangeCreatedEvent

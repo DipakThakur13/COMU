@@ -25,6 +25,8 @@ export class TaskSessionStore {
 
   private seenEvents = new Set<string>();
 
+  private modeResolved = false;
+
   public getState(): ChatSessionStateUI {
     return this.state;
   }
@@ -47,6 +49,7 @@ export class TaskSessionStore {
 
   public startNewTask(taskId: string, prompt: string, modelId: string, mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT") {
     const now = Date.now();
+    this.modeResolved = false;
     this.state = {
       taskId,
       prompt,
@@ -103,16 +106,26 @@ export class TaskSessionStore {
         this.state.workingSet.modifiedFiles = this.state.workingSet.modifiedFiles || [];
         this.state.workingSet.modifiedFiles.push({ path: ce.path, source: 'COMU_CHANGE' });
       }
+    } else if (event.type === 'task.mode_resolved') {
+      // Authoritative mode from the kernel (explicit selection or classification result).
+      const me = event as any;
+      if (me.mode) {
+        this.state.interactionMode = me.mode;
+        this.modeResolved = true;
+      }
     } else if (event.type === 'agent.status') {
       const se = event as any;
       if (se.status) {
         this.state.agentState = se.status;
-        const sUpper = se.status.toUpperCase();
-        if (sUpper.includes("AGENT")) this.state.interactionMode = "AGENT";
-        else if (sUpper.includes("PLAN")) this.state.interactionMode = "PLAN";
-        else if (sUpper.includes("ASK")) this.state.interactionMode = "ASK";
-        else if (sUpper.includes("CHAT")) this.state.interactionMode = "CHAT";
-        else if (sUpper.includes("AMBIGUOUS") || sUpper.includes("CLARIF")) this.state.interactionMode = "AMBIGUOUS";
+        if (!this.modeResolved) {
+          // Legacy inference for runtimes that do not publish task.mode_resolved.
+          const sUpper = se.status.toUpperCase();
+          if (sUpper.includes("AGENT")) this.state.interactionMode = "AGENT";
+          else if (sUpper.includes("PLAN")) this.state.interactionMode = "PLAN";
+          else if (/\bASK\b/.test(sUpper)) this.state.interactionMode = "ASK";
+          else if (sUpper.includes("CHAT")) this.state.interactionMode = "CHAT";
+          else if (sUpper.includes("AMBIGUOUS") || sUpper.includes("CLARIF")) this.state.interactionMode = "AMBIGUOUS";
+        }
       }
     } else if (event.type === 'tool.started' || event.type === 'tool.completed') {
       const te = event as any;

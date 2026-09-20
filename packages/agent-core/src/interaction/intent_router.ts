@@ -3,7 +3,7 @@ import { InteractionMode } from "./interaction_modes.js";
 export interface IntentClassification {
   mode: InteractionMode;
   confidence: number;
-  source: "deterministic" | "context" | "fallback";
+  source: "explicit" | "deterministic" | "context" | "model" | "fallback";
   reasons: string[];
   requiresClarification: boolean;
 }

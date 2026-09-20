@@ -202,6 +202,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 taskId: `task-${Date.now()}`,
                 prompt,
                 modelId,
+                mode: mode || 'AUTO',
                 workspace: workspaceCtx,
                 editor: editorCtx
             });

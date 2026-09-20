@@ -142,6 +142,7 @@ export class AgentOrchestrator {
     return kernel.handle({
       taskId: ctx.taskId,
       runId: ctx.taskId,
+      mode: ctx.mode,
       systemPrompt: ctx.systemPrompt,
       userPrompt: ctx.userPrompt,
       workspaceRoot: ctx.workspaceRoot,
