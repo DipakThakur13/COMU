@@ -1,6 +1,7 @@
 import express, { Express } from 'express';
 import cors from 'cors';
-import { resolve } from 'path';
+import { resolve, isAbsolute } from 'path';
+import { statSync, realpathSync } from 'fs';
 import { ToolRegistry, ToolExecutor } from '@comu/tool-core';
 import { ReadFileTool, ListDirectoryTool, GetWorkspaceTreeTool, CreateFileTool, WriteFileTool, EditFileTool } from '@comu/tool-filesystem';
 import { SearchTextTool, NodeRecursiveSearchBackend } from '@comu/tool-search';
@@ -24,11 +25,88 @@ import {
 import { AgentEvent, ProviderConfig, ProviderTestResult } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
 
+export type ProviderFactory = (selection: ProviderSelection, config: Record<string, any>) => ModelProvider;
+
+export interface RuntimeServerOptions {
+  /** Test seam: replaces provider construction for the task runner. */
+  providerFactory?: ProviderFactory;
+}
+
+export interface ProviderSelection {
+  modelId: string;
+  providerId: 'nvidia' | 'experiential' | 'openai' | 'ollama' | 'unknown';
+}
+
+export function selectProvider(modelId: string): ProviderSelection {
+  const lower = (modelId || '').toLowerCase();
+  if (lower.includes('nvidia') || lower.includes('nemotron') || lower.includes('deepseek')) {
+    return { modelId, providerId: 'nvidia' };
+  }
+  if (lower.includes('experiential') || lower.includes('astra')) {
+    return { modelId, providerId: 'experiential' };
+  }
+  if (lower.includes('openai') || lower.includes('gpt-4')) {
+    return { modelId, providerId: 'openai' };
+  }
+  if (lower.includes('ollama') || lower.includes('local')) {
+    return { modelId, providerId: 'ollama' };
+  }
+  return { modelId, providerId: 'unknown' };
+}
+
+export type WorkspaceResolution =
+  | { ok: true; rootPath: string; workspaceId?: string }
+  | { ok: false; code: 'WORKSPACE_REQUIRED' | 'WORKSPACE_INVALID'; message: string };
+
+/**
+ * The task request's workspace is the only authority for where the agent operates.
+ * The runtime's own process.cwd() is the extension host's directory, never the user's project.
+ */
+export function resolveWorkspaceRoot(workspace: unknown): WorkspaceResolution {
+  const ws = workspace as { rootPath?: unknown; workspaceId?: unknown } | undefined;
+  const raw = ws && typeof ws.rootPath === 'string' ? ws.rootPath.trim() : '';
+  if (!raw) {
+    return { ok: false, code: 'WORKSPACE_REQUIRED', message: 'Task request must include workspace.rootPath.' };
+  }
+  if (!isAbsolute(raw)) {
+    return { ok: false, code: 'WORKSPACE_INVALID', message: `workspace.rootPath must be an absolute path (received '${raw}').` };
+  }
+  let rootPath: string;
+  try {
+    rootPath = realpathSync(resolve(raw));
+    if (!statSync(rootPath).isDirectory()) {
+      return { ok: false, code: 'WORKSPACE_INVALID', message: `workspace.rootPath is not a directory: ${raw}` };
+    }
+  } catch {
+    return { ok: false, code: 'WORKSPACE_INVALID', message: `workspace.rootPath does not exist or is not accessible: ${raw}` };
+  }
+  const workspaceId = ws && typeof ws.workspaceId === 'string' && ws.workspaceId.trim() ? ws.workspaceId.trim() : undefined;
+  return { ok: true, rootPath, workspaceId };
+}
+
+export function defaultProviderFactory(selection: ProviderSelection, providers: Record<string, any>): ModelProvider {
+  const { modelId, providerId } = selection;
+  if (providerId === 'experiential') {
+    const key = providers?.['experiential']?.apiKey || process.env.EXPERIENTIAL_API_KEY;
+    const endpoint = providers?.['experiential']?.endpoint;
+    return new OpenAICompatibleProvider(key, endpoint, 'gpt-6-astra', ASTRA_CAPABILITY_PROFILE);
+  }
+  if (providerId === 'openai') {
+    const key = providers?.['openai']?.apiKey || process.env.OPENAI_API_KEY;
+    const endpoint = providers?.['openai']?.endpoint;
+    return new OpenAICompatibleProvider(key, endpoint, modelId);
+  }
+  const nvidiaKey = providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY;
+  const nvidiaEndpoint = providers?.['nvidia']?.endpoint;
+  return new NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+}
+
+export function createRuntimeApp(options: RuntimeServerOptions = {}): Express {
+const providerFactory: ProviderFactory = options.providerFactory || defaultProviderFactory;
+
 const app: Express = express();
 app.use(express.json());
 app.use(cors());
-
-const port = process.env.PORT || 3456;
 
 // Setup tools
 const registry = new ToolRegistry();
@@ -252,16 +330,12 @@ app.get("/v1/health", (req, res) => {
 });
 
 app.post('/v1/tasks', async (req, res) => {
-  const taskReq = req.body;
-  const modelId = taskReq.modelId || 'nvidia-nemotron-3-ultra';
+  const taskReq = req.body || {};
+  const modelId: string = taskReq.modelId || 'nvidia-nemotron-3-ultra';
+  const selection = selectProvider(modelId);
 
   // Task-Start Guard: verify provider credential exists before task launch
-  const isNvidia = modelId.toLowerCase().includes('nvidia') || modelId.toLowerCase().includes('nemotron') || modelId.toLowerCase().includes('deepseek');
-  const isExperiential = modelId.toLowerCase().includes('experiential') || modelId.toLowerCase().includes('astra');
-  const isOpenAI = modelId.toLowerCase().includes('openai') || modelId.toLowerCase().includes('gpt-4');
-  const isLocal = modelId.toLowerCase().includes('ollama') || modelId.toLowerCase().includes('local');
-
-  if (isNvidia) {
+  if (selection.providerId === 'nvidia') {
     const hasNvidia = !!(runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY);
     if (!hasNvidia) {
       return res.status(400).json({
@@ -271,7 +345,7 @@ app.post('/v1/tasks', async (req, res) => {
         message: 'Connect your NVIDIA API key before starting this task.'
       });
     }
-  } else if (isExperiential) {
+  } else if (selection.providerId === 'experiential') {
     const hasExperiential = !!(runtimeConfig.providers?.['experiential']?.apiKey || process.env.EXPERIENTIAL_API_KEY);
     if (!hasExperiential) {
       return res.status(400).json({
@@ -281,7 +355,7 @@ app.post('/v1/tasks', async (req, res) => {
         message: 'Connect your Experiential Labs API key for GPT-6 Astra before starting this task.'
       });
     }
-  } else if (isOpenAI) {
+  } else if (selection.providerId === 'openai') {
     const hasOpenAI = !!(runtimeConfig.providers?.['openai']?.apiKey || process.env.OPENAI_API_KEY);
     if (!hasOpenAI) {
       return res.status(400).json({
@@ -291,7 +365,7 @@ app.post('/v1/tasks', async (req, res) => {
         message: 'Connect your OpenAI API key before starting this task.'
       });
     }
-  } else if (!isLocal && !runtimeConfig.providers?.[modelId]?.apiKey) {
+  } else if (selection.providerId === 'unknown' && !runtimeConfig.providers?.[modelId]?.apiKey) {
     return res.status(400).json({
       error: 'PROVIDER_NOT_CONFIGURED',
       code: 'PROVIDER_NOT_CONFIGURED',
@@ -300,33 +374,54 @@ app.post('/v1/tasks', async (req, res) => {
     });
   }
 
-  const taskId = `task-${Date.now()}`;
-  const workspaceRoot = resolve(process.cwd());
+  // Workspace Guard: the request's workspace is authoritative. Never fall back to process.cwd().
+  const workspace = resolveWorkspaceRoot(taskReq.workspace);
+  if (!workspace.ok) {
+    return res.status(400).json({
+      error: workspace.code,
+      code: workspace.code,
+      message: workspace.message
+    });
+  }
+  const workspaceRoot = workspace.rootPath;
+  const workspaceId = workspace.workspaceId;
+
+  const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
   const controller = new AbortController();
   taskControllers.set(taskId, controller);
 
-  res.status(201).json({ taskId });
+  res.status(201).json({ taskId, workspaceRoot });
+
+  const emit = (event: AgentEvent) => {
+    eventStore.append(event);
+    const streams = eventStreams.get(taskId) || [];
+    streams.forEach(stream => {
+      stream.write(`id: ${event.eventId}\n`);
+      stream.write(`event: ${event.type}\n`);
+      stream.write(`data: ${JSON.stringify(event)}\n\n`);
+    });
+  };
+
+  const closeStreams = () => {
+    const streams = eventStreams.get(taskId) || [];
+    streams.forEach(stream => stream.end());
+    eventStreams.delete(taskId);
+  };
+
+  const scheduleCleanup = () => {
+    setTimeout(() => {
+      eventStore.clear(taskId);
+      taskChangeSets.delete(taskId);
+      taskControllers.delete(taskId);
+    }, 5 * 60 * 1000);
+  };
 
   // Run asynchronously
   setTimeout(async () => {
     try {
-      // Setup provider dynamically
-      let model: ModelProvider;
-      if (isExperiential) {
-        const key = runtimeConfig.providers?.['experiential']?.apiKey || process.env.EXPERIENTIAL_API_KEY || "dummy-key";
-        const endpoint = runtimeConfig.providers?.['experiential']?.endpoint;
-        model = new OpenAICompatibleProvider(key, endpoint, "gpt-6-astra", ASTRA_CAPABILITY_PROFILE);
-      } else if (isOpenAI) {
-        const key = runtimeConfig.providers?.['openai']?.apiKey || process.env.OPENAI_API_KEY || "dummy-key";
-        const endpoint = runtimeConfig.providers?.['openai']?.endpoint;
-        model = new OpenAICompatibleProvider(key, endpoint, modelId);
-      } else {
-        const nvidiaKey = runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
-        const nvidiaEndpoint = runtimeConfig.providers?.['nvidia']?.endpoint;
-        model = new NvidiaProvider(nvidiaKey, nvidiaEndpoint);
-      }
-      
+      const model = providerFactory(selection, runtimeConfig.providers);
+
       const orchestrator = new AgentOrchestrator(model, registry, executor, diffEngine, {
         planner: new TaskPlanner(),
         verificationEngine: new VerificationEngine(),
@@ -339,6 +434,7 @@ app.post('/v1/tasks', async (req, res) => {
       const ctx: OrchestratorContext = {
         taskId,
         workspaceRoot,
+        workspaceId,
         systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
         userPrompt: taskReq.description || taskReq.prompt || "",
         limits: {
@@ -352,16 +448,7 @@ app.post('/v1/tasks', async (req, res) => {
         },
         onEvent: (event: AgentEvent) => {
           console.log(`[Event ${event.type}]`, event);
-
-          // Store event in bounded history
-          eventStore.append(event);
-
-          const streams = eventStreams.get(taskId) || [];
-          streams.forEach(stream => {
-            stream.write(`id: ${event.eventId}\n`);
-            stream.write(`event: ${event.type}\n`);
-            stream.write(`data: ${JSON.stringify(event)}\n\n`);
-          });
+          emit(event);
         },
         abortSignal: controller.signal
       };
@@ -374,29 +461,26 @@ app.post('/v1/tasks', async (req, res) => {
         taskChangeSets.set(taskId, result.changeSet);
       }
 
-      // Close streams
-      const streams = eventStreams.get(taskId) || [];
-      streams.forEach(stream => stream.end());
-      eventStreams.delete(taskId);
-
-      setTimeout(() => {
-        eventStore.clear(taskId);
-        taskChangeSets.delete(taskId);
-        taskControllers.delete(taskId);
-      }, 5 * 60 * 1000);
+      closeStreams();
+      scheduleCleanup();
     } catch (e: any) {
       console.error(`Error executing task ${taskId}:`, e);
-      // Ensure streams are closed
-      const streams = eventStreams.get(taskId) || [];
-      streams.forEach(stream => stream.end());
-      eventStreams.delete(taskId);
-
-      // Retain failed task events temporarily
-      setTimeout(() => {
-        eventStore.clear(taskId);
-        taskChangeSets.delete(taskId);
-        taskControllers.delete(taskId);
-      }, 5 * 60 * 1000);
+      // The orchestrator normally publishes its own terminal event. If it threw before doing so,
+      // publish one here so subscribers never hang waiting for a task that already died.
+      const history = eventStore.getEvents(taskId);
+      const hasTerminal = history.some(ev => ev.type === 'task.completed' || ev.type === 'task.failed' || ev.type === 'task.cancelled');
+      if (!hasTerminal) {
+        emit({
+          type: 'task.failed',
+          eventId: `evt-${Date.now()}-runtime-error`,
+          taskId,
+          timestamp: new Date().toISOString(),
+          error: e?.message || String(e),
+          payload: { code: 'RUNTIME_ERROR', message: e?.message || String(e) }
+        } as AgentEvent);
+      }
+      closeStreams();
+      scheduleCleanup();
     }
   }, 0);
 });
@@ -532,7 +616,10 @@ app.post('/v1/tasks/:taskId/interactions/:interactionId/respond', (req, res) => 
 
 app.get('/v1/workspace/memory', async (req, res) => {
   try {
-    const workspaceId = (req.query.workspaceId as string) || resolve(process.cwd());
+    const workspaceId = req.query.workspaceId as string | undefined;
+    if (!workspaceId) {
+      return res.status(400).json({ error: "workspaceId query parameter is required." });
+    }
     const text = (req.query.query as string) || (req.query.text as string);
     const type = req.query.type as any;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
@@ -615,7 +702,13 @@ app.get('/v1/tasks/:taskId/subagents', (req, res) => {
   });
 });
 
+return app;
+}
+
+const app: Express = createRuntimeApp();
+
 if (require.main === module) {
+  const port = process.env.PORT || 3456;
   app.listen(port, () => {
     console.log(`Agent runtime server listening on port ${port}`);
   });

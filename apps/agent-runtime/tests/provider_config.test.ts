@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import app from "../src/server";
 import { Server } from "http";
+import os from "node:os";
 
 describe("Runtime BYOK Provider Configuration & Task-Start Guard", () => {
   let server: Server;
@@ -64,7 +65,7 @@ describe("Runtime BYOK Provider Configuration & Task-Start Guard", () => {
         taskId: "test-guard-task",
         prompt: "Refactor code",
         modelId: "nvidia-nemotron-3-ultra",
-        workspace: { workspaceRoot: "/tmp" }
+        workspace: { rootPath: os.tmpdir() }
       })
     });
 
@@ -83,7 +84,7 @@ describe("Runtime BYOK Provider Configuration & Task-Start Guard", () => {
         taskId: `task-local-${Date.now()}`,
         prompt: "Run local analysis",
         modelId: "ollama-llama-3",
-        workspace: { workspaceRoot: "/tmp" }
+        workspace: { rootPath: os.tmpdir() }
       })
     });
 
