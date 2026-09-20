@@ -263,3 +263,41 @@
 .toneError { color: var(--comu-status-error); }
 .toneWarn { color: var(--comu-status-warn); }
 .toneMuted { color: var(--comu-text-muted); }
+
+/* ── Context chips ──────────────────────────────────────────────────────── */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--comu-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px var(--comu-space-2);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-pill);
+  background: var(--comu-surface-sunken);
+  color: var(--comu-text-muted);
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip:hover {
+  background: var(--comu-hover);
+  color: var(--comu-text);
+}
+
+.chip:focus-visible {
+  outline: 1px solid var(--comu-focus);
+  outline-offset: -1px;
+}

@@ -140,6 +140,20 @@ export interface WorkerView {
   streamText?: string;
 }
 
+/**
+ * The files this task has looked at and the files it has changed.
+ *
+ * Derived from the same events everything else is derived from, so it needs nothing new from the
+ * runtime. Inspected files are newest first and bounded: the point is "what is COMU working on
+ * right now", which a hundred-entry list stops answering.
+ */
+export interface WorkingSetView {
+  inspectedFiles: string[];
+  modifiedFiles: string[];
+}
+
+export const MAX_INSPECTED_FILES = 20;
+
 export interface ApprovalView {
   interactionId: string;
   taskId: string;
@@ -215,6 +229,7 @@ export interface SessionState {
   streaming?: StreamingView;
 
   changes: ChangeView[];
+  workingSet: WorkingSetView;
   pendingApproval?: ApprovalView;
   /** Every approval decision, including session grants and automatic denials. */
   approvals: ApprovalDecidedEvent[];
@@ -247,7 +262,7 @@ export interface SequencedEvent {
 
 export interface UiState {
   surface: "activity" | "changes";
-  drawer?: "overview" | "verification" | "memory" | "workers";
+  drawer?: "overview" | "verification" | "memory" | "workers" | "context";
   settingsOpen: boolean;
   composer: {
     text: string;

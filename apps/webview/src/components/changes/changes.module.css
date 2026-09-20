@@ -91,3 +91,8 @@
 .openButton {
   padding: var(--comu-space-1) var(--comu-space-3) var(--comu-space-2);
 }
+
+.bulk {
+  flex: 1 1 100%;
+  margin-top: var(--comu-space-1);
+}

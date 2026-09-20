@@ -1,0 +1,124 @@
+/*
+ * The empty state. Sized for a 280px sidebar first: the old hero was built for a wide editor tab
+ * and pushed the composer off-screen at real panel width.
+ */
+
+.wrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--comu-space-4);
+  padding: var(--comu-space-4) var(--comu-space-3);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--comu-space-1);
+  text-align: center;
+}
+
+.heroIcon {
+  color: var(--comu-text-muted);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--comu-text-lg);
+  font-weight: 600;
+  color: var(--comu-text);
+  letter-spacing: 0.02em;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: 34ch;
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-sm);
+}
+
+/* ── Setup ──────────────────────────────────────────────────────────────── */
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-3);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-md);
+  background: var(--comu-surface-raised);
+  min-width: 0;
+}
+
+.setupTitle {
+  margin: 0;
+  font-size: var(--comu-text-sm);
+  font-weight: 600;
+  color: var(--comu-text);
+}
+
+.setupBody {
+  margin: 0;
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-xs);
+}
+
+.setupActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--comu-space-2);
+}
+
+/* ── Suggestions ────────────────────────────────────────────────────────── */
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-2);
+  min-width: 0;
+}
+
+.suggestionsTitle {
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--comu-text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.chip {
+  display: block;
+  width: 100%;
+  padding: var(--comu-space-2);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  background: var(--comu-surface-raised);
+  color: var(--comu-text);
+  font-size: var(--comu-text-sm);
+  text-align: left;
+  transition: background var(--comu-motion-fast) var(--comu-ease);
+}
+
+.chip:hover {
+  background: var(--comu-hover);
+  border-color: var(--comu-border-strong);
+}
+
+.chip:focus-visible {
+  outline: 1px solid var(--comu-focus);
+  outline-offset: -1px;
+}

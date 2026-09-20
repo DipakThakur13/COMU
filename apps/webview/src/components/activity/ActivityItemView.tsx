@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { ActivityEntry, ActivityItem, ActivityStatus, ToolCategory } from "@comu/ui-state";
 import { isActivityGroup } from "@comu/ui-state";
 import { Badge, Icon, IconName } from "../primitives/index.js";
+import { MessageText } from "./MessageText.js";
 import styles from "./activity.module.css";
 
 const TOOL_ICON: Record<ToolCategory, IconName> = {
@@ -42,13 +43,14 @@ export interface ActivityRowProps {
   entry: ActivityEntry;
   expanded: boolean;
   onToggle: (id: string) => void;
+  onSaveCode?: (content: string, suggestedPath: string) => void;
 }
 
 /**
  * One row in the stream. Memoised on identity: the reducer returns new objects only for entries
  * that actually changed, so appending an event does not re-render the history above it.
  */
-export const ActivityRow = memo(function ActivityRow({ entry, expanded, onToggle }: ActivityRowProps) {
+export const ActivityRow = memo(function ActivityRow({ entry, expanded, onToggle, onSaveCode }: ActivityRowProps) {
   const group = isActivityGroup(entry);
   const message = entry.category === "AGENT_MESSAGE";
   const expandable = group || message || !!entry.shortDescription;
@@ -70,8 +72,8 @@ export const ActivityRow = memo(function ActivityRow({ entry, expanded, onToggle
           {!expanded && entry.shortDescription && !message ? (
             <span className={styles.rowSubtitle}>{entry.shortDescription}</span>
           ) : null}
-          {message ? (
-            <span className={expanded ? styles.messageFull : styles.messageClamped}>{entry.shortDescription}</span>
+          {message && !expanded ? (
+            <span className={styles.messageClamped}>{entry.shortDescription}</span>
           ) : null}
         </span>
         {group ? <Badge title={`${entry.items.length} items`}>{entry.items.length}</Badge> : null}
@@ -87,6 +89,16 @@ export const ActivityRow = memo(function ActivityRow({ entry, expanded, onToggle
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {/*
+        The expanded message sits outside the header button. Its code blocks carry Copy and Save
+        controls, and a button inside a button is neither valid nor reachable by keyboard.
+      */}
+      {expanded && message ? (
+        <div className={styles.messageFull}>
+          <MessageText text={entry.shortDescription ?? ""} onSaveCode={onSaveCode} />
+        </div>
       ) : null}
 
       {expanded && !group && entry.shortDescription && !message ? (

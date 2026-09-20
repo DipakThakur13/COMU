@@ -3,6 +3,7 @@ import { Badge, ErrorBoundary, Icon, IconName } from "../primitives/index.js";
 import { OverviewPanel } from "./OverviewPanel.js";
 import { VerificationPanel } from "./VerificationPanel.js";
 import { MemoryPanel } from "./MemoryPanel.js";
+import { ContextPanel } from "./ContextPanel.js";
 import { WorkersPanel } from "./WorkersPanel.js";
 import styles from "./drawer.module.css";
 
@@ -36,6 +37,10 @@ export function availableTabs(session: SessionState): DrawerTab[] {
   if (session.workers.length > 0) {
     tabs.push({ id: "workers", label: "Workers", icon: "worker", count: session.workers.length });
   }
+  const context = session.workingSet.inspectedFiles.length + session.workingSet.modifiedFiles.length;
+  if (context > 0) {
+    tabs.push({ id: "context", label: "Context", icon: "file", count: context });
+  }
   if (session.memory.length > 0) {
     tabs.push({ id: "memory", label: "Memory", icon: "memory", count: session.memory.length });
   }
@@ -62,6 +67,7 @@ export interface DrawerProps {
   session: SessionState;
   open?: DrawerSurface;
   onSelect: (surface: DrawerSurface) => void;
+  onOpenFile: (path: string) => void;
 }
 
 /**
@@ -72,7 +78,7 @@ export interface DrawerProps {
  * for. The drawer opens over the stream rather than beside it, because the panel is often 300px
  * wide and there is no beside.
  */
-export function Drawer({ session, open, onSelect }: DrawerProps) {
+export function Drawer({ session, open, onSelect, onOpenFile }: DrawerProps) {
   const tabs = availableTabs(session);
   if (tabs.length === 0) return null;
 
@@ -89,6 +95,7 @@ export function Drawer({ session, open, onSelect }: DrawerProps) {
             {active === "verification" ? <VerificationPanel result={session.verification!} /> : null}
             {active === "workers" ? <WorkersPanel workers={session.workers} /> : null}
             {active === "memory" ? <MemoryPanel entries={session.memory} /> : null}
+            {active === "context" ? <ContextPanel workingSet={session.workingSet} onOpenFile={onOpenFile} /> : null}
           </ErrorBoundary>
         </div>
       ) : null}

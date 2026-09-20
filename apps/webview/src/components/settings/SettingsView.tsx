@@ -7,6 +7,8 @@ export interface SettingsViewProps {
   providers: ProviderConfig[];
   testResults: Record<string, ProviderTestResult>;
   testing: string | undefined;
+  /** Provider the host deep-linked to, if any. */
+  target?: string;
   onClose: () => void;
   onSave: (providerId: string, key: string, endpoint?: string) => void;
   onRemove: (providerId: string) => void;
@@ -18,7 +20,7 @@ export interface SettingsViewProps {
  *
  * Ready providers come first, because the common visit is "which model can I use right now".
  */
-export function SettingsView({ providers, testResults, testing, onClose, onSave, onRemove, onTest }: SettingsViewProps) {
+export function SettingsView({ providers, testResults, testing, target, onClose, onSave, onRemove, onTest }: SettingsViewProps) {
   const ready = providers.filter(p => p.hasCredential || p.isLocal);
   const rest = providers.filter(p => !(p.hasCredential || p.isLocal));
 
@@ -47,6 +49,7 @@ export function SettingsView({ providers, testResults, testing, onClose, onSave,
             provider={provider}
             testResult={testResults[provider.providerId]}
             testing={testing === provider.providerId}
+            highlighted={target === provider.providerId}
             onSave={(key, endpoint) => onSave(provider.providerId, key, endpoint)}
             onRemove={() => onRemove(provider.providerId)}
             onTest={(key, endpoint) => onTest(provider.providerId, key, endpoint)}

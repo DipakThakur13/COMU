@@ -181,3 +181,24 @@
 
 .testOk { color: var(--comu-status-ok); }
 .testFail { color: var(--comu-status-error); }
+
+.keyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  min-width: 0;
+}
+
+.keyRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * Marks the card a deep link asked for. A border rather than an animation: the panel is often
+ * read by someone who has just been told "your key was rejected", and a pulse is noise then.
+ */
+.highlighted {
+  border-color: var(--comu-accent);
+  box-shadow: 0 0 0 1px var(--comu-accent);
+}

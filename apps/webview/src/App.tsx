@@ -3,6 +3,7 @@ import { useStore } from "./store/store.js";
 import { Header } from "./components/Header.js";
 import { Composer } from "./components/Composer.js";
 import { SurfaceTabs } from "./components/SurfaceTabs.js";
+import { Onboarding } from "./components/Onboarding.js";
 import { ActivityStream } from "./components/activity/ActivityStream.js";
 import { ApprovalCard } from "./components/approval/ApprovalCard.js";
 import { PlanRibbon } from "./components/plan/PlanRibbon.js";
@@ -21,8 +22,20 @@ export function App() {
 
   const providerTests = useStore(s => s.providerTests);
   const testingProvider = useStore(s => s.testingProvider);
+  const settingsTarget = useStore(s => s.settingsTarget);
 
   const busy = session.status === "running" || session.status === "cancelling";
+
+  // The legacy panel reported these two and the host logs them; losing them would quietly remove
+  // the only measurement of whether the panel still starts quickly.
+  useEffect(() => {
+    if (typeof performance === "undefined") return;
+    store.reportTelemetry("firstPaintMs", performance.now());
+    const id = window.setTimeout(() => store.reportTelemetry("interactiveMs", performance.now()), 0);
+    return () => window.clearTimeout(id);
+    // Empty deps on purpose: this measures startup once, not every re-render. `store` is a stable
+    // zustand store object, so there is nothing here that needs to be a dependency.
+  }, []);
 
   // Esc stops a running task from anywhere in the panel. Nothing here approves anything.
   useEffect(() => {
@@ -44,6 +57,7 @@ export function App() {
             providers={providers}
             testResults={providerTests}
             testing={testingProvider}
+            target={settingsTarget}
             onClose={() => store.setSettingsOpen(false)}
             onSave={store.saveProviderKey}
             onRemove={store.removeProviderKey}
@@ -100,17 +114,32 @@ export function App() {
               expandedIds={ui.expandedActivityIds}
               onToggle={store.toggleExpanded}
               status={session.status}
+              onSaveCode={store.saveCode}
+              emptyContent={
+                session.taskId ? undefined : (
+                  <Onboarding
+                    providers={providers}
+                    onSuggest={store.setComposerText}
+                    onOpenSettings={() => store.setSettingsOpen(true)}
+                  />
+                )
+              }
             />
           </ErrorBoundary>
         </>
       ) : (
         <ErrorBoundary region="changes">
-          <ChangesPanel changes={session.changes} onOpenFile={store.openFile} onRequestDiff={store.requestDiff} />
+          <ChangesPanel
+            changes={session.changes}
+            onOpenFile={store.openFile}
+            onRequestDiff={store.requestDiff}
+            onOpenAll={store.openAllChangedFiles}
+          />
         </ErrorBoundary>
       )}
 
       <ErrorBoundary region="task detail drawer">
-        <Drawer session={session} open={ui.drawer} onSelect={store.setDrawer} />
+        <Drawer session={session} open={ui.drawer} onSelect={store.setDrawer} onOpenFile={store.openFile} />
       </ErrorBoundary>
 
       <ErrorBoundary region="composer">

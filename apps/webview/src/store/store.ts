@@ -25,6 +25,17 @@ export interface StoreState {
   providerTests: Record<string, ProviderTestResult>;
   testingProvider?: string;
   banner?: { message: string; hint?: string };
+  /**
+   * The provider the settings view should scroll to and highlight, set when the host deep-links
+   * into settings. Cleared once the card has been reached.
+   */
+  settingsTarget?: string;
+  /**
+   * True once the user has chosen an autonomy level in this session. The host's configured default
+   * must not overwrite a deliberate choice, which is the one thing that would quietly widen what
+   * COMU may do without asking.
+   */
+  autonomyTouched: boolean;
 
   applyHostMessage: (message: HostToWebviewMessage) => void;
   post: (message: WebviewToHostMessage) => void;
@@ -46,6 +57,10 @@ export interface StoreState {
   testProvider: (providerId: string, key?: string, endpoint?: string) => void;
   openFile: (path: string) => void;
   requestDiff: (path: string) => void;
+  openAllChangedFiles: () => void;
+  saveCode: (content: string, suggestedPath: string) => void;
+  reportTelemetry: (name: string, value: number, details?: string) => void;
+  clearSettingsTarget: () => void;
   dismissBanner: () => void;
 }
 
@@ -68,6 +83,7 @@ export const useStore = create<StoreState>((set, get) => ({
   ui: initialUi,
   providers: [],
   providerTests: {},
+  autonomyTouched: false,
 
   post: message => {
     vscodeApi?.postMessage(message);
@@ -110,7 +126,9 @@ export const useStore = create<StoreState>((set, get) => ({
             ...state.ui,
             composer: {
               ...state.ui.composer,
-              autonomy: message.defaultAutonomy,
+              // A default is a starting point, not an override. Once the user has picked a level
+              // this session, the host's configured default stops applying.
+              autonomy: state.autonomyTouched ? state.ui.composer.autonomy : message.defaultAutonomy,
               modelId: state.ui.composer.modelId ?? message.defaultModelId
             }
           }
@@ -122,7 +140,10 @@ export const useStore = create<StoreState>((set, get) => ({
         break;
 
       case "open_settings":
-        set(state => ({ ui: { ...state.ui, settingsOpen: true } }));
+        set(state => ({ ui: { ...state.ui, settingsOpen: true }, settingsTarget: message.targetProviderId }));
+        // The catalogue may have changed since it was last pushed, and this is the one view where
+        // a stale credential status is actively misleading.
+        get().post({ type: "request_providers" });
         break;
 
       case "error":
@@ -136,7 +157,10 @@ export const useStore = create<StoreState>((set, get) => ({
 
   setSurface: surface => set(state => ({ ui: { ...state.ui, surface } })),
   setDrawer: drawer => set(state => ({ ui: { ...state.ui, drawer: state.ui.drawer === drawer ? undefined : drawer } })),
-  setSettingsOpen: settingsOpen => set(state => ({ ui: { ...state.ui, settingsOpen } })),
+  setSettingsOpen: settingsOpen => {
+    set(state => ({ ui: { ...state.ui, settingsOpen } }));
+    if (settingsOpen) get().post({ type: "request_providers" });
+  },
   setComposerText: text => set(state => ({ ui: { ...state.ui, composer: { ...state.ui.composer, text } } })),
   setMode: mode => set(state => ({ ui: { ...state.ui, composer: { ...state.ui.composer, mode } } })),
   setModel: modelId => {
@@ -144,7 +168,7 @@ export const useStore = create<StoreState>((set, get) => ({
     get().post({ type: "select_model", modelId });
   },
   setAutonomy: autonomy => {
-    set(state => ({ ui: { ...state.ui, composer: { ...state.ui.composer, autonomy } } }));
+    set(state => ({ ui: { ...state.ui, composer: { ...state.ui.composer, autonomy } }, autonomyTouched: true }));
     get().post({ type: "set_autonomy", autonomy });
   },
   toggleExpanded: id =>
@@ -208,6 +232,18 @@ export const useStore = create<StoreState>((set, get) => ({
 
   openFile: path => get().post({ type: "open_file", path }),
   requestDiff: path => get().post({ type: "request_diff", path }),
+
+  openAllChangedFiles: () => {
+    const { session, post } = get();
+    for (const change of session.changes) post({ type: "open_file", path: change.path });
+  },
+
+  saveCode: (content, suggestedPath) => get().post({ type: "save_code", content, suggestedPath }),
+
+  reportTelemetry: (name, value, details) =>
+    get().post({ type: "telemetry_metric", name, value: Math.round(value), details }),
+
+  clearSettingsTarget: () => set({ settingsTarget: undefined }),
 
   dismissBanner: () => set({ banner: undefined })
 }));

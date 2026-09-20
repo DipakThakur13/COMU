@@ -13,6 +13,7 @@ export interface ChangesPanelProps {
   changes: ChangeView[];
   onOpenFile: (path: string) => void;
   onRequestDiff: (path: string) => void;
+  onOpenAll: () => void;
 }
 
 /**
@@ -23,7 +24,7 @@ export interface ChangesPanelProps {
  * a file from the change set's original content. Offering checkboxes or an "accept" control would
  * imply an undo that does not exist, so this view reviews and opens, and says so.
  */
-export function ChangesPanel({ changes, onOpenFile, onRequestDiff }: ChangesPanelProps) {
+export function ChangesPanel({ changes, onOpenFile, onRequestDiff, onOpenAll }: ChangesPanelProps) {
   const [expanded, setExpanded] = useState<string>();
 
   if (changes.length === 0) {
@@ -50,6 +51,11 @@ export function ChangesPanel({ changes, onOpenFile, onRequestDiff }: ChangesPane
         <p className={styles.readOnlyNote}>
           Already written to disk. Open a file to inspect or undo it with your editor's own history.
         </p>
+        <div className={styles.bulk}>
+          <Button variant="secondary" small icon="file" onClick={onOpenAll}>
+            {changes.length === 1 ? `Open ${splitPath(changes[0].path).file}` : `Open all ${changes.length} files`}
+          </Button>
+        </div>
       </div>
 
       <ul className={styles.list} aria-label="Changed files">

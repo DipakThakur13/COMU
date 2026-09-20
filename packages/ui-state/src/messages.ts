@@ -140,6 +140,13 @@ export interface WebviewTestProviderMessage {
   endpoint?: string;
 }
 
+/** Offers a code block from an agent response to the host, which asks where to save it. */
+export interface WebviewSaveCodeMessage {
+  type: "save_code";
+  content: string;
+  suggestedPath: string;
+}
+
 export interface WebviewTelemetryMessage {
   type: "telemetry_metric";
   name: string;
@@ -161,4 +168,5 @@ export type WebviewToHostMessage =
   | WebviewSaveProviderKeyMessage
   | WebviewRemoveProviderKeyMessage
   | WebviewTestProviderMessage
+  | WebviewSaveCodeMessage
   | WebviewTelemetryMessage;

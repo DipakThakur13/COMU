@@ -6,6 +6,7 @@ import {
   ActivityItem,
   ChangeView,
   MAX_ACTIVITY_ENTRIES,
+  MAX_INSPECTED_FILES,
   MAX_SEEN_EVENT_IDS,
   MAX_STREAM_CHARS,
   PlanView,
@@ -13,6 +14,7 @@ import {
   SessionState,
   StreamingView,
   WorkerView,
+  WorkingSetView,
   isActivityGroup
 } from "./types.js";
 
@@ -25,6 +27,7 @@ export function createInitialSessionState(autonomy: TaskAutonomy = "ask"): Sessi
     activity: [],
     elidedCount: 0,
     changes: [],
+    workingSet: { inspectedFiles: [], modifiedFiles: [] },
     approvals: [],
     repairs: [],
     workers: [],
@@ -143,6 +146,7 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
 
     case "change.created":
       next.changes = upsertChange(next.changes, { path: e.path, operation: e.operation });
+      next.workingSet = noteModified(next.workingSet, e.path);
       break;
 
     case "plan.created":
@@ -288,11 +292,42 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
       break;
   }
 
+  const inspected = inspectedPath(event);
+  if (inspected) {
+    next.workingSet = noteInspected(next.workingSet, inspected);
+  }
+
   const item = normalizeEvent(event);
   if (item) {
     next = withActivity(next, item);
   }
   return next;
+}
+
+/**
+ * The file a tool event touched, if any.
+ *
+ * Tool events carry their target in whichever field the tool happened to use, so this checks the
+ * same places the panel's own rendering does rather than assuming one shape.
+ */
+function inspectedPath(event: AgentEvent): string | undefined {
+  if (event.type !== "tool.started" && event.type !== "tool.completed") return undefined;
+  const e = event as any;
+  const candidate = e.path ?? e.filePath ?? e.result?.path ?? e.result?.filePath;
+  return typeof candidate === "string" && candidate ? candidate : undefined;
+}
+
+/** Newest first, de-duplicated, bounded. */
+function noteInspected(set: WorkingSetView, path: string): WorkingSetView {
+  if (set.inspectedFiles[0] === path) return set;
+  const rest = set.inspectedFiles.filter(p => p !== path);
+  return { ...set, inspectedFiles: [path, ...rest].slice(0, MAX_INSPECTED_FILES) };
+}
+
+/** Files COMU has written. Unbounded on purpose: every one of them is a change the user must see. */
+function noteModified(set: WorkingSetView, path: string): WorkingSetView {
+  if (!path || set.modifiedFiles.includes(path)) return set;
+  return { ...set, modifiedFiles: [...set.modifiedFiles, path] };
 }
 
 // ---------------------------------------------------------------------------------------------

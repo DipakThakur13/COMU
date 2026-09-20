@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { DiffHunk, DiffLine, languageForPath, numberLines, parseUnifiedDiff } from "./parse.js";
 import styles from "./diff.module.css";
 
@@ -110,9 +110,11 @@ export function DiffView({ path, diff, content, operation, truncated, maxHeight 
         <table className={styles.table}>
           <tbody>
             {hunks.map((hunk, index) => (
-              <>
+              // A keyed Fragment: a bare <> in a list has no key, so React cannot tell hunks apart
+              // and re-creates rows it should have reused.
+              <Fragment key={index}>
                 {hunk.header ? (
-                  <tr key={`h-${index}`} className={styles.hunk}>
+                  <tr className={styles.hunk}>
                     <td className={styles.gutter} colSpan={3} aria-hidden="true" />
                     <td className={styles.code}>{hunk.header}</td>
                   </tr>
@@ -120,7 +122,7 @@ export function DiffView({ path, diff, content, operation, truncated, maxHeight 
                 {hunk.lines.map((line, lineIndex) => (
                   <LineRow key={`${index}-${lineIndex}`} line={line} html={highlighted?.get(line.text)} />
                 ))}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

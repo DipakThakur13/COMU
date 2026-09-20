@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ProviderConfig, ProviderTestResult } from "@comu/protocol";
 import { Button, Icon, StatusPill, StatusTone } from "../primitives/index.js";
 import styles from "./settings.module.css";
@@ -26,6 +26,8 @@ export interface ProviderCardProps {
   provider: ProviderConfig;
   testResult?: ProviderTestResult;
   testing: boolean;
+  /** Set when the host deep-linked to this provider, so it can be scrolled to and pointed out. */
+  highlighted?: boolean;
   onSave: (key: string, endpoint?: string) => void;
   onRemove: () => void;
   onTest: (key?: string, endpoint?: string) => void;
@@ -40,11 +42,23 @@ export interface ProviderCardProps {
  * and the endpoint, which is the one genuinely unbreakable string, is the only thing allowed to
  * break anywhere.
  */
-export function ProviderCard({ provider, testResult, testing, onSave, onRemove, onTest }: ProviderCardProps) {
+export function ProviderCard({ provider, testResult, testing, highlighted, onSave, onRemove, onTest }: ProviderCardProps) {
   const [key, setKey] = useState("");
   const [endpoint, setEndpoint] = useState(provider.endpoint ?? "");
+  const [revealed, setRevealed] = useState(false);
+  const cardRef = useRef<HTMLElement>(null);
 
   useEffect(() => setEndpoint(provider.endpoint ?? ""), [provider.endpoint]);
+
+  // A deep link from the host lands on a page of cards; without this the user arrives at the top
+  // and has to find the one they asked for.
+  useEffect(() => {
+    const card = cardRef.current;
+    // Guarded: not every host implements it, and failing to scroll must never break the view.
+    if (highlighted && typeof card?.scrollIntoView === "function") {
+      card.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [highlighted]);
 
   const { tone, label } = toneFor(provider.status);
   const local = provider.isLocal === true;
@@ -52,7 +66,12 @@ export function ProviderCard({ provider, testResult, testing, onSave, onRemove, 
   const endpointId = `provider-endpoint-${provider.providerId}`;
 
   return (
-    <section className={styles.card} aria-labelledby={`provider-name-${provider.providerId}`}>
+    <section
+      ref={cardRef}
+      id={`provider-card-${provider.providerId}`}
+      className={`${styles.card} ${highlighted ? styles.highlighted : ""}`}
+      aria-labelledby={`provider-name-${provider.providerId}`}
+    >
       <div className={styles.cardHead}>
         <h3 className={styles.name} id={`provider-name-${provider.providerId}`}>
           {provider.displayName}
@@ -94,15 +113,30 @@ export function ProviderCard({ provider, testResult, testing, onSave, onRemove, 
         <>
           <div className={styles.field}>
             <label htmlFor={keyId}>API key</label>
-            <input
-              id={keyId}
-              type="password"
-              value={key}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={provider.hasCredential ? "A key is saved. Enter a new one to replace it." : "Paste your key"}
-              onChange={event => setKey(event.target.value)}
-            />
+            <div className={styles.keyRow}>
+              <input
+                id={keyId}
+                type={revealed ? "text" : "password"}
+                value={key}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={provider.hasCredential ? "A key is saved. Enter a new one to replace it." : "Paste your key"}
+                onChange={event => setKey(event.target.value)}
+              />
+              {/*
+                Reveal only ever shows what the user just typed. A stored key is never sent to the
+                panel, so there is nothing here to reveal until they type something.
+              */}
+              <Button
+                variant="ghost"
+                small
+                icon={revealed ? "close" : "search"}
+                label={revealed ? "Hide the key" : "Show the key you typed"}
+                aria-pressed={revealed}
+                disabled={key.length === 0}
+                onClick={() => setRevealed(v => !v)}
+              />
+            </div>
             <p className={styles.fieldHint}>
               Stored in the operating system keychain through VS Code, never in this panel and never in the repository.
             </p>

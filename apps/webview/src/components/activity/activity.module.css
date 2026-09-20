@@ -200,3 +200,51 @@
   right: var(--comu-space-3);
   bottom: var(--comu-space-2);
 }
+
+/* ── Assistant message body ─────────────────────────────────────────────── */
+
+.messageProse {
+  display: block;
+  white-space: pre-wrap;
+  /* Model prose can contain a bare URL or a long identifier, which is exactly the uncontrolled
+     content that may break mid-word. Labels elsewhere must not. */
+  overflow-wrap: anywhere;
+}
+
+.codeBlock {
+  display: block;
+  margin: var(--comu-space-2) 0;
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.codeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  padding: 2px var(--comu-space-1) 2px var(--comu-space-2);
+  border-bottom: 1px solid var(--comu-border);
+  background: var(--comu-surface-raised);
+}
+
+.codeLang {
+  flex: 1;
+  color: var(--comu-text-muted);
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codePre {
+  margin: 0;
+  padding: var(--comu-space-2);
+  background: var(--comu-surface-code);
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  /* Code scrolls rather than wrapping: a broken line of code reads as different code. */
+  overflow-x: auto;
+}

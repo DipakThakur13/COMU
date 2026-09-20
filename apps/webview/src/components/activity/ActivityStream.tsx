@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ActivityEntry } from "@comu/ui-state";
 import { Button, EmptyState, Icon } from "../primitives/index.js";
@@ -13,6 +13,9 @@ export interface ActivityStreamProps {
   onToggle: (id: string) => void;
   status: string;
   emptyHint?: string;
+  /** Rendered instead of the default empty state, for the first-run surface. */
+  emptyContent?: ReactNode;
+  onSaveCode?: (content: string, suggestedPath: string) => void;
 }
 
 /**
@@ -32,7 +35,9 @@ export function ActivityStream({
   expandedIds,
   onToggle,
   status,
-  emptyHint
+  emptyHint,
+  emptyContent,
+  onSaveCode
 }: ActivityStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
@@ -69,9 +74,11 @@ export function ActivityStream({
   if (entries.length === 0 && !streamingText) {
     return (
       <div className={styles.stream}>
-        <EmptyState icon="agent" title="Nothing running">
-          {emptyHint ?? "Describe a change and COMU will plan it, make it and verify it."}
-        </EmptyState>
+        {emptyContent ?? (
+          <EmptyState icon="agent" title="Nothing running">
+            {emptyHint ?? "Describe a change and COMU will plan it, make it and verify it."}
+          </EmptyState>
+        )}
       </div>
     );
   }
@@ -100,7 +107,12 @@ export function ActivityStream({
               if (!entry) return null;
               return (
                 <div key={item.key} data-index={item.index} ref={virtualizer.measureElement}>
-                  <ActivityRow entry={entry} expanded={expandedIds.includes(entry.id)} onToggle={onToggle} />
+                  <ActivityRow
+                    entry={entry}
+                    expanded={expandedIds.includes(entry.id)}
+                    onToggle={onToggle}
+                    onSaveCode={onSaveCode}
+                  />
                 </div>
               );
             })}
