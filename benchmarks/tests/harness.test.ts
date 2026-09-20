@@ -125,6 +125,7 @@ describe("Failure classification", () => {
     planVersions: 0,
     repairAttempts: 0,
     repairRecovered: false,
+    limitReached: false,
     limits: {},
     ...over
   });
@@ -145,7 +146,7 @@ describe("Failure classification", () => {
   });
 
   it("separates running out of budget from running out of ideas", () => {
-    const o = outcome({ finalText: "Max steps (30) reached" });
+    const o = outcome({ limitReached: true });
     expect(classifyFailure({ outcome: o, verdict: bad, unnecessary: [], peakContextRatio: 0.1 })).toBe("loop_truncation");
   });
 
@@ -329,19 +330,19 @@ describe("End to end against a stand-in model", () => {
     expect(record.grader.stillFailing.length).toBeGreaterThan(0);
     expect(record.filesChanged).toEqual([]);
     // COMU's completion gate does catch this one: verification fails, repair runs out, and the
-    // run ends at a limit. Recorded rather than asserted as a false completion, because a false
+    // run stops at a limit. Recorded rather than asserted as a false completion, because a false
     // completion is what happens when the gate does NOT catch it.
     expect(record.comuStatus).not.toBe("completed");
     expect(record.falseCompletion).toBe(false);
   }, 240_000);
 
-  it("records a run that ends at a limit rather than losing it as unknown", async () => {
-    // The runtime publishes agent.limit_reached and then no task.* event at all, so a subscriber
-    // waiting for a terminal task event never learns the task ended. The harness treats the limit
-    // as terminal so the baseline can count how often it happens.
+  it("receives a terminal event even when the run stops at a limit", async () => {
+    // The runtime used to publish agent.limit_reached and then nothing, so every client waiting
+    // for a task.* event waited forever. The harness deliberately does not compensate: if this
+    // regresses, the status is "unknown" and this test says so.
     const record = await start("claim-without-doing");
     await runtime.stop();
-    expect(record.comuStatus).toBe("limit_reached");
+    expect(record.comuStatus).toBe("failed");
     expect(record.failureClass).toBe("loop_truncation");
   }, 240_000);
 });

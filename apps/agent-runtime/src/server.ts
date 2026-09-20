@@ -706,6 +706,34 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
     }, 5 * 60 * 1000);
   };
 
+  /**
+   * Guarantees the task ends with a terminal event, whatever happened.
+   *
+   * The orchestrator publishes one on most paths, but not all: a run that stops at a step, tool
+   * call or repair limit returns `limit_reached` having emitted only `agent.limit_reached`, and a
+   * run that throws early may emit nothing. Either way the stream used to just close, so every
+   * client waiting for a terminal event waited forever and the panel stayed on "running".
+   *
+   * This publishes nothing when the orchestrator already did. It changes no agent behaviour, costs
+   * no tokens and alters no outcome; it only tells the client the task is over.
+   */
+  const ensureTerminalEvent = (taskId: string, failure: { code: string; message: string }) => {
+    const history = eventStore.getEvents(taskId);
+    const hasTerminal = history.some(
+      ev => ev.type === 'task.completed' || ev.type === 'task.failed' || ev.type === 'task.cancelled'
+    );
+    if (hasTerminal) return;
+
+    emit({
+      type: 'task.failed',
+      eventId: `evt-${Date.now()}-${failure.code.toLowerCase()}`,
+      taskId,
+      timestamp: new Date().toISOString(),
+      error: failure.message,
+      payload: { code: failure.code, message: failure.message }
+    } as AgentEvent);
+  };
+
   // Run asynchronously. runTask handles every failure internally, so the timer callback stays void.
   const runTask = async () => {
     try {
@@ -750,24 +778,20 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
         taskChangeSets.set(taskId, result.changeSet);
       }
 
+      // Every task ends with exactly one terminal event, whichever way it ended.
+      ensureTerminalEvent(taskId, {
+        code: result.status === 'limit_reached' ? 'LIMIT_REACHED' : 'RUN_ENDED_WITHOUT_TERMINAL_EVENT',
+        message:
+          result.status === 'limit_reached'
+            ? `The task stopped early: ${result.error || 'an execution limit was reached'}.`
+            : `The task ended with status '${result.status}' and published no terminal event.`
+      });
+
       closeStreams();
       scheduleCleanup();
     } catch (e: any) {
       console.error(`Error executing task ${taskId}:`, e);
-      // The orchestrator normally publishes its own terminal event. If it threw before doing so,
-      // publish one here so subscribers never hang waiting for a task that already died.
-      const history = eventStore.getEvents(taskId);
-      const hasTerminal = history.some(ev => ev.type === 'task.completed' || ev.type === 'task.failed' || ev.type === 'task.cancelled');
-      if (!hasTerminal) {
-        emit({
-          type: 'task.failed',
-          eventId: `evt-${Date.now()}-runtime-error`,
-          taskId,
-          timestamp: new Date().toISOString(),
-          error: e?.message || String(e),
-          payload: { code: 'RUNTIME_ERROR', message: e?.message || String(e) }
-        } as AgentEvent);
-      }
+      ensureTerminalEvent(taskId, { code: 'RUNTIME_ERROR', message: e?.message || String(e) });
       closeStreams();
       scheduleCleanup();
     }

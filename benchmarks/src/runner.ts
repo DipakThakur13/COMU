@@ -14,17 +14,18 @@ import type { Command } from "./types.js";
 /**
  * What ends a task, as observed on the wire.
  *
- * agent.limit_reached is in this set because the runtime does not follow it with a task.* event:
- * an orchestrator run that ends at a step, tool-call or repair limit returns without publishing a
- * terminal event, and the stream simply closes. A subscriber that waits for task.failed therefore
- * waits forever. Recorded here as its own status rather than smoothed into "failed", so the
- * baseline shows how often it happens.
+ * Exactly the three the protocol defines. The runtime guarantees one of them on every path, so the
+ * harness has nothing to compensate for. It deliberately does not treat agent.limit_reached as
+ * terminal: doing so would paper over a runtime that failed to end its own task, which is a product
+ * defect that belongs in the measurement rather than in the instrument.
  */
-const TERMINAL = new Set(["task.completed", "task.failed", "task.cancelled", "agent.limit_reached"]);
+const TERMINAL = new Set(["task.completed", "task.failed", "task.cancelled"]);
 
 export interface TaskOutcome {
   /** COMU's own verdict. Recorded, never used to decide correctness. */
-  status: "completed" | "failed" | "cancelled" | "limit_reached" | "unknown";
+  status: "completed" | "failed" | "cancelled" | "unknown";
+  /** True when the run stopped at a step, tool call or repair limit. */
+  limitReached: boolean;
   finalText: string;
   events: AgentEvent[];
   approvalsRequested: number;
@@ -71,6 +72,7 @@ interface Counters {
   repairRecovered: boolean;
   verificationStatus?: string;
   status: TaskOutcome["status"];
+  limitReached: boolean;
   finalText: string;
 }
 
@@ -121,8 +123,9 @@ function fold(counters: Counters, event: AgentEvent): void {
       counters.status = "cancelled";
       break;
     case "agent.limit_reached":
-      counters.status = "limit_reached";
-      counters.finalText = `Limit reached: ${String(e.limit ?? "unknown")}`;
+      // Not terminal. Recorded so a run that stopped at a limit can be told apart from one that
+      // failed for another reason, but the task is over only when a task.* event says so.
+      counters.limitReached = true;
       break;
     default:
       break;
@@ -169,6 +172,7 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
     repairAttempts: 0,
     repairRecovered: false,
     status: "unknown",
+    limitReached: false,
     finalText: ""
   };
   const events: AgentEvent[] = [];

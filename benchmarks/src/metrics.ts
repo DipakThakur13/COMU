@@ -21,7 +21,7 @@ const OVERFLOW_SIGNATURES = [
   "prompt is too long"
 ];
 
-const TRUNCATION_SIGNATURES = ["max steps", "max tool calls", "execution time", "limit reached"];
+const TRUNCATION_SIGNATURES = ["max steps", "max tool calls", "execution time", "limit was reached"];
 
 function errorTextOf(events: AgentEvent[], outcome: TaskOutcome): string {
   const parts: string[] = [outcome.finalText];
@@ -59,7 +59,7 @@ export function classifyFailure({ outcome, verdict, unnecessary, peakContextRati
   if (OVERFLOW_SIGNATURES.some(sig => text.includes(sig)) || peakContextRatio >= 1) {
     return "context_overflow";
   }
-  if (hasEvent(outcome.events, "agent.limit_reached") || TRUNCATION_SIGNATURES.some(sig => text.includes(sig))) {
+  if (outcome.limitReached || TRUNCATION_SIGNATURES.some(sig => text.includes(sig))) {
     return "loop_truncation";
   }
   if (outcome.verificationStatus === "UNAVAILABLE" || text.includes("unavailable")) {

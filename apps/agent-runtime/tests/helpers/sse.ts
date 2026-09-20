@@ -1,6 +1,14 @@
 import { AgentEvent } from "@comu/protocol";
 
-const TERMINAL_EVENTS = new Set(["task.completed", "task.failed", "task.cancelled", "agent.limit_reached"]);
+/**
+ * Exactly the three the protocol defines as terminal.
+ *
+ * agent.limit_reached is not one of them. It used to be listed here because a run that stopped at a
+ * limit published nothing further, so waiting for a task.* event hung. The runtime now guarantees a
+ * terminal event on every path, and treating the limit as terminal would stop the stream one event
+ * early and hide a regression in that guarantee.
+ */
+const TERMINAL_EVENTS = new Set(["task.completed", "task.failed", "task.cancelled"]);
 
 /**
  * Subscribes to a task's SSE stream and resolves with every event seen once a terminal event arrives.

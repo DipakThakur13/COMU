@@ -141,7 +141,15 @@ describe("Approval over HTTP (Phase 1.2)", () => {
     const decided = events.find(e => e.type === "approval.decided") as any;
     expect(decided?.decision).toBe("NO_HUMAN_OBSERVER");
     expect(fs.existsSync(path.join(fixtureRoot, "headless.txt"))).toBe(false);
-    expect(events.find(e => e.type === "task.failed")).toBeUndefined();
+
+    // The point of this test is that the denial does not leave the task hanging, which is now
+    // asserted directly: exactly one terminal event, whatever it says. It previously asserted the
+    // absence of task.failed, which passed only because the run ended at a limit and published no
+    // terminal event at all. That was the hang, being read as a pass.
+    const terminals = events.filter(
+      e => e.type === "task.completed" || e.type === "task.failed" || e.type === "task.cancelled"
+    );
+    expect(terminals.map(e => e.type)).toHaveLength(1);
   });
 
   it("auto: git_push still requires a human; with none attached it is denied and never runs", async () => {
