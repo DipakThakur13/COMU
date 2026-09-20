@@ -17,6 +17,7 @@ import { executeFixture } from "../src/execute.js";
 import { gradeRubric, parseJUnit, resetBaselineCache } from "../src/graders.js";
 import { SecretLeakError, assertNoSecret, assertNoSecretInArgv } from "../src/secrets.js";
 import { classifyFailure, summarise } from "../src/metrics.js";
+import { createCounters, fold } from "../src/runner.js";
 import { renderMarkdown } from "../src/report.js";
 import { configureProvider, startRuntime, type TaskOutcome } from "../src/runner.js";
 import { SelfTestModel } from "../src/selftest_model.js";
@@ -195,6 +196,7 @@ describe("Failure classification", () => {
     status: "failed",
     finalText: "",
     assistantText: "",
+    terminalError: "",
     events: [],
     approvalsRequested: 0,
     clarificationsRequested: 0,
@@ -318,6 +320,37 @@ describe("Summarising", () => {
     ]);
     expect(summary.providerFailures).toEqual({ timeouts: 2, rateLimits: 3, gateway: 2, other: 1 });
     expect(summary.perFixture[0].providerFailures.timeouts).toBe(2);
+  });
+
+  it("counts a provider timeout, which arrives as its own event and never as a failure", () => {
+    /*
+     * The regression this exists for.
+     *
+     * The manager emits model_request.timed_out for a timeout and model_request.failed for
+     * everything else, so folding only the failure event left the timeout count at zero however
+     * many requests were abandoned. That is the one provider failure the benchmark can cause for
+     * itself, and a metric that reads zero is worse than no metric: it says the instrument is
+     * clean when it is not.
+     */
+    const counters = createCounters();
+    fold(counters, { type: "model_request.timed_out", timeoutMs: 600_000 } as never);
+    fold(counters, { type: "model_request.timed_out", timeoutMs: 600_000 } as never);
+    fold(counters, { type: "model_request.failed", error: "503 Service Unavailable" } as never);
+    expect(counters.providerFailures).toEqual({ timeouts: 2, rateLimits: 0, gateway: 1, other: 0 });
+  });
+
+  it("keeps COMU's own reason for ending, which the graded answer would otherwise replace", () => {
+    // Without this a false failure records that COMU said "failed" and not what it said had gone
+    // wrong, and the cause is the only part of a false failure anyone can act on.
+    const counters = createCounters();
+    fold(counters, {
+      type: "task.failed",
+      error: "The task stopped early: an execution limit was reached.",
+      payload: { code: "LIMIT_REACHED" }
+    } as never);
+    expect(counters.status).toBe("failed");
+    expect(counters.terminalError).toContain("LIMIT_REACHED");
+    expect(counters.terminalError).toContain("execution limit");
   });
 
   it("treats a record written before the breakdown existed as zeros", () => {

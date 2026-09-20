@@ -45,6 +45,14 @@ export interface TaskOutcome {
    * graded against a runtime error message and scored zero however good the answer was.
    */
   assistantText: string;
+  /**
+   * COMU's own reason for ending the task, verbatim from the terminal event.
+   *
+   * Kept apart from finalText, which the caller replaces with the graded answer. Without it a false
+   * failure records that COMU said "failed" but not what it said had gone wrong, and the cause of a
+   * false failure is the whole point of counting them.
+   */
+  terminalError: string;
   events: AgentEvent[];
   approvalsRequested: number;
   clarificationsRequested: number;
@@ -76,7 +84,7 @@ export interface TaskRequestInput {
   timeoutMs: number;
 }
 
-interface Counters {
+export interface Counters {
   approvalsRequested: number;
   clarificationsRequested: number;
   toolCalls: number;
@@ -94,10 +102,41 @@ interface Counters {
   providerFailures: ProviderFailureCounts;
   finalText: string;
   assistantText: string;
+  terminalError: string;
   streamBuffer: string;
 }
 
-function fold(counters: Counters, event: AgentEvent): void {
+/**
+ * A fresh set of counters.
+ *
+ * Exported with `fold` so the accounting can be tested against a list of events directly. The
+ * alternative is driving a real runtime to provoke each event, which is slow for the common cases
+ * and impossible for the ones worth testing: a provider timeout cannot be produced on demand.
+ */
+export function createCounters(): Counters {
+  return {
+    approvalsRequested: 0,
+    clarificationsRequested: 0,
+    toolCalls: 0,
+    modelRequests: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    peakPromptTokens: 0,
+    planSteps: 0,
+    planVersions: 0,
+    repairAttempts: 0,
+    repairRecovered: false,
+    status: "unknown",
+    limitReached: false,
+    providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
+    finalText: "",
+    assistantText: "",
+    terminalError: "",
+    streamBuffer: ""
+  };
+}
+
+export function fold(counters: Counters, event: AgentEvent): void {
   const e = event as unknown as Record<string, any>;
   switch (event.type) {
     case "tool.started":
@@ -140,6 +179,17 @@ function fold(counters: Counters, event: AgentEvent): void {
     case "verification.completed":
       counters.verificationStatus = e.result?.status ?? counters.verificationStatus;
       break;
+    case "model_request.timed_out":
+      /*
+       * A timeout arrives as its own event and never as model_request.failed.
+       *
+       * Counting only the failure event left this at zero however many requests were abandoned,
+       * which is the one provider failure the benchmark is capable of causing for itself: under
+       * concurrency a request that waits behind three others passes modelRequestTimeoutMs, the task
+       * ends, and the run is recorded as a failure the agent did not commit.
+       */
+      counters.providerFailures.timeouts += 1;
+      break;
     case "model_request.failed": {
       counters.providerFailures[classifyProviderFailure(String(e.error ?? ""))] += 1;
       break;
@@ -155,9 +205,11 @@ function fold(counters: Counters, event: AgentEvent): void {
     case "task.failed":
       counters.status = "failed";
       counters.finalText = String(e.error ?? e.payload?.message ?? "");
+      counters.terminalError = [e.payload?.code, counters.finalText].filter(Boolean).join(": ");
       break;
     case "task.cancelled":
       counters.status = "cancelled";
+      counters.terminalError = String(e.reason ?? "cancelled");
       break;
     case "agent.limit_reached":
       // Not terminal. Recorded so a run that stopped at a limit can be told apart from one that
@@ -196,25 +248,7 @@ async function autoRespond(input: TaskRequestInput, taskId: string, event: Agent
 }
 
 export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
-  const counters: Counters = {
-    approvalsRequested: 0,
-    clarificationsRequested: 0,
-    toolCalls: 0,
-    modelRequests: 0,
-    promptTokens: 0,
-    completionTokens: 0,
-    peakPromptTokens: 0,
-    planSteps: 0,
-    planVersions: 0,
-    repairAttempts: 0,
-    repairRecovered: false,
-    status: "unknown",
-    limitReached: false,
-    providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
-    finalText: "",
-    assistantText: "",
-    streamBuffer: ""
-  };
+  const counters: Counters = createCounters();
   const events: AgentEvent[] = [];
 
   const created = await fetch(`${input.baseUrl}/v1/tasks`, {

@@ -127,6 +127,7 @@ export function assembleRecord(input: AssembleInput): RunRecord {
     startedAt: input.startedAt,
     durationMs: input.durationMs,
     comuStatus: outcome.status,
+    comuError: (outcome.terminalError ?? "").slice(0, MAX_ANSWER_CHARS),
     finalAnswer: outcome.finalText.slice(0, MAX_ANSWER_CHARS),
     grader: verdict,
     falseCompletion,

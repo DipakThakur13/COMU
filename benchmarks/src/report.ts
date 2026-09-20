@@ -139,6 +139,29 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push(`| Other provider errors | ${pf.other} |`);
   lines.push("");
 
+  /*
+   * A false failure is only actionable with its cause attached.
+   *
+   * The count alone says the agent disagreed with the workspace; it does not say whether that was a
+   * budget the harness set too low, a provider timeout the concurrency caused, or a gate misfiring
+   * on work that was already done. Each of those is a different defect and only one of them is
+   * COMU's.
+   */
+  const falseFailures = run.records.filter(r => r.falseFailure);
+  if (falseFailures.length > 0) {
+    lines.push("## False failures, with causes");
+    lines.push("");
+    lines.push("The work was correct and COMU said otherwise.");
+    lines.push("");
+    lines.push("| Fixture | Rep | COMU said | Provider failures (t/r/g/o) |");
+    lines.push("|---|---|---|---|");
+    for (const r of falseFailures) {
+      const said = (r.comuError || r.comuStatus || "").replace(/\s+/g, " ").slice(0, 160) || "nothing recorded";
+      lines.push(`| ${r.fixtureId} | ${r.rep} | ${said} | ${fmtFailures(r.providerFailures)} |`);
+    }
+    lines.push("");
+  }
+
   lines.push("## Failure classes");
   lines.push("");
   if (Object.keys(summary.failureCounts).length === 0) {

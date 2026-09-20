@@ -176,6 +176,13 @@ export interface RunRecord {
   /** What COMU said about itself. Never used to decide correctness. */
   comuStatus: string;
   /**
+   * COMU's own reason for ending, when it did not end cleanly.
+   *
+   * A false failure is only actionable with the cause attached: "the agent said it failed" is not a
+   * finding, "the agent said LIMIT_REACHED after 30 steps and the work was already correct" is.
+   */
+  comuError: string;
+  /**
    * The agent's final message, verbatim and bounded.
    *
    * Recorded so a human can spot check the quality of an onboarding answer without the score
