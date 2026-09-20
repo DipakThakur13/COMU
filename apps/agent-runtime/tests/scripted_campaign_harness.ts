@@ -8,6 +8,15 @@ import { AgentOrchestrator, OrchestratorContext, SubagentManager } from "@comu/a
 import { MemoryEngine } from "@comu/memory-engine";
 import { ModelProvider, ModelRequest, ModelResponse } from "@comu/model-core";
 
+/**
+ * Fixtures and a canned model for the scripted plumbing campaign.
+ *
+ * The model here replays responses the test wrote, so these scenarios prove that the orchestrator
+ * routes tools, honours the approval gate and respects git governance. They prove nothing about
+ * agent quality. Anything that needs to answer "is COMU good at this task" belongs in the
+ * benchmark under benchmarks/, which uses a real model and grades the workspace it leaves behind.
+ */
+
 export interface RepoBaseline {
   repoPath: string;
   initialBranch: string;

@@ -22,12 +22,22 @@ import {
   GitPushTool
 } from "@comu/git";
 import { AgentEvent } from "@comu/protocol";
-import { CampaignHarness, ScriptableCampaignModel, ScenarioMetrics } from "./campaign_harness.js";
+import { CampaignHarness, ScriptableCampaignModel, ScenarioMetrics } from "./scripted_campaign_harness.js";
 
-// Global collector for all 27 scenario benchmark metrics
-export const campaignBenchmarkResults: ScenarioMetrics[] = [];
+/**
+ * Scenario outcomes for the scripted campaign.
+ *
+ * Not a benchmark. Every model turn here is a canned response supplied by the test, so what these
+ * scenarios exercise is the orchestrator's wiring: tool routing, the approval gate, git governance,
+ * workspace integrity, memory trust and the completion gate. They say nothing about how well COMU
+ * performs on a real task, because no decision in them was made by a model.
+ *
+ * Agent quality is measured by the benchmark under benchmarks/, which runs a real model against
+ * graded fixtures.
+ */
+export const scriptedScenarioResults: ScenarioMetrics[] = [];
 
-describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
+describe("Scripted plumbing campaign: orchestrator wiring under a canned model", () => {
   let campaignBaseDir: string;
   let memoryDir: string;
 
@@ -141,7 +151,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     const finalContent = fs.readFileSync(path.join(fixtureDir, "src/user_profile.ts"), "utf8");
     expect(finalContent).toContain("active: true");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_1",
       name: "TypeScript / Node User Profile Service",
       status: "PASS",
@@ -249,7 +259,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     expect(result.verificationResult?.status).toBe("PASSED");
     expect(fs.readFileSync(path.join(fixtureDir, "auth_service.py"), "utf8")).toContain("cleaned == 'valid_secret'");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_2",
       name: "Python Authentication (Pytest)",
       status: "PASS",
@@ -364,7 +374,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     expect(result.changeSet.changes.size).toBe(1);
     expect(result.changeSet.changes.has("src/components/SettingsForm.tsx")).toBe(true);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_3",
       name: "React Frontend Settings Form",
       status: "PASS",
@@ -480,7 +490,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     expect(result.changeSet.changes.size).toBe(1);
     expect(result.changeSet.changes.has("packages/shared-types/src/index.ts")).toBe(true);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_4",
       name: "Monorepo Package Boundary Isolation",
       status: "PASS",
@@ -596,7 +606,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     expect(updated).toContain("status: 400");
     expect(updated).toContain("status: 201");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_5",
       name: "Backend API Contract Preservation",
       status: "PASS",
@@ -726,7 +736,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     expect(destructiveCommandsAttempted).toBe(false);
     expect(fs.readFileSync(path.join(fixtureDir, "src/db/user_repo.ts"), "utf8")).toContain("WHERE email =");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_6",
       name: "Database-Backed Project Safe Query Fix",
       status: "PASS",
@@ -836,7 +846,7 @@ describe("COMU REAL-REPOSITORY VALIDATION CAMPAIGN (27 SCENARIOS)", () => {
     // Verified bounded context: inspected only 1 file out of 100+ files!
     expect(totalFilesInspected).toBe(1);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_7",
       name: "Large Repository Context Efficiency",
       status: "PASS",
@@ -957,7 +967,7 @@ function unusedHelper_v2() { return 42; }
     expect(updated).toContain("unusedHelper_v2");
     expect(updated).toContain("amt > 5000) return false;");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_8",
       name: "Messy Legacy Code Targeted Repair",
       status: "PASS",
@@ -1073,7 +1083,7 @@ function unusedHelper_v2() { return 42; }
     expect(result.changeSet.changes.has("src/notifications.ts")).toBe(true);
     expect(result.changeSet.changes.has("src/user_preferences.ts")).toBe(false);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_9",
       name: "Uncommitted User Changes Preservation",
       status: "PASS",
@@ -1123,7 +1133,7 @@ function unusedHelper_v2() { return 42; }
     expect(res.success).toBe(false);
     expect(res.error).toBeDefined();
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_10",
       name: "Git Ambiguous State & Branch Conflict",
       status: "PASS",
@@ -1237,7 +1247,7 @@ function unusedHelper_v2() { return 42; }
     expect(result.changeSet.changes.has("src/auth_policy.ts")).toBe(true);
     expect(result.changeSet.changes.has("tests/auth_policy.test.ts")).toBe(false);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_11",
       name: "Architectural Intent (Multiple Plausible Fixes)",
       status: "PASS",
@@ -1351,7 +1361,7 @@ function unusedHelper_v2() { return 42; }
     expect(validationAttempts).toBeGreaterThanOrEqual(1);
     expect(fs.readFileSync(path.join(fixtureDir, "src/calculator.ts"), "utf8")).toContain("return a + b;");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_12",
       name: "Multiple Repair Attempts & Dynamic Diagnostics",
       status: "PASS",
@@ -1437,7 +1447,7 @@ function unusedHelper_v2() { return 42; }
     expect(decision2.eligible).toBe(false);
     expect(decision2.reason).toContain("DUPLICATE_REPAIR_STRATEGY");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_13",
       name: "Duplicate Repair Strategy Prevention",
       status: "PASS",
@@ -1508,7 +1518,7 @@ function unusedHelper_v2() { return 42; }
     expect(result.status).not.toBe("completed");
     expect(result.status).toBe("failed");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_14",
       name: "Required Verification Unavailable",
       status: "PASS",
@@ -1562,7 +1572,7 @@ function unusedHelper_v2() { return 42; }
     const q2 = await memoryEngine.query({ workspaceId, text: "package manager" });
     expect(q2.entries.length).toBe(0);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_15",
       name: "Memory Reuse & Ground Truth Precedence",
       status: "PASS",
@@ -1609,7 +1619,7 @@ function unusedHelper_v2() { return 42; }
     expect(candidate.trustLevel).not.toBe("USER_VERIFIED");
     expect(candidate.trustLevel).toBe("AGENT_DERIVED");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_16",
       name: "Memory Anti-Poisoning Defenses",
       status: "PASS",
@@ -1672,7 +1682,7 @@ function unusedHelper_v2() { return 42; }
     const caps = SubagentManager.getWorkerCapabilities("RESEARCH");
     expect(caps.allowedTools).not.toContain("write_file");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_17",
       name: "Supervised Research Worker Delegation",
       status: "PASS",
@@ -1733,7 +1743,7 @@ function unusedHelper_v2() { return 42; }
     expect(subResult.status).toBe("COMPLETED");
     expect(subResult.type).toBe("VERIFICATION");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_18",
       name: "Supervised Verification Worker",
       status: "PASS",
@@ -1781,7 +1791,7 @@ function unusedHelper_v2() { return 42; }
     const ssrfRes = await webTool.execute({ url: "https://169.254.169.254/metadata" }, toolCtx);
     expect(ssrfRes.error).toContain("SSRF_BLOCKED");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_19",
       name: "Web Documentation & SSRF Blocking",
       status: "PASS",
@@ -1833,7 +1843,7 @@ function unusedHelper_v2() { return 42; }
     );
     expect(res.success).toBe(false);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_20",
       name: "Git Commit Governance (ChangeSet Diff Match)",
       status: "PASS",
@@ -1875,7 +1885,7 @@ function unusedHelper_v2() { return 42; }
     expect(pushTool.requiresApproval).toBe("always");
     expect(JSON.stringify(pushTool.inputSchema)).not.toContain("approved");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_21",
       name: "Git Push Governance (No Implicit Push)",
       status: "PASS",
@@ -1933,7 +1943,7 @@ function unusedHelper_v2() { return 42; }
 
     expect(result.status).toBe("CANCELLED");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_22",
       name: "Worker Cancellation Propagation",
       status: "PASS",
@@ -2012,7 +2022,7 @@ function unusedHelper_v2() { return 42; }
     // Invariant: Cannot report completed when OCC conflict occurred
     expect(result.status).not.toBe("completed");
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_23",
       name: "External Workspace Mutation (OCC)",
       status: "PASS",
@@ -2095,7 +2105,7 @@ function unusedHelper_v2() { return 42; }
     expect(result.status).toBe("completed");
     expect(result.changeSet.changes.size).toBe(0); // 0 file changes!
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_24",
       name: "No-Op Task (No Fabricated Work)",
       status: "PASS",
@@ -2210,7 +2220,7 @@ function unusedHelper_v2() { return 42; }
     expect(result.changeSet.changes.has("src/discount.ts")).toBe(true);
     expect(result.changeSet.changes.has("tests/discount.test.ts")).toBe(false);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_25",
       name: "Test Modification Trap Avoidance",
       status: "PASS",
@@ -2322,7 +2332,7 @@ function unusedHelper_v2() { return 42; }
     expect(result.status).toBe("completed");
     expect(result.changeSet.changes.size).toBe(1);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_26",
       name: "Broad Repair Trap Avoidance",
       status: "PASS",
@@ -2484,7 +2494,7 @@ function unusedHelper_v2() { return 42; }
     const episodes = await memoryEngine.getEpisodes(fixtureDir);
     expect(episodes.length).toBeGreaterThanOrEqual(1);
 
-    campaignBenchmarkResults.push({
+    scriptedScenarioResults.push({
       scenarioId: "SCENARIO_27",
       name: "Full Integration (Memory + Worker + Web + Repair + Git)",
       status: "PASS",
