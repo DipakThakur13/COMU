@@ -38,8 +38,15 @@ export function readJournal(outDir: string, label: string): RunRecord[] {
     .map(line => JSON.parse(line) as RunRecord);
 }
 
+/**
+ * The journal is keyed by label alone, with no date.
+ *
+ * A run takes hours and can cross midnight. Dating the journal would split it in two at that
+ * moment, and a resume would then re-measure everything recorded before the split and pay for it
+ * twice.
+ */
 function journalStem(label: string): string {
-  return `${new Date().toISOString().slice(0, 10)}-${label}`;
+  return `${label}.journal`;
 }
 
 export function writeRun(run: BenchmarkRun, outDir: string): { jsonPath: string; markdownPath: string } {
