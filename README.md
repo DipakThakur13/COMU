@@ -32,7 +32,7 @@
 | **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI-compatible, Ollama (local, keyless) |
 | **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
 | **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck, Lint & Build |
-| **Automated Test Suite** | **46 Test Files · 421 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
+| **Automated Test Suite** | **52 Test Files · 487 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
 | **VS Code Package** | `comu-ai-0.2.4.vsix` | Built & Ready to Install |
 
 ---
@@ -94,7 +94,20 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
 - **First-Class Instant Cancellation (`■ Stop`)**:
   - Non-blocking, instant transition to `◌ Cancelling…` (<5ms response). Immediately stops agent execution without freezing the editor.
 
-### 2. High-Performance Startup & Runtime Stabilization
+### 2. Interface (rebuild in progress)
+The panel is being rebuilt as a React 18 + TypeScript application (`apps/webview`) built by Vite, with a Zustand store fed by a pure, unit-tested event reducer (`@comu/ui-state`) shared with the extension host. Enable it with the `comu.ui.experimental` setting; the current interface remains the default until the rebuild reaches parity.
+
+Landed so far:
+- **Token-level streaming**: the assistant's reply renders as it is generated (`model.token_delta`), with worker turns kept on their own channel so they never interleave into the main stream.
+- **Live cost and usage**: tokens and, where the model has a published price, spend, both of which the runtime previously computed and discarded. A model with no published price shows tokens only rather than an invented figure.
+- **Virtualised activity timeline**: thousands of events render a bounded number of rows; earlier activity beyond the runtime's own 5000-event ceiling is elided with an explicit affordance rather than lost silently.
+- **Every colour resolves from a VS Code theme variable**, enforced by a test, so light, dark and high contrast are all correct. Icons are inline Codicons drawing with `currentColor`; no emoji.
+- **Strict CSP**: the host document is generated in TypeScript with a per-load nonce, so `script-src` needs no `unsafe-inline` and `connect-src` is gone entirely.
+- **Standalone harness** at `http://127.0.0.1:3000` replaying recorded fixtures in any theme at any panel width, so the interface can be built without reloading an extension host.
+
+Still to come in this phase: the approval card, plan ribbon, aggregate diff review, drawer surfaces and the settings rebuild.
+
+### 3. High-Performance Startup & Runtime Stabilization
 - **Instant First Paint (<20ms)**: Renders the full workspace shell, navigation tabs, and composer immediately from local static defaults.
 - **Zero-Blocking Architecture**: First paint **never** waits for runtime health checks, provider connection tests, secret decryption, model catalogs, or SSE handshakes.
 - **Progressive Hydration**: Hydrates provider metadata, session history, and runtime status asynchronously in the background.
@@ -103,7 +116,7 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
 - **CSS Layout Containment**: Uses `contain: layout style;` across scroll areas to eliminate layout thrashing during token streaming.
 - **Component Error Boundaries**: Every tab is wrapped in an isolated error boundary, ensuring partial failures never blank the UI.
 
-### 3. Provider-Neutral Model Gateway (BYOK)
+### 4. Provider-Neutral Model Gateway (BYOK)
 Bring Your Own Key directly to VS Code. COMU does not resell inference credits or lock you into a proprietary model:
 - **NVIDIA Nemotron (NVIDIA NIM)**:
   - `Nemotron 3.5 Lightning 30B-A3B` (Fast Agent)
@@ -122,7 +135,7 @@ Bring Your Own Key directly to VS Code. COMU does not resell inference credits o
 - **Hardware-Backed Secret Storage**:
   - All API keys are encrypted in VS Code `SecretStorage` (Windows DPAPI, macOS Keychain, Linux Secret Service). Keys are never logged, exposed to the webview DOM, or committed to Git.
 
-### 4. Autonomous Engineering Loop & Tools
+### 5. Autonomous Engineering Loop & Tools
 - **AgentKernel FSM**: Formal finite state machine governing state transitions:
   `IDLE` → `STARTING` → `CLASSIFYING` → `ANALYZING` → `PLANNING` → `THINKING` → `TOOL_CALLING` → `OBSERVING` → `VERIFYING` → `DIAGNOSING` → `REPAIRING` → `WAITING_FOR_USER` → `COMPLETED` / `FAILED` / `CANCELLED`.
 - **15+ Built-In Engineering Tools**:

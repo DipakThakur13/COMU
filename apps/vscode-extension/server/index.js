@@ -24663,6 +24663,8 @@ var require_git_commit_tool = __commonJS({
       name = "git_commit";
       description = "Create a git commit with conventional commit message validation and staged file verification.";
       capabilities = ["execute"];
+      /** Commits are gated by the autonomy level (ask), like any other mutating action. */
+      requiresApproval = "byAutonomy";
       inputSchema = {
         type: "object",
         properties: {
@@ -24794,30 +24796,21 @@ var require_git_push_tool = __commonJS({
     var terminal_1 = require_dist5();
     var GitPushTool2 = class {
       name = "git_push";
-      description = "Push committed changes to a remote repository. Strictly requires explicit human approval.";
+      description = "Push committed changes to a remote repository. A human approves every push; there is no way to pre-authorise it.";
       capabilities = ["execute"];
+      requiresApproval = "always";
       inputSchema = {
         type: "object",
         properties: {
           remote: { type: "string", description: "Remote repository name, defaults to origin" },
-          branch: { type: "string", description: "Remote branch name" },
-          approved: { type: "boolean", description: "Explicit developer approval flag" }
+          branch: { type: "string", description: "Remote branch name" }
         },
-        required: ["approved"]
+        required: []
       };
       processManager = new terminal_1.ProcessManager();
       async execute(args, context) {
         const cwd = context.workspace.rootPath;
         const remote = args.remote || "origin";
-        if (!args.approved) {
-          return {
-            success: false,
-            remote,
-            branch: args.branch || "",
-            commitHash: "",
-            error: "PUSH_NOT_AUTHORIZED: git push strictly requires explicit human approval."
-          };
-        }
         if (!/^[a-zA-Z0-9_\-]+$/.test(remote)) {
           return {
             success: false,
@@ -25634,12 +25627,47 @@ var require_dist9 = __commonJS({
           maxAttempts: config?.maxAttempts ?? 3,
           maxRetryTimeMs: config?.maxRetryTimeMs ?? 6e4,
           retryBaseDelayMs: config?.retryBaseDelayMs ?? 500,
-          retryMaxDelayMs: config?.retryMaxDelayMs ?? 8e3
+          retryMaxDelayMs: config?.retryMaxDelayMs ?? 8e3,
+          streamChannel: config?.streamChannel ?? "main",
+          subagentId: config?.subagentId ?? "",
+          pricePerMillionTokens: config?.pricePerMillionTokens ?? void 0
         };
       }
       provider;
       onEvent;
       config;
+      /** Cost for a usage report, or undefined when this model has no known price. */
+      computeCost(usage) {
+        const price = this.config.pricePerMillionTokens;
+        if (!price || !usage) return void 0;
+        return (usage.promptTokens * price.input + usage.completionTokens * price.output) / 1e6;
+      }
+      /**
+       * Builds the per-attempt delta emitter. Indices are monotonic per (requestId, kind) so a
+       * consumer can detect a dropped delta; a retry starts a fresh request context but keeps the
+       * requestId, so the index continues rather than restarting.
+       */
+      makeDeltaEmitter(taskId, runId, requestId, counters) {
+        return (delta) => {
+          if (!delta || !delta.text) return;
+          const kind = delta.kind === "reasoning" ? "reasoning" : "text";
+          const index = counters.get(kind) ?? 0;
+          counters.set(kind, index + 1);
+          this.onEvent({
+            type: "model.token_delta",
+            eventId: `evt-${Date.now()}-${requestId}-${kind}-${index}`,
+            taskId,
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            requestId,
+            runId,
+            channel: this.config.streamChannel,
+            subagentId: this.config.subagentId || void 0,
+            kind,
+            delta: delta.text,
+            index
+          });
+        };
+      }
       isRetryable(error) {
         if (error instanceof import_shared.ProviderAuthenticationError) return false;
         if (error instanceof import_shared.ProviderAuthorizationError) return false;
@@ -25669,6 +25697,8 @@ var require_dist9 = __commonJS({
       async execute(taskId, runId, request, parentSignal) {
         const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         const startTime = Date.now();
+        const deltaCounters = /* @__PURE__ */ new Map();
+        const emitDelta = this.makeDeltaEmitter(taskId, runId, requestId, deltaCounters);
         let attempt = 1;
         this.onEvent({
           type: "model_request.created",
@@ -25709,7 +25739,8 @@ var require_dist9 = __commonJS({
             signal: controller.signal,
             attempt,
             maxAttempts: this.config.maxAttempts,
-            startedAt: attemptStartTime
+            startedAt: attemptStartTime,
+            onDelta: emitDelta
           };
           try {
             const timeoutPromise = new Promise((_, reject) => {
@@ -25729,7 +25760,10 @@ var require_dist9 = __commonJS({
               requestId,
               runId,
               attempt,
-              latencyMs
+              latencyMs,
+              usage: response.usage,
+              costUsd: this.computeCost(response.usage),
+              model: this.provider.selectedModel
             });
             return response;
           } catch (error) {
@@ -25882,6 +25916,8 @@ var require_dist9 = __commonJS({
       supportsVision: false,
       maxContextTokens: 8192,
       maxOutputTokens: 4096,
+      // Local inference: no per-token cost.
+      pricePerMillionTokens: { input: 0, output: 0 },
       requiresApiKey: false,
       defaultEndpoint: "http://127.0.0.1:11434/v1",
       allowedModels: []
@@ -26292,9 +26328,12 @@ var require_dist9 = __commonJS({
                 const delta = data.choices[0].delta;
                 if (delta.content) {
                   fullText += delta.content;
+                  _OpenAICompatibleProvider.emitDelta(context, "text", delta.content);
                 }
                 if (delta.reasoning_content || delta.reasoning) {
-                  fullReasoning += delta.reasoning_content || delta.reasoning;
+                  const reasoning = delta.reasoning_content || delta.reasoning;
+                  fullReasoning += reasoning;
+                  _OpenAICompatibleProvider.emitDelta(context, "reasoning", reasoning);
                 }
                 if (delta.tool_calls) {
                   for (const tc of delta.tool_calls) {
@@ -26346,6 +26385,17 @@ var require_dist9 = __commonJS({
           toolCalls,
           usage: { promptTokens, completionTokens, totalTokens }
         };
+      }
+      /**
+       * Hands a chunk to the caller. A throwing consumer must not corrupt the response we are
+       * accumulating, so failures here are swallowed deliberately.
+       */
+      static emitDelta(context, kind, text) {
+        if (!context?.onDelta || !text) return;
+        try {
+          context.onDelta({ kind, text });
+        } catch {
+        }
       }
       static extractThinking(content, reasoningContent) {
         let rawContent = content || "";
@@ -28771,6 +28821,12 @@ var require_dist16 = __commonJS({
       }
       options;
       grants = /* @__PURE__ */ new Set();
+      /**
+       * Once a task has been judged headless we do not pay the observer grace wait again: a run with
+       * no panel attached would otherwise stall for the grace period on every single approval.
+       * The verdict is sticky per task, and only in the headless direction.
+       */
+      headless = false;
       get autonomy() {
         return this.options.autonomy;
       }
@@ -28971,7 +29027,7 @@ var require_dist16 = __commonJS({
           this.record(payload, decision2);
           return decision2;
         }
-        if (this.options.hasHumanObserver && !this.options.hasHumanObserver()) {
+        if (this.options.hasHumanObserver && !await this.waitForObserver()) {
           const decision2 = {
             approved: false,
             reason: "NO_HUMAN_OBSERVER",
@@ -29016,6 +29072,30 @@ var require_dist16 = __commonJS({
         }
         this.record(payload, decision, answer.interactionId);
         return decision;
+      }
+      /** True once this task has been judged headless; the verdict is cached for the task. */
+      isHeadless() {
+        return this.headless;
+      }
+      /** Polls the observer callback for up to observerGraceMs. Rejects if the task is cancelled meanwhile. */
+      async waitForObserver() {
+        const check = this.options.hasHumanObserver;
+        if (check()) return true;
+        if (this.headless) return false;
+        const grace = this.options.observerGraceMs ?? 3e3;
+        const deadline = Date.now() + grace;
+        while (Date.now() < deadline) {
+          if (this.options.abortSignal?.aborted) {
+            throw new Error("Task was cancelled while waiting for an observer.");
+          }
+          await new Promise((r) => setTimeout(r, Math.min(50, Math.max(1, deadline - Date.now()))));
+          if (check()) return true;
+        }
+        const observed = check();
+        if (!observed) {
+          this.headless = true;
+        }
+        return observed;
       }
       record(payload, decision, interactionId) {
         this.options.onEvent({
@@ -29213,12 +29293,42 @@ var require_dist16 = __commonJS({
                 error: limitErr
               };
             }
+            const workerRequestId = `req-${subagentId}-${steps}`;
+            const deltaCounters = /* @__PURE__ */ new Map();
+            const workerModelContext = {
+              requestId: workerRequestId,
+              taskId: params.parentTaskId,
+              runId: subagentId,
+              timeoutMs: subagentTask.budget.maxExecutionTimeMs,
+              signal: controller.signal,
+              attempt: 1,
+              maxAttempts: 1,
+              startedAt: Date.now(),
+              onDelta: (delta) => {
+                const kind = delta.kind === "reasoning" ? "reasoning" : "text";
+                const index = deltaCounters.get(kind) ?? 0;
+                deltaCounters.set(kind, index + 1);
+                params.onEvent({
+                  type: "model.token_delta",
+                  eventId: `evt-${Date.now()}-${workerRequestId}-${kind}-${index}`,
+                  taskId: params.parentTaskId,
+                  timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                  requestId: workerRequestId,
+                  runId: subagentId,
+                  channel: "subagent",
+                  subagentId,
+                  kind,
+                  delta: delta.text,
+                  index
+                });
+              }
+            };
             const response = await params.model.generate({
               prompt: params.goal,
               systemPrompt: `You are a bounded ${params.type} subagent. Execute read-only tools or provide findings.`,
               messages,
               tools: workerTools
-            });
+            }, workerModelContext);
             messages.push({
               role: "assistant",
               content: response.text,
@@ -29281,6 +29391,24 @@ var require_dist16 = __commonJS({
           });
           return result;
         } catch (err) {
+          if (controller.signal.aborted) {
+            params.onEvent({
+              type: "subagent.cancelled",
+              eventId: `evt-${Date.now()}`,
+              taskId: params.parentTaskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              subagentId,
+              subagentType: params.type
+            });
+            return {
+              subagentId,
+              parentTaskId: params.parentTaskId,
+              type: params.type,
+              status: "CANCELLED",
+              summary: "Worker was cancelled.",
+              usage: { steps, toolCalls, durationMs: Date.now() - startTime }
+            };
+          }
           const failResult = {
             subagentId,
             parentTaskId: params.parentTaskId,
@@ -29492,6 +29620,7 @@ var require_dist16 = __commonJS({
           onEvent: ctx.onEvent,
           abortSignal: ctx.abortSignal,
           hasHumanObserver: ctx.hasHumanObserver,
+          observerGraceMs: ctx.limits.approvalObserverGraceMs,
           timeoutMs: ctx.limits.approvalTimeoutMs ?? 10 * 60 * 1e3,
           createUnifiedDiff: (path, original, proposed) => this.diffEngine.createUnifiedDiff(path, original, proposed)
         });
@@ -33836,9 +33965,12 @@ var require_dist19 = __commonJS({
                 const delta = data.choices[0].delta;
                 if (delta.content) {
                   fullText += delta.content;
+                  _NvidiaProvider.emitDelta(context, "text", delta.content);
                 }
                 if (delta.reasoning_content || delta.reasoning) {
-                  fullReasoning += delta.reasoning_content || delta.reasoning;
+                  const reasoning = delta.reasoning_content || delta.reasoning;
+                  fullReasoning += reasoning;
+                  _NvidiaProvider.emitDelta(context, "reasoning", reasoning);
                 }
                 if (delta.tool_calls) {
                   for (const tc of delta.tool_calls) {
@@ -33888,6 +34020,14 @@ var require_dist19 = __commonJS({
           toolCalls,
           usage: { promptTokens, completionTokens, totalTokens }
         };
+      }
+      /** Hands a chunk to the caller; a throwing consumer never breaks generation. */
+      static emitDelta(context, kind, text) {
+        if (!context?.onDelta || !text) return;
+        try {
+          context.onDelta({ kind, text });
+        } catch {
+        }
       }
       static extractThinking(content, reasoningContent) {
         let rawContent = content || "";
@@ -34515,7 +34655,8 @@ function createRuntimeApp(options = {}) {
             maxValidationRuns: 6,
             maxRepairFiles: 5,
             maxRepairTimeMs: 18e4,
-            approvalTimeoutMs
+            approvalTimeoutMs,
+            approvalObserverGraceMs: options.approvalObserverGraceMs
           },
           onEvent: (event) => {
             console.log(`[Event ${event.type}]`, event);

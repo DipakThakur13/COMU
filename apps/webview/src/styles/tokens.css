@@ -1,0 +1,111 @@
+/*
+ * COMU design tokens.
+ *
+ * Every colour here resolves from a VS Code theme variable, so the interface is correct in light,
+ * dark and high contrast without a single literal hex value. Components never reach for a
+ * --vscode-* variable directly: they use the semantic aliases below, which is what makes a theme
+ * problem fixable in one file.
+ *
+ * Where VS Code has no equivalent for a semantic colour, it is derived with color-mix from one
+ * that does, so it still tracks the active theme.
+ */
+
+:root {
+  /* ── Surfaces ──────────────────────────────────────────────────── */
+  --comu-surface: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --comu-surface-raised: color-mix(in srgb, var(--comu-surface) 92%, var(--vscode-foreground));
+  --comu-surface-sunken: color-mix(in srgb, var(--comu-surface) 96%, black);
+  --comu-surface-code: var(--vscode-textCodeBlock-background, var(--comu-surface-raised));
+  --comu-overlay: color-mix(in srgb, var(--comu-surface) 70%, transparent);
+
+  /* ── Text ──────────────────────────────────────────────────────── */
+  --comu-text: var(--vscode-foreground);
+  --comu-text-muted: var(--vscode-descriptionForeground, color-mix(in srgb, var(--comu-text) 65%, transparent));
+  --comu-text-link: var(--vscode-textLink-foreground);
+  --comu-text-on-accent: var(--vscode-button-foreground);
+
+  /* ── Borders ───────────────────────────────────────────────────── */
+  --comu-border: var(--vscode-panel-border, color-mix(in srgb, var(--comu-text) 20%, transparent));
+  --comu-border-strong: var(--vscode-contrastBorder, var(--comu-border));
+  --comu-focus: var(--vscode-focusBorder);
+
+  /* ── Interaction ───────────────────────────────────────────────── */
+  --comu-accent: var(--vscode-button-background);
+  --comu-accent-hover: var(--vscode-button-hoverBackground, var(--comu-accent));
+  --comu-secondary: var(--vscode-button-secondaryBackground, var(--comu-surface-raised));
+  --comu-secondary-hover: var(--vscode-button-secondaryHoverBackground, var(--comu-secondary));
+  --comu-secondary-text: var(--vscode-button-secondaryForeground, var(--comu-text));
+  --comu-hover: var(--vscode-list-hoverBackground);
+  --comu-selected: var(--vscode-list-activeSelectionBackground);
+
+  /* ── Status ────────────────────────────────────────────────────── */
+  --comu-status-running: var(--vscode-progressBar-background, var(--vscode-charts-blue));
+  --comu-status-ok: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+  --comu-status-warn: var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow));
+  --comu-status-error: var(--vscode-errorForeground, var(--vscode-charts-red));
+  --comu-status-idle: var(--comu-text-muted);
+  --comu-status-waiting: var(--vscode-charts-purple, var(--comu-status-warn));
+
+  /* Tinted backgrounds for status surfaces, derived so they track the theme. */
+  --comu-tint-ok: color-mix(in srgb, var(--comu-status-ok) 14%, transparent);
+  --comu-tint-warn: color-mix(in srgb, var(--comu-status-warn) 14%, transparent);
+  --comu-tint-error: color-mix(in srgb, var(--comu-status-error) 14%, transparent);
+  --comu-tint-waiting: color-mix(in srgb, var(--comu-status-waiting) 16%, transparent);
+  --comu-tint-accent: color-mix(in srgb, var(--comu-accent) 16%, transparent);
+
+  /* ── Diff ──────────────────────────────────────────────────────── */
+  --comu-diff-add: var(--vscode-gitDecoration-addedResourceForeground, var(--comu-status-ok));
+  --comu-diff-del: var(--vscode-gitDecoration-deletedResourceForeground, var(--comu-status-error));
+  --comu-diff-add-bg: color-mix(in srgb, var(--comu-diff-add) 12%, transparent);
+  --comu-diff-del-bg: color-mix(in srgb, var(--comu-diff-del) 12%, transparent);
+  --comu-diff-hunk: var(--comu-text-link);
+
+  /* ── Spacing scale ─────────────────────────────────────────────── */
+  --comu-space-1: 4px;
+  --comu-space-2: 8px;
+  --comu-space-3: 12px;
+  --comu-space-4: 16px;
+
+  /* ── Type scale ────────────────────────────────────────────────── */
+  --comu-text-xs: 11px;
+  --comu-text-sm: 12px;
+  --comu-text-md: 13px;
+  --comu-text-lg: 15px;
+  --comu-font: var(--vscode-font-family, system-ui, sans-serif);
+  --comu-font-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+  --comu-line: 1.45;
+
+  /* ── Shape ─────────────────────────────────────────────────────── */
+  --comu-radius-sm: 3px;
+  --comu-radius-md: 5px;
+  --comu-radius-pill: 999px;
+
+  /* ── Motion: functional only ───────────────────────────────────── */
+  --comu-motion-fast: 90ms;
+  --comu-motion-base: 160ms;
+  --comu-ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/*
+ * High contrast themes draw everything with explicit borders and no tinted fills. VS Code sets
+ * the body class, so the token layer adapts without any component knowing about it.
+ */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  --comu-surface-raised: var(--comu-surface);
+  --comu-border: var(--vscode-contrastBorder, var(--comu-text));
+  --comu-tint-ok: transparent;
+  --comu-tint-warn: transparent;
+  --comu-tint-error: transparent;
+  --comu-tint-waiting: transparent;
+  --comu-tint-accent: transparent;
+  --comu-diff-add-bg: transparent;
+  --comu-diff-del-bg: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --comu-motion-fast: 0ms;
+    --comu-motion-base: 0ms;
+  }
+}

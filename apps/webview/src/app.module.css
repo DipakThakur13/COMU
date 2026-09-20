@@ -1,0 +1,30 @@
+.shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--comu-surface);
+}
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-2) var(--comu-space-3);
+  border-bottom: 1px solid var(--comu-status-error);
+  background: var(--comu-tint-error);
+}
+
+.bannerMessage {
+  margin: 0;
+  font-size: var(--comu-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.bannerHint {
+  margin: var(--comu-space-1) 0 0;
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-xs);
+}

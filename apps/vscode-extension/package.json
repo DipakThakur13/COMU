@@ -88,7 +88,11 @@
         },
         "comu.defaultAutonomy": {
           "type": "string",
-          "enum": ["ask", "auto", "readonly"],
+          "enum": [
+            "ask",
+            "auto",
+            "readonly"
+          ],
           "enumDescriptions": [
             "Ask before every file write and command (an approval card with the diff or the exact command).",
             "Run without approvals. Git push still always asks.",
@@ -106,26 +110,33 @@
           "type": "string",
           "default": "nvidia-nemotron-3-ultra",
           "description": "Default model ID to use"
+        },
+        "comu.ui.experimental": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use the rebuilt React interface. In development while the remaining surfaces are ported; the current interface stays the default until it reaches parity."
         }
       }
     }
   },
   "scripts": {
     "copy-server": "node -e \"const fs = require('fs'); fs.mkdirSync('server', { recursive: true }); fs.copyFileSync('../agent-runtime/dist/server.js', 'server/index.js');\"",
-    "build": "pnpm run copy-server && pnpm run compile",
-    "vscode:prepublish": "pnpm --filter @comu/agent-runtime build && pnpm run copy-server && pnpm run compile",
+    "build": "pnpm run copy-server && pnpm run build-webview && pnpm run compile",
+    "vscode:prepublish": "pnpm --filter @comu/agent-runtime build && pnpm run copy-server && pnpm run build-webview && pnpm run compile",
     "compile": "tsup",
     "watch": "tsup --watch",
     "test-compile": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "test": "pnpm run test-compile && node ./dist/test/runTest.js"
+    "test": "pnpm run test-compile && node ./dist/test/runTest.js",
+    "build-webview": "pnpm --filter @comu/webview build"
   },
   "dependencies": {
     "@comu/model-core": "workspace:*",
     "@comu/protocol": "workspace:*",
     "@comu/provider-nvidia": "workspace:*",
-    "eventsource-parser": "^4.1.0"
+    "eventsource-parser": "^4.1.0",
+    "@comu/ui-state": "workspace:*"
   },
   "devDependencies": {
     "@types/glob": "^9.0.0",

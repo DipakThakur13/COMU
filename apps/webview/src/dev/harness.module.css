@@ -1,0 +1,72 @@
+.layout {
+  display: flex;
+  gap: 24px;
+  align-items: stretch;
+  height: 100vh;
+  padding: 24px;
+  background: #2b2b2b;
+  color: #ddd;
+  font-family: system-ui, sans-serif;
+}
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid #555;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  background: var(--comu-surface);
+  color: var(--comu-text);
+  resize: horizontal;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 260px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.group select,
+.group button {
+  padding: 4px 6px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #1f1f1f;
+  color: #ddd;
+  font: inherit;
+}
+
+.group button {
+  cursor: pointer;
+}
+
+.hint {
+  margin: 2px 0 0;
+  opacity: 0.6;
+  line-height: 1.4;
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 14px;
+}

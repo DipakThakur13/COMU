@@ -10,10 +10,14 @@ import { getWorkspaceContext } from '../workspace/workspace_context';
 import { getEditorContext } from '../workspace/editor_context';
 import { openDiff } from '../diff/diff_viewer';
 import { ProviderManager } from './provider_manager';
+import { ReplicaPublisher } from '../sessions/replica_publisher';
+import { buildReactWebviewHtml } from '../webview/react_host';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'comu.chatView';
     private _view?: vscode.WebviewView;
+    /** Authoritative session state for the React interface. Idle while the flag is off. */
+    private readonly replica = new ReplicaPublisher();
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -35,6 +39,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         webviewView.onDidDispose(() => {
             console.log('[COMU WEBVIEW] Webview disposed, cleaning up references');
             this._view = undefined;
+            this.replica.attach(undefined);
         });
 
         try {
@@ -46,7 +51,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 ]
             };
 
-            webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+            webviewView.webview.html = this.useReactUi()
+                ? buildReactWebviewHtml(webviewView.webview, this._extensionUri)
+                : this._getHtmlForWebview(webviewView.webview);
+            this.replica.attach(webviewView.webview);
             const t1 = Date.now();
             console.log(`[COMU WEBVIEW] T1: HTML returned in ${t1 - t0}ms`);
         } catch (err: any) {
@@ -96,6 +104,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'request_providers':
                     await this.sendProvidersToWebview();
+                    break;
+                case 'request_snapshot':
+                    // The replica detected a gap (or is starting) and needs the authoritative state.
+                    this.replica.sendSnapshot();
+                    break;
+                case 'set_autonomy':
+                    await vscode.workspace
+                        .getConfiguration('comu')
+                        .update('defaultAutonomy', data.autonomy, vscode.ConfigurationTarget.Global);
                     break;
                 case 'save_provider_key':
                     if (data.key && data.key.trim()) {
@@ -175,6 +192,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this.runtimeClient.pushConfig(config);
     }
 
+    /** True when the rebuilt React interface is enabled. */
+    public useReactUi(): boolean {
+        return vscode.workspace.getConfiguration('comu').get<boolean>('ui.experimental') === true;
+    }
+
+    /**
+     * Single entry point for a runtime event. The legacy store and the React replica are both fed,
+     * so the interface can be switched without the event path changing.
+     */
+    public handleAgentEvent(event: any): boolean {
+        const added = this.sessionStore.addEvent(event);
+        if (added) {
+            this.replica.publish(event);
+        }
+        return added;
+    }
+
+    public setConnectionState(connected: boolean) {
+        this.replica.setConnection(connected ? 'online' : 'offline');
+    }
+
+    public dispose() {
+        this.replica.dispose();
+    }
+
     /** The user's default autonomy from settings, validated. */
     public getDefaultAutonomy(): TaskAutonomy {
         const configured = String(vscode.workspace.getConfiguration('comu').get<string>('defaultAutonomy') || 'ask').toLowerCase();
@@ -183,7 +225,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private sendSettingsToWebview() {
         if (this._view) {
-            const msg: ExtensionMessage = { type: 'settings_update', defaultAutonomy: this.getDefaultAutonomy() };
+            const msg: ExtensionMessage = {
+                type: 'settings_update',
+                defaultAutonomy: this.getDefaultAutonomy(),
+                defaultModelId: vscode.workspace.getConfiguration('comu').get<string>('defaultModel'),
+                experimentalUi: this.useReactUi()
+            };
             void this._view.webview.postMessage(msg);
         }
     }
@@ -228,6 +275,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
 
             this.sessionStore.startNewTask(taskInfo.taskId, prompt, modelId, mode);
+            this.replica.beginTask({
+                taskId: taskInfo.taskId,
+                prompt,
+                modelId,
+                autonomy: effectiveAutonomy,
+                mode
+            });
             this.sendStateToWebview();
 
             const url = this.runtimeClient.getEventStreamUrl(taskInfo.taskId);

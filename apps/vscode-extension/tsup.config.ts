@@ -9,6 +9,7 @@ export default defineConfig({
   noExternal: [
     'eventsource-parser',
     '@comu/protocol',
+    '@comu/ui-state',
     '@comu/provider-nvidia',
     '@comu/model-core'
   ],

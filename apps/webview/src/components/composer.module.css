@@ -1,0 +1,102 @@
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-2) var(--comu-space-3) var(--comu-space-3);
+  border-top: 1px solid var(--comu-border);
+  background: var(--comu-surface);
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--comu-space-2);
+  min-width: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  max-height: 160px;
+  padding: var(--comu-space-2);
+  border: 1px solid var(--vscode-input-border, var(--comu-border));
+  border-radius: var(--comu-radius-md);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: var(--comu-text-sm);
+  line-height: var(--comu-line);
+  resize: none;
+  overflow-y: auto;
+}
+
+.input::placeholder {
+  color: var(--comu-text-muted);
+}
+
+/*
+ * One row, wrapping only when the panel is genuinely too narrow. Each control shrinks rather than
+ * forcing a horizontal scrollbar at 280px.
+ */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--comu-space-1);
+  min-width: 0;
+}
+
+.control {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 var(--comu-space-1);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  background: var(--comu-surface-raised);
+  color: var(--comu-text-muted);
+}
+
+.control select {
+  max-width: 100%;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--comu-text);
+  font-size: var(--comu-text-xs);
+  text-overflow: ellipsis;
+}
+
+.control select:disabled {
+  opacity: 0.6;
+}
+
+.model {
+  flex: 1 1 96px;
+  min-width: 0;
+}
+
+.model select {
+  width: 100%;
+}
+
+/* Autonomy is the control that decides whether the agent writes without asking: make it readable. */
+.autonomy[data-level="auto"] {
+  color: var(--comu-status-warn);
+  border-color: color-mix(in srgb, var(--comu-status-warn) 55%, transparent);
+  background: var(--comu-tint-warn);
+}
+
+.autonomy[data-level="ask"] {
+  color: var(--comu-status-running);
+  border-color: color-mix(in srgb, var(--comu-status-running) 45%, transparent);
+  background: var(--comu-tint-accent);
+}
+
+.autonomy[data-level="readonly"] {
+  color: var(--comu-text-muted);
+}
+
+.autonomy select {
+  color: inherit;
+}

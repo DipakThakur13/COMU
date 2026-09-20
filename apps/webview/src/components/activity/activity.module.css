@@ -1,0 +1,201 @@
+.stream {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Containment keeps a streaming append from re-laying out the whole panel. */
+  contain: layout style;
+}
+
+.virtualCanvas {
+  position: relative;
+  width: 100%;
+}
+
+.virtualWindow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+/* ── Row ────────────────────────────────────────────────────────── */
+.row {
+  border-bottom: 1px solid color-mix(in srgb, var(--comu-border) 55%, transparent);
+}
+
+.rowHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--comu-space-2);
+  width: 100%;
+  padding: var(--comu-space-2) var(--comu-space-3);
+  text-align: left;
+  background: transparent;
+}
+
+.rowHeader:hover:not(:disabled) {
+  background: var(--comu-hover);
+}
+
+.rowHeader:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.rowIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.rowBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: var(--comu-text-sm);
+  color: var(--comu-text);
+  /* One line, truncated: a 280px panel must never break a path mid-word. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSubtitle {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowChevron {
+  margin-top: 3px;
+  color: var(--comu-text-muted);
+}
+
+.rowDetail {
+  margin: 0;
+  padding: 0 var(--comu-space-3) var(--comu-space-2) 34px;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* ── Assistant message ──────────────────────────────────────────── */
+.rowMessage {
+  background: var(--comu-surface-raised);
+}
+
+.messageClamped,
+.messageFull {
+  font-size: var(--comu-text-sm);
+  color: var(--comu-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.messageClamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.caret {
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--comu-status-running);
+  animation: comu-blink 1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+.reasoning {
+  padding: 0 var(--comu-space-3) var(--comu-space-2) 34px;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.reasoning summary {
+  cursor: pointer;
+}
+
+.reasoning p {
+  margin: var(--comu-space-1) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── Group ──────────────────────────────────────────────────────── */
+.groupList {
+  margin: 0;
+  padding: 0 var(--comu-space-3) var(--comu-space-2) 34px;
+  list-style: none;
+}
+
+.groupItem {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-2);
+  padding: 2px 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  min-width: 0;
+}
+
+.groupItemText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Status colours ─────────────────────────────────────────────── */
+.statusOk { color: var(--comu-status-ok); }
+.statusRunning { color: var(--comu-status-running); }
+.statusWarn { color: var(--comu-status-warn); }
+.statusError { color: var(--comu-status-error); }
+.statusWaiting { color: var(--comu-status-waiting); }
+
+/* ── Elided banner ──────────────────────────────────────────────── */
+.elided {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  padding: var(--comu-space-1) var(--comu-space-3);
+  border-bottom: 1px solid var(--comu-border);
+  background: var(--comu-surface-raised);
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-xs);
+}
+
+/* ── Follow affordance ──────────────────────────────────────────── */
+.followAffordance {
+  position: absolute;
+  right: var(--comu-space-3);
+  bottom: var(--comu-space-2);
+}

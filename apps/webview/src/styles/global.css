@@ -1,0 +1,107 @@
+/*
+ * The only global stylesheet: a reset and the shell. Everything else is a CSS Module scoped to its
+ * component, so there is no cascade to reason about and no unscoped selector to collide with.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--comu-font);
+  font-size: var(--comu-text-md);
+  line-height: var(--comu-line);
+  color: var(--comu-text);
+  background: var(--comu-surface);
+  /* A 300px panel has no room for a horizontal scrollbar, and mid-word breaks are a defect. */
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* One focus treatment everywhere, visible in every theme including high contrast. */
+:focus-visible {
+  outline: 1px solid var(--comu-focus);
+  outline-offset: 1px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+code,
+pre {
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+}
+
+pre {
+  margin: 0;
+}
+
+/* Scrollbars follow the host so panels do not look foreign. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background);
+  border-radius: var(--comu-radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.comu-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

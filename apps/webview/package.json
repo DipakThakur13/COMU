@@ -1,0 +1,30 @@
+{
+  "name": "@comu/webview",
+  "version": "0.2.4",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@comu/protocol": "workspace:*",
+    "@comu/ui-state": "workspace:*",
+    "@tanstack/react-virtual": "^3.13.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10",
+    "@testing-library/react": "^16",
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vscode/codicons": "^0.0.36",
+    "jsdom": "^25",
+    "vite": "^5.4.21"
+  }
+}

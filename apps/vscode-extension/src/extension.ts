@@ -33,6 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push({
       dispose: () => {
           serverManager?.stopServer();
+          chatProvider?.dispose();
       }
   });
 
@@ -40,8 +41,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   const sseClient = new SSEClient(
       (event) => {
-          const added = sessionStore.addEvent(event);
-          if (added && chatProvider) {
+          if (!chatProvider) return;
+          const added = chatProvider.handleAgentEvent(event);
+          if (added) {
               chatProvider.sendStateToWebview();
           }
       },
@@ -57,6 +59,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const healthMonitor = new HealthMonitor(runtimeClient, async (connected) => {
       sessionStore.setOffline(!connected);
+      chatProvider.setConnectionState(connected);
       if (connected) {
           const config = await providerManager.getRawConfig();
           await runtimeClient.pushConfig(config);

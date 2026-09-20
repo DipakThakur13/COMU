@@ -1,0 +1,171 @@
+/* ── Button ─────────────────────────────────────────────────────── */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--comu-space-1);
+  min-height: 24px;
+  padding: 0 var(--comu-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--comu-radius-sm);
+  font-size: var(--comu-text-sm);
+  white-space: nowrap;
+  transition: background var(--comu-motion-fast) var(--comu-ease);
+}
+
+.primary {
+  background: var(--comu-accent);
+  color: var(--comu-text-on-accent);
+  border-color: var(--comu-border-strong);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--comu-accent-hover);
+}
+
+.secondary {
+  background: var(--comu-secondary);
+  color: var(--comu-secondary-text);
+  border-color: var(--comu-border);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--comu-secondary-hover);
+}
+
+.danger {
+  background: transparent;
+  color: var(--comu-status-error);
+  border-color: var(--comu-status-error);
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--comu-tint-error);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--comu-text-muted);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--comu-hover);
+  color: var(--comu-text);
+}
+
+.iconOnly {
+  min-width: 24px;
+  padding: 0;
+}
+
+.small {
+  min-height: 20px;
+  font-size: var(--comu-text-xs);
+}
+
+/* ── StatusPill ─────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  padding: 1px var(--comu-space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--comu-radius-pill);
+  font-size: var(--comu-text-xs);
+  line-height: 1.5;
+  /* Status text like "WAITING FOR USER" must never break inside itself. */
+  white-space: nowrap;
+}
+
+.pillRunning { color: var(--comu-status-running); background: var(--comu-tint-accent); }
+.pillOk { color: var(--comu-status-ok); background: var(--comu-tint-ok); }
+.pillWarn { color: var(--comu-status-warn); background: var(--comu-tint-warn); }
+.pillError { color: var(--comu-status-error); background: var(--comu-tint-error); }
+.pillWaiting { color: var(--comu-status-waiting); background: var(--comu-tint-waiting); }
+.pillIdle { color: var(--comu-text-muted); background: transparent; }
+
+/* ── Badge ──────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: var(--comu-radius-pill);
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: var(--comu-text-xs);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* ── EmptyState ─────────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-4) var(--comu-space-3);
+  color: var(--comu-text-muted);
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--comu-text-muted);
+  opacity: 0.6;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--comu-text);
+  font-size: var(--comu-text-md);
+  font-weight: 600;
+}
+
+.emptyBody {
+  margin: 0;
+  max-width: 34ch;
+  font-size: var(--comu-text-sm);
+}
+
+/* ── Skeleton ───────────────────────────────────────────────────── */
+.skeleton {
+  border-radius: var(--comu-radius-sm);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--comu-text) 8%, transparent) 25%,
+    color-mix(in srgb, var(--comu-text) 16%, transparent) 37%,
+    color-mix(in srgb, var(--comu-text) 8%, transparent) 63%
+  );
+  background-size: 400% 100%;
+  animation: comu-shimmer 1.4s ease infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* ── ErrorBoundary ──────────────────────────────────────────────── */
+.boundary {
+  margin: var(--comu-space-2);
+  padding: var(--comu-space-3);
+  border: 1px solid var(--comu-status-error);
+  border-radius: var(--comu-radius-md);
+  background: var(--comu-tint-error);
+  color: var(--comu-text);
+  font-size: var(--comu-text-sm);
+}
+
+.boundaryTitle {
+  margin: 0 0 var(--comu-space-1);
+  font-weight: 600;
+}
+
+.boundaryDetail {
+  margin: 0 0 var(--comu-space-2);
+  color: var(--comu-text-muted);
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+}

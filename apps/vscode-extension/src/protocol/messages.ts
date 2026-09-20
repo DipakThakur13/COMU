@@ -26,6 +26,17 @@ export interface SubagentSummaryUI {
   findings?: string;
 }
 
+/**
+ * The React interface uses the shared protocol in @comu/ui-state, which both sides import so a
+ * message shape cannot drift. These legacy shapes serve the outgoing interface until it is removed.
+ */
+export type {
+  HostToWebviewMessage,
+  WebviewToHostMessage,
+  HostSnapshotMessage,
+  HostEventsMessage
+} from "@comu/ui-state";
+
 export type WebviewMessage =
   | { type: "ready" }
   | { type: "webview_ready" }
@@ -39,6 +50,8 @@ export type WebviewMessage =
   | { type: "remove_provider_key"; providerId: string }
   | { type: "test_provider"; providerId: string; key?: string; endpoint?: string }
   | { type: "request_providers" }
+  | { type: "request_snapshot"; reason: "gap" | "initial" | "manual"; lastSeq: number }
+  | { type: "set_autonomy"; autonomy: TaskAutonomy }
   | { type: "open_settings"; targetProviderId?: string }
   | { type: "respond_interaction"; taskId: string; interactionId: string; response: InteractionResponse }
   | { type: "approve_commit"; taskId: string; message?: string }
@@ -57,7 +70,7 @@ export type ExtensionMessage =
   | { type: "provider_test_result"; providerId: string; result: ProviderTestResult }
   | { type: "open_settings"; targetProviderId?: string }
   | { type: "memory_update"; entries: WorkspaceMemoryEntry[] }
-  | { type: "settings_update"; defaultAutonomy: TaskAutonomy }
+  | { type: "settings_update"; defaultAutonomy: TaskAutonomy; defaultModelId?: string; experimentalUi?: boolean }
   | { type: "agent_event"; event: AgentEvent };
 
 export interface WorkingSetUI {
