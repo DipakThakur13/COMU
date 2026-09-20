@@ -102,7 +102,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 
 ---
 
-## 9. Web Documentation Sandboxing & SSRF Defenses
+## 10. Web Documentation Sandboxing & SSRF Defenses
 
 - **Strict Domain Allowlist**: Only explicitly whitelisted official engineering documentation domains (`developer.mozilla.org`, `docs.github.com`, `typescriptlang.org`, etc.) can be queried.
 - **Scheme & Protocol**: Only `https:` URLs are permitted; plain `http:` is blocked.
@@ -110,3 +110,20 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 - **Zero JavaScript Execution**: Fetched HTML is parsed purely as static text; scripts, iframes, styles, and active content are stripped.
 - **Strict Resource Bounds**: Requests enforce timeouts, a 2MB maximum payload size, and a 3-hop redirect maximum.
 
+---
+
+## 11. Why these choices
+
+This document states what the guarantees are. The reasoning behind the structural ones, including
+the options rejected and the incidents that produced them, is in `docs/decisions/`:
+
+- [0002](decisions/0002-autonomy-model-and-scope-keys.md) and
+  [0003](decisions/0003-approval-semantics-and-expiry-as-denial.md) — autonomy, scope keys, and why
+  an expired approval is a denial rather than nothing.
+- [0004](decisions/0004-one-required-abort-signal.md) — why cancellation is one required signal
+  enforced over the whole registry rather than a convention.
+- [0008](decisions/0008-the-runtime-is-a-private-local-service.md) — why the runtime has four
+  overlapping network controls when two would appear to be enough.
+- [0012](decisions/0012-commands-are-allowed-by-name-and-git-by-subcommand.md) and
+  [0013](decisions/0013-no-shell-and-windows-shims.md) — why git is decided per subcommand and per
+  caller, and why no command ever reaches a shell.
