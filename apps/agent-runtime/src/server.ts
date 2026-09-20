@@ -186,6 +186,74 @@ export function resolveWorkspaceRoot(workspace: unknown): WorkspaceResolution {
   return { ok: true, rootPath, workspaceId };
 }
 
+/**
+ * The execution budget a task runs under when the caller asks for nothing else.
+ *
+ * These are the values COMU has always shipped. They are exported so that anything measuring the
+ * agent can record which budget a run used, rather than assuming.
+ */
+export const DEFAULT_AGENT_LIMITS = {
+  maxSteps: 30,
+  maxToolCalls: 100,
+  maxExecutionTimeMs: 5 * 60 * 1000,
+  maxRepairAttempts: 3,
+  maxValidationRuns: 6,
+  maxRepairFiles: 5,
+  maxRepairTimeMs: 180_000
+} as const;
+
+/**
+ * Ceilings on what a caller may ask for.
+ *
+ * A budget is not a security boundary, so these are generous. They exist so that a typo cannot
+ * wedge the runtime on a task that will never end, and so an overridable limit stays a limit.
+ */
+const MAX_AGENT_LIMITS: Record<keyof typeof DEFAULT_AGENT_LIMITS, number> = {
+  maxSteps: 1000,
+  maxToolCalls: 5000,
+  maxExecutionTimeMs: 2 * 60 * 60 * 1000,
+  maxRepairAttempts: 20,
+  maxValidationRuns: 50,
+  maxRepairFiles: 100,
+  maxRepairTimeMs: 30 * 60 * 1000
+};
+
+export type TaskLimitsResolution =
+  | { ok: true; limits: typeof DEFAULT_AGENT_LIMITS }
+  | { ok: false; message: string };
+
+/**
+ * Merges a caller's requested budget over the defaults.
+ *
+ * The five minute default is right for someone watching a panel and wrong for a long refactor, so
+ * it is a parameter rather than a constant. Anything a benchmark measures under a raised budget
+ * has to say so, which is why the resolved budget is reported back on the task.
+ */
+export function resolveTaskLimits(requested: unknown): TaskLimitsResolution {
+  if (requested === undefined || requested === null) {
+    return { ok: true, limits: { ...DEFAULT_AGENT_LIMITS } };
+  }
+  if (typeof requested !== 'object' || Array.isArray(requested)) {
+    return { ok: false, message: 'limits must be an object.' };
+  }
+
+  const limits: Record<string, number> = { ...DEFAULT_AGENT_LIMITS };
+  for (const [key, value] of Object.entries(requested as Record<string, unknown>)) {
+    if (!(key in DEFAULT_AGENT_LIMITS)) {
+      return { ok: false, message: `Unknown limit '${key}'. Allowed: ${Object.keys(DEFAULT_AGENT_LIMITS).join(', ')}.` };
+    }
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      return { ok: false, message: `limits.${key} must be a positive integer (received ${JSON.stringify(value)}).` };
+    }
+    const ceiling = MAX_AGENT_LIMITS[key as keyof typeof DEFAULT_AGENT_LIMITS];
+    if (value > ceiling) {
+      return { ok: false, message: `limits.${key} must not exceed ${ceiling} (received ${value}).` };
+    }
+    limits[key] = value;
+  }
+  return { ok: true, limits: limits as unknown as typeof DEFAULT_AGENT_LIMITS };
+}
+
 export function defaultProviderFactory(selection: ProviderSelection, providers: Record<string, any>): ModelProvider {
   const { modelId, providerId } = selection;
   if (providerId === 'ollama') {
@@ -593,12 +661,24 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
     autonomy = requested as TaskAutonomy;
   }
 
+  // Budget Guard: the shipped defaults unless the caller asks for something else, within ceilings.
+  const limitsResolution = resolveTaskLimits(taskReq.limits);
+  if (!limitsResolution.ok) {
+    return res.status(400).json({
+      error: 'INVALID_LIMITS',
+      code: 'INVALID_LIMITS',
+      message: limitsResolution.message
+    });
+  }
+  const taskLimits = limitsResolution.limits;
+
   const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
   const controller = new AbortController();
   taskControllers.set(taskId, controller);
 
-  res.status(201).json({ taskId, workspaceRoot });
+  // The resolved budget is reported back, so a caller that measures a run knows what it ran under.
+  res.status(201).json({ taskId, workspaceRoot, limits: taskLimits });
 
   const emit = (event: AgentEvent) => {
     eventStore.append(event);
@@ -651,13 +731,7 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
         systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
         userPrompt: taskReq.description || taskReq.prompt || "",
         limits: {
-          maxSteps: 30,
-          maxToolCalls: 100,
-          maxExecutionTimeMs: 5 * 60 * 1000, // 5 mins
-          maxRepairAttempts: 3,
-          maxValidationRuns: 6,
-          maxRepairFiles: 5,
-          maxRepairTimeMs: 180000,
+          ...taskLimits,
           approvalTimeoutMs,
           approvalObserverGraceMs: options.approvalObserverGraceMs
         },
