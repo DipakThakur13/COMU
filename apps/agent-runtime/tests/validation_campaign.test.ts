@@ -1870,10 +1870,10 @@ function unusedHelper_v2() { return 42; }
       permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } }
     };
 
-    // Denied push
-    const resDenied = await pushTool.execute({ remote: "origin", branch: "main", approved: false }, toolCtx);
-    expect(resDenied.success).toBe(false);
-    expect(resDenied.error).toContain("PUSH_NOT_AUTHORIZED");
+    // No self-asserted approval exists any more; the human gate is the orchestrator's ApprovalGate.
+    void toolCtx;
+    expect(pushTool.requiresApproval).toBe("always");
+    expect(JSON.stringify(pushTool.inputSchema)).not.toContain("approved");
 
     campaignBenchmarkResults.push({
       scenarioId: "SCENARIO_21",
@@ -1896,7 +1896,7 @@ function unusedHelper_v2() { return 42; }
       memoryRetrievedCount: 0,
       memoryStaleOverridden: false,
       completionGateHonored: true,
-      reason: "Push without approved: true failed with PUSH_NOT_AUTHORIZED."
+      reason: "git_push is marked requiresApproval: always and exposes no model-settable approval argument."
     });
   });
 

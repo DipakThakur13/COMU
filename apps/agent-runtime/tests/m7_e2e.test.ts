@@ -389,18 +389,10 @@ describe("Milestone 7: Persistent Intelligence, Git Governance, Workers & Web Do
   it("Scenario 9: Git Push Always Requires Explicit Human Approval", async () => {
     const pushTool = new GitPushTool();
 
-    // Push without explicit approval MUST fail
-    const pushRes = await pushTool.execute(
-      { remote: "origin", branch: "main", approved: false },
-      {
-        taskId: "task-git-9",
-        workspace: { rootPath: tempDir },
-        limits: { maxResults: 10, maxBytes: 10000 },
-        permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } }
-      }
-    );
-    expect(pushRes.success).toBe(false);
-    expect(pushRes.error).toContain("PUSH_NOT_AUTHORIZED");
+    // The approval is a human decision in the orchestrator's ApprovalGate, in every autonomy level.
+    // The tool exposes no argument the model could set to pre-authorise it.
+    expect(pushTool.requiresApproval).toBe("always");
+    expect(JSON.stringify(pushTool.inputSchema)).not.toContain("approved");
   });
 
   // ============================================================

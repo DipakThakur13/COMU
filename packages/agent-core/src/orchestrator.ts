@@ -221,6 +221,7 @@ export class AgentOrchestrator {
       onEvent: ctx.onEvent,
       abortSignal: ctx.abortSignal,
       hasHumanObserver: ctx.hasHumanObserver,
+      observerGraceMs: ctx.limits.approvalObserverGraceMs,
       timeoutMs: ctx.limits.approvalTimeoutMs ?? 10 * 60 * 1000,
       createUnifiedDiff: (path, original, proposed) => this.diffEngine.createUnifiedDiff(path, original, proposed)
     });

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { AgentTool, ToolCapability, ToolContext } from "@comu/tool-core";
+import { AgentTool, ToolCapability, ToolContext, ToolApprovalRequirement } from "@comu/tool-core";
 import { ProcessManager, CommandPlan } from "@comu/terminal";
 import { GitCommitResult } from "@comu/protocol";
 
@@ -7,6 +7,8 @@ export class GitCommitTool implements AgentTool<any, GitCommitResult> {
   name = "git_commit";
   description = "Create a git commit with conventional commit message validation and staged file verification.";
   capabilities: ToolCapability[] = ["execute"];
+  /** Commits are gated by the autonomy level (ask), like any other mutating action. */
+  requiresApproval: ToolApprovalRequirement = "byAutonomy";
   inputSchema = {
     type: "object",
     properties: {

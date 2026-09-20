@@ -25,6 +25,11 @@ export interface ApprovalGateOptions {
   abortSignal?: AbortSignal;
   /** Returns true while a human can see the task (an event stream subscriber is attached). */
   hasHumanObserver?: () => boolean;
+  /**
+   * Grace period for an observer to attach before the task counts as headless. The panel
+   * subscribes after task creation, so the first approval can otherwise race the subscription.
+   */
+  observerGraceMs?: number;
   /** Bounded wait for a decision. Expiry is a denial, never an implicit approval. */
   timeoutMs: number;
   createUnifiedDiff: (path: string, original: string, proposed: string) => string;
@@ -281,7 +286,7 @@ export class ApprovalGate {
       return decision;
     }
 
-    if (this.options.hasHumanObserver && !this.options.hasHumanObserver()) {
+    if (this.options.hasHumanObserver && !(await this.waitForObserver())) {
       const decision: GateDecision = {
         approved: false,
         reason: "NO_HUMAN_OBSERVER",
@@ -329,6 +334,22 @@ export class ApprovalGate {
     }
     this.record(payload, decision, answer.interactionId);
     return decision;
+  }
+
+  /** Polls the observer callback for up to observerGraceMs. Rejects if the task is cancelled meanwhile. */
+  private async waitForObserver(): Promise<boolean> {
+    const check = this.options.hasHumanObserver!;
+    if (check()) return true;
+    const grace = this.options.observerGraceMs ?? 3000;
+    const deadline = Date.now() + grace;
+    while (Date.now() < deadline) {
+      if (this.options.abortSignal?.aborted) {
+        throw new Error("Task was cancelled while waiting for an observer.");
+      }
+      await new Promise(r => setTimeout(r, Math.min(50, Math.max(1, deadline - Date.now()))));
+      if (check()) return true;
+    }
+    return check();
   }
 
   private record(payload: ApprovalPayload, decision: GateDecision, interactionId?: string) {

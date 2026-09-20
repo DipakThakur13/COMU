@@ -1,40 +1,34 @@
-import { AgentTool, ToolCapability, ToolContext } from "@comu/tool-core";
+import { AgentTool, ToolCapability, ToolContext, ToolApprovalRequirement } from "@comu/tool-core";
 import { ProcessManager, CommandPlan } from "@comu/terminal";
 import { GitPushResult } from "@comu/protocol";
 
+/**
+ * Pushing is the one action that leaves the machine, so it is gated by a human in every autonomy
+ * level. The gate is the orchestrator's ApprovalGate, driven by `requiresApproval: "always"`; the
+ * model has no argument it can set to skip it, and the approval is never grantable for a session.
+ */
 export class GitPushTool implements AgentTool<any, GitPushResult> {
   name = "git_push";
-  description = "Push committed changes to a remote repository. Strictly requires explicit human approval.";
+  description = "Push committed changes to a remote repository. A human approves every push; there is no way to pre-authorise it.";
   capabilities: ToolCapability[] = ["execute"];
+  requiresApproval: ToolApprovalRequirement = "always";
   inputSchema = {
     type: "object",
     properties: {
       remote: { type: "string", description: "Remote repository name, defaults to origin" },
-      branch: { type: "string", description: "Remote branch name" },
-      approved: { type: "boolean", description: "Explicit developer approval flag" }
+      branch: { type: "string", description: "Remote branch name" }
     },
-    required: ["approved"]
+    required: []
   };
 
   private processManager = new ProcessManager();
 
   async execute(
-    args: { remote?: string; branch?: string; approved?: boolean },
+    args: { remote?: string; branch?: string },
     context: ToolContext
   ): Promise<GitPushResult> {
     const cwd = context.workspace.rootPath;
     const remote = args.remote || "origin";
-
-    // Strict invariant: Push ALWAYS requires explicit approval
-    if (!args.approved) {
-      return {
-        success: false,
-        remote,
-        branch: args.branch || "",
-        commitHash: "",
-        error: "PUSH_NOT_AUTHORIZED: git push strictly requires explicit human approval."
-      };
-    }
 
     if (!/^[a-zA-Z0-9_\-]+$/.test(remote)) {
       return {

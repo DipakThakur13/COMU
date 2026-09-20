@@ -41,6 +41,8 @@ export interface RuntimeServerOptions {
   allowedOriginPattern?: RegExp;
   /** Bounded wait for approval decisions; expiry is a denial. Defaults to COMU_APPROVAL_TIMEOUT_MS or 10 minutes. */
   approvalTimeoutMs?: number;
+  /** Grace period for an event stream subscriber to attach before a task counts as headless. Defaults to 3 seconds. */
+  approvalObserverGraceMs?: number;
 }
 
 export const AUTH_HEADER = 'authorization';
@@ -646,7 +648,8 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
           maxValidationRuns: 6,
           maxRepairFiles: 5,
           maxRepairTimeMs: 180000,
-          approvalTimeoutMs
+          approvalTimeoutMs,
+          approvalObserverGraceMs: options.approvalObserverGraceMs
         },
         onEvent: (event: AgentEvent) => {
           console.log(`[Event ${event.type}]`, event);

@@ -58,18 +58,18 @@ describe("Git Tools & Governance", () => {
     expect(GitCommitTool.validateCommitMessage("WIP").valid).toBe(false);
   });
 
-  it("should strictly reject git push without explicit human approval", async () => {
+  it("git push carries no self-asserted approval flag and is marked requiresApproval: always", () => {
     const pushTool = new GitPushTool();
+    // The model can no longer authorise its own push: the argument is gone from the schema.
+    expect(Object.keys(pushTool.inputSchema.properties)).toEqual(["remote", "branch"]);
+    expect(pushTool.inputSchema.required).toEqual([]);
+    expect(JSON.stringify(pushTool.inputSchema)).not.toContain("approved");
+    // The gate lives in the orchestrator and reads this marker in every autonomy level.
+    expect(pushTool.requiresApproval).toBe("always");
+  });
 
-    // Unapproved
-    const resUnapproved = await pushTool.execute({ remote: "origin", branch: "feat", approved: false }, fakeContext);
-    expect(resUnapproved.success).toBe(false);
-    expect(resUnapproved.error).toContain("PUSH_NOT_AUTHORIZED");
-
-    // Missing approval argument
-    const resMissing = await pushTool.execute({ remote: "origin", branch: "feat" } as any, fakeContext);
-    expect(resMissing.success).toBe(false);
-    expect(resMissing.error).toContain("PUSH_NOT_AUTHORIZED");
+  it("git commit is gated by the autonomy level", () => {
+    expect(new GitCommitTool().requiresApproval).toBe("byAutonomy");
   });
 
   it("should guarantee git reset --hard and git clean -fd are permanently forbidden", () => {

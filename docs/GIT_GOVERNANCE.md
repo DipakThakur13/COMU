@@ -11,7 +11,7 @@ Milestone 7 introduces controlled, audited Git governance capabilities in `tools
 1. **Downstream of Completion Gate:** Git staging and commit operations occur strictly AFTER the task passes all verification checks, workspace integrity verification, and the M6 Completion Gate.
 2. **Authorized ChangeSet Invariant:** `stagedFiles ⊆ authorizedChangeSetFiles`. COMU never runs `git add .` or stages wildcard patterns.
 3. **Staged Diff Integrity:** `git diff --cached` must match the expected `ChangeSet` diff. If unrelated developer modifications are present in the staged area, commit is immediately blocked.
-4. **Push Authorization Invariant:** `git_push` strictly requires explicit human approval (`approved: true`). Autonomous or unattended pushing is impossible by design.
+4. **Push Authorization Invariant:** `git_push` is marked `requiresApproval: "always"` and is gated by the orchestrator's ApprovalGate in every autonomy level. There is no model-settable approval argument, no session grant for pushes, and an unattended task cannot push: with no human observer the gate denies.
 5. **Permanently Forbidden Commands:**
    - `git reset --hard` (Strictly forbidden across all tools and fallback shells)
    - `git clean -fd` (Strictly forbidden across all tools and fallback shells)

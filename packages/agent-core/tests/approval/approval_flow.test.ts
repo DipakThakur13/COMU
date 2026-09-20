@@ -54,7 +54,7 @@ function harness(autonomy: TaskAutonomy, responses: ModelResponse[], opts: { has
     autonomy,
     systemPrompt: "sys",
     userPrompt: "Add a constant to src/a.ts",
-    limits: { maxSteps: 12, maxToolCalls: 12, maxExecutionTimeMs: opts.maxExecutionTimeMs ?? 20_000, approvalTimeoutMs: opts.approvalTimeoutMs },
+    limits: { maxSteps: 12, maxToolCalls: 12, maxExecutionTimeMs: opts.maxExecutionTimeMs ?? 20_000, approvalTimeoutMs: opts.approvalTimeoutMs, approvalObserverGraceMs: 0 },
     hasHumanObserver: opts.hasHumanObserver,
     abortSignal: controller.signal,
     onEvent: e => events.push(e)

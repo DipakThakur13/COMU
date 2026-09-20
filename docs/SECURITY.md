@@ -82,7 +82,7 @@ All terminal actions are governed by `CommandPolicy` and managed by `ProcessMana
 - **Gated Execution**: Staging and committing are strictly forbidden before passing the Completion Gate.
 - **ChangeSet-Restricted Staging**: Staging is strictly limited to files modified within the task's authorized `ChangeSet`. Wildcard staging (`git add .`) is permanently blocked.
 - **Staged Diff Integrity**: `git diff --cached` must match the expected ChangeSet. Any extraneous or unexpected developer changes halt commit immediately.
-- **Explicit Push Approval**: `git_push` strictly requires developer approval (`approved: true`). Autonomous push is impossible.
+- **Explicit Push Approval**: `git_push` is marked `requiresApproval: "always"`, so the orchestrator's ApprovalGate holds it for a human decision in every autonomy level, including `auto`; the approval is never grantable for a session. The tool exposes no argument the model could set to pre-authorise a push. With no human attached, the push is denied. Commits are `requiresApproval: "byAutonomy"`.
 - **Permanently Forbidden Commands**: `git reset --hard` and `git clean -fd` remain permanently forbidden across all tools and shells.
 
 ---

@@ -658,6 +658,12 @@ export interface AgentLimits {
   maxExecutionTimeMs: number;
   /** Bounded wait for an approval decision; expiry is a denial. Defaults to 10 minutes. */
   approvalTimeoutMs?: number;
+  /**
+   * How long the gate waits for a human observer to attach before treating the task as headless.
+   * The panel subscribes to the event stream only after the task is created, so a fast model can
+   * reach its first approval before the subscription lands. Defaults to 3 seconds.
+   */
+  approvalObserverGraceMs?: number;
   maxRepairAttempts?: number;
   maxValidationRuns?: number;
   maxRepairFiles?: number;

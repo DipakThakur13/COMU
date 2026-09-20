@@ -48,7 +48,7 @@ describe("Approval over HTTP (Phase 1.2)", () => {
   beforeAll(async () => {
     fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "comu-approval-"));
     fs.writeFileSync(path.join(fixtureRoot, "notes.txt"), "original\n", "utf8");
-    const app = createRuntimeApp({ providerFactory: () => model, approvalTimeoutMs: 1500 });
+    const app = createRuntimeApp({ providerFactory: () => model, approvalTimeoutMs: 1500, approvalObserverGraceMs: 150 });
     await new Promise<void>(resolve => {
       server = app.listen(0, "127.0.0.1", () => {
         baseUrl = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -142,6 +142,42 @@ describe("Approval over HTTP (Phase 1.2)", () => {
     expect(decided?.decision).toBe("NO_HUMAN_OBSERVER");
     expect(fs.existsSync(path.join(fixtureRoot, "headless.txt"))).toBe(false);
     expect(events.find(e => e.type === "task.failed")).toBeUndefined();
+  });
+
+  it("auto: git_push still requires a human; with none attached it is denied and never runs", async () => {
+    model.responses = [
+      { text: "Pushing.", toolCalls: [{ id: "c1", name: "git_push", arguments: { remote: "origin", branch: "main" } }] },
+      { text: "Push was not approved; stopping." },
+      { text: "Done." }
+    ];
+    const { body } = await start("auto", "Add a note and push it");
+    const taskId = body.taskId as string;
+    expect(await waitForInteraction(baseUrl, taskId, 20)).toBeNull(); // headless: nothing to approve with
+    const events = await collectTaskEvents(baseUrl, taskId, {}, 10000);
+    const decided = events.find(e => e.type === "approval.decided") as any;
+    expect(decided).toMatchObject({ tool: "git_push", kind: "git_push", approved: false, decision: "NO_HUMAN_OBSERVER" });
+    const pushResult = events.find(e => e.type === "tool.completed" && (e as any).tool === "git_push") as any;
+    expect(pushResult.result.error).toContain("APPROVAL_DENIED");
+    expect(events.some(e => e.type === "git.push.completed")).toBe(false);
+  });
+
+  it("auto: git_push with a human attached raises a non-grantable approval card", async () => {
+    model.responses = [
+      { text: "Pushing.", toolCalls: [{ id: "c1", name: "git_push", arguments: { remote: "origin", branch: "main" } }] },
+      { text: "Push was denied; stopping." },
+      { text: "Done." }
+    ];
+    const { body } = await start("auto", "Add a note and push it");
+    const taskId = body.taskId as string;
+    const collecting = collectTaskEvents(baseUrl, taskId, {}, 15000);
+    const interaction = await waitForInteraction(baseUrl, taskId);
+    expect(interaction, "expected a push approval").toBeTruthy();
+    expect(interaction.approval.kind).toBe("git_push");
+    expect(interaction.approval.scopes).toEqual([]);
+    const ok = await json(baseUrl, `/v1/tasks/${taskId}/interactions/${interaction.interactionId}/respond`, "POST", { response: { type: "DENY" } });
+    expect(ok.status).toBe(200);
+    const events = await collecting;
+    expect((events.find(e => e.type === "approval.decided") as any)?.decision).toBe("DENIED");
   });
 
   it("auto: no approval is raised and the write lands", async () => {

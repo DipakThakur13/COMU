@@ -166,12 +166,35 @@ describe("ApprovalGate: decisions and the no-human case", () => {
 
   it("denies immediately when no human is observing, without raising an interaction", async () => {
     const im = new InteractionManager(1000);
-    const { g, events } = gate({ interactionManager: im, hasHumanObserver: () => false });
+    const { g, events } = gate({ interactionManager: im, hasHumanObserver: () => false, observerGraceMs: 0 });
     const decision = await g.decide(g.buildPayload(writeTool, { path: "a.ts", content: "x" }, { exists: false }));
     expect(decision.approved).toBe(false);
     expect(decision.reason).toBe("NO_HUMAN_OBSERVER");
     expect(im.getPendingInteraction("t1")).toBeUndefined();
     expect(events.find(e => e.type === "approval.decided")).toMatchObject({ approved: false, decision: "NO_HUMAN_OBSERVER", tool: "write_file", path: "a.ts" });
+  });
+
+  it("waits for an observer to attach within the grace period before deciding headless", async () => {
+    const im = new InteractionManager(5000);
+    let attached = false;
+    setTimeout(() => { attached = true; }, 60);
+    const { g } = gate({ interactionManager: im, hasHumanObserver: () => attached, observerGraceMs: 500 });
+    const pending = g.decide(g.buildPayload(writeTool, { path: "a.ts", content: "x" }, { exists: false }));
+    // an interaction appears once the observer is there
+    let interaction;
+    for (let i = 0; i < 40 && !interaction; i++) {
+      await new Promise(r => setTimeout(r, 10));
+      interaction = im.getPendingInteraction("t1");
+    }
+    expect(interaction).toBeDefined();
+    im.resolveInteraction("t1", interaction!.interactionId, { type: "APPROVE" });
+    expect((await pending).reason).toBe("APPROVED");
+
+    const never = gate({ interactionManager: im, hasHumanObserver: () => false, observerGraceMs: 80 });
+    const started = Date.now();
+    const denied = await never.g.decide(never.g.buildPayload(writeTool, { path: "b.ts", content: "x" }, { exists: false }));
+    expect(denied.reason).toBe("NO_HUMAN_OBSERVER");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(70);
   });
 
   it("denies after the bounded wait and records TIMEOUT", async () => {

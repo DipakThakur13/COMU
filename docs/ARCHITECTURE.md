@@ -119,7 +119,7 @@ OPTIONAL HUMAN-APPROVED PUSH
 - All Git modification occurs downstream of engineering verification and the Completion Gate.
 - Staging invariant: `stagedFiles ⊆ authorizedChangeSetFiles`. Wildcards (`git add .`) are permanently blocked.
 - Cached diff verification: `git diff --cached` must match the authorized ChangeSet before `git commit` proceeds.
-- Push invariant: `git_push` strictly requires explicit human approval (`approved: true`).
+- Push invariant: `git_push` is `requiresApproval: "always"`; the ApprovalGate asks a human in every autonomy level and never grants it for a session.
 - Destructive commands (`git reset --hard`, `git clean -fd`) remain permanently forbidden.
 
 ### 3.3 Persistent Workspace Intelligence (Memory Engine)
