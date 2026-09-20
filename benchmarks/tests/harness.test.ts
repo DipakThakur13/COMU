@@ -208,7 +208,7 @@ describe("Failure classification", () => {
     repairAttempts: 0,
     repairRecovered: false,
     limitReached: false,
-    gatewayErrors: 0,
+    providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
     limits: {},
     ...over
   });
@@ -278,7 +278,7 @@ describe("Summarising", () => {
       planVersions: 0,
       repairAttempts: 0,
       repairRecovered: false,
-      gatewayErrors: 0,
+      providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
       failureClass: null,
       ...over
     }) as RunRecord;
@@ -290,8 +290,8 @@ describe("Summarising", () => {
       record({ fixtureId: "b", rep: 1 })
     ]);
     expect(summary.perFixture).toEqual([
-      { fixtureId: "a", tier: "T1", correct: 1, of: 2, peakContextRatio: 0.05, gatewayErrors: 0 },
-      { fixtureId: "b", tier: "T1", correct: 1, of: 1, peakContextRatio: 0.05, gatewayErrors: 0 }
+      { fixtureId: "a", tier: "T1", correct: 1, of: 2, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 } },
+      { fixtureId: "b", tier: "T1", correct: 1, of: 1, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 } }
     ]);
     expect(summary.failureCounts).toEqual({ planning_miss: 1 });
   });
@@ -308,10 +308,23 @@ describe("Summarising", () => {
     expect(summary.perFixture.find(f => f.fixtureId === "small")?.peakContextRatio).toBe(0.04);
   });
 
-  it("counts gateway errors on their own, because they track prompt size", () => {
-    const summary = summarise([record({ gatewayErrors: 2 }), record({ rep: 2, gatewayErrors: 1 })]);
-    expect(summary.gatewayErrors).toBe(3);
-    expect(summary.perFixture[0].gatewayErrors).toBe(3);
+  it("counts provider failures by cause, not as one number", () => {
+    // Only some of these are COMU's. A timeout under concurrency is the measurement's own
+    // contention arriving as a failed task; a gateway refusal tracks request size. Summing them
+    // would hide which one moved.
+    const summary = summarise([
+      record({ providerFailures: { timeouts: 2, rateLimits: 0, gateway: 1, other: 0 } }),
+      record({ rep: 2, providerFailures: { timeouts: 0, rateLimits: 3, gateway: 1, other: 1 } })
+    ]);
+    expect(summary.providerFailures).toEqual({ timeouts: 2, rateLimits: 3, gateway: 2, other: 1 });
+    expect(summary.perFixture[0].providerFailures.timeouts).toBe(2);
+  });
+
+  it("treats a record written before the breakdown existed as zeros", () => {
+    const legacy = record({});
+    delete (legacy as Partial<RunRecord>).providerFailures;
+    expect(() => summarise([legacy])).not.toThrow();
+    expect(summarise([legacy]).providerFailures).toEqual({ timeouts: 0, rateLimits: 0, gateway: 0, other: 0 });
   });
 
   it("counts the two directions of disagreement separately", () => {

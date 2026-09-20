@@ -68,6 +68,17 @@ export function writeRun(run: BenchmarkRun, outDir: string): { jsonPath: string;
   return { jsonPath, markdownPath };
 }
 
+/**
+ * Timeouts, rate limits, gateway, other.
+ *
+ * Kept as four numbers rather than a total because only some of them are COMU's: a timeout under
+ * concurrency is the measurement's own contention arriving as a failed task.
+ */
+function fmtFailures(f: { timeouts: number; rateLimits: number; gateway: number; other: number } | undefined): string {
+  if (!f) return "not recorded";
+  return `${f.timeouts}/${f.rateLimits}/${f.gateway}/${f.other}`;
+}
+
 function fmtSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
@@ -94,12 +105,12 @@ export function renderMarkdown(run: BenchmarkRun): string {
   // that never does reports something true of neither.
   lines.push("## Per fixture");
   lines.push("");
-  lines.push("| Fixture | Tier | Correct | Peak prompt, share of window | Gateway errors |");
+  lines.push("| Fixture | Tier | Correct | Peak prompt, share of window | Provider failures (t/r/g/o) |");
   lines.push("|---|---|---|---|---|");
   for (const entry of summary.perFixture) {
     const tier = TIER_NAMES[entry.tier as Tier] ?? entry.tier;
     lines.push(
-      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${entry.gatewayErrors} |`
+      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
     );
   }
   lines.push("");
@@ -121,7 +132,11 @@ export function renderMarkdown(run: BenchmarkRun): string {
     `| Prompt tokens per run, median (range) | ${summary.promptTokens.median.toLocaleString()} (${summary.promptTokens.min.toLocaleString()} to ${summary.promptTokens.max.toLocaleString()}) |`
   );
   lines.push(`| Largest prompt seen, as a share of the window | ${(summary.maxPeakContextRatio * 100).toFixed(1)}% |`);
-  lines.push(`| Gateway errors (502, 503, 504) | ${summary.gatewayErrors} |`);
+  const pf = summary.providerFailures;
+  lines.push(`| Provider timeouts | ${pf.timeouts} |`);
+  lines.push(`| Provider rate limits (429) | ${pf.rateLimits} |`);
+  lines.push(`| Gateway refusals (502, 503, 504) | ${pf.gateway} |`);
+  lines.push(`| Other provider errors | ${pf.other} |`);
   lines.push("");
 
   lines.push("## Failure classes");

@@ -1,5 +1,10 @@
 import type { AgentEvent } from "@comu/protocol";
-import type { FailureClass, GraderVerdict, RunRecord } from "./types.js";
+import type { FailureClass, GraderVerdict, ProviderFailureCounts, RunRecord } from "./types.js";
+
+/**
+ * Records written before the breakdown existed carry no counts, so every read defaults to zero.
+ */
+const FAILURE_KEYS = ["timeouts", "rateLimits", "gateway", "other"] as const;
 import type { TaskOutcome } from "./runner.js";
 
 /**
@@ -137,7 +142,7 @@ export function assembleRecord(input: AssembleInput): RunRecord {
     peakPromptTokens: outcome.peakPromptTokens,
     contextWindow: input.contextWindow,
     peakContextRatio: Number(peakContextRatio.toFixed(4)),
-    gatewayErrors: outcome.gatewayErrors,
+    providerFailures: outcome.providerFailures,
     planSteps: outcome.planSteps,
     planVersions: outcome.planVersions,
     repairAttempts: outcome.repairAttempts,
@@ -165,7 +170,7 @@ export interface Summary {
   correct: number;
   falseCompletions: number;
   falseFailures: number;
-  gatewayErrors: number;
+  providerFailures: ProviderFailureCounts;
   durationMs: Spread;
   promptTokens: Spread;
   maxPeakContextRatio: number;
@@ -190,7 +195,7 @@ export interface Summary {
      * context ceiling bites: an aggregate maximum tells you one task got close and not which.
      */
     peakContextRatio: number;
-    gatewayErrors: number;
+    providerFailures: ProviderFailureCounts;
   }>;
   /** Fixtures that always, sometimes and never produced correct work. */
   reliability: { always: number; sometimes: number; never: number };
@@ -211,13 +216,13 @@ export function summarise(records: RunRecord[]): Summary {
     if (record.failureClass) failureCounts[record.failureClass] = (failureCounts[record.failureClass] ?? 0) + 1;
   }
 
-  const byFixture = new Map<string, { tier: string; correct: number; of: number; peakContextRatio: number; gatewayErrors: number }>();
+  const byFixture = new Map<string, { tier: string; correct: number; of: number; peakContextRatio: number; providerFailures: ProviderFailureCounts }>();
   for (const record of records) {
-    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, gatewayErrors: 0 };
+    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 } };
     entry.of += 1;
     if (record.grader.correct) entry.correct += 1;
     entry.peakContextRatio = Math.max(entry.peakContextRatio, record.peakContextRatio);
-    entry.gatewayErrors += record.gatewayErrors;
+    for (const k of FAILURE_KEYS) entry.providerFailures[k] += record.providerFailures?.[k] ?? 0;
     byFixture.set(record.fixtureId, entry);
   }
 
@@ -228,7 +233,7 @@ export function summarise(records: RunRecord[]): Summary {
       correct: v.correct,
       of: v.of,
       peakContextRatio: v.peakContextRatio,
-      gatewayErrors: v.gatewayErrors
+      providerFailures: v.providerFailures
     }))
     .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId));
 
@@ -237,7 +242,13 @@ export function summarise(records: RunRecord[]): Summary {
     correct: correct.length,
     falseCompletions: records.filter(r => r.falseCompletion).length,
     falseFailures: records.filter(r => r.falseFailure).length,
-    gatewayErrors: records.reduce((sum, r) => sum + r.gatewayErrors, 0),
+    providerFailures: records.reduce(
+      (acc, r) => {
+        for (const k of FAILURE_KEYS) acc[k] += r.providerFailures?.[k] ?? 0;
+        return acc;
+      },
+      { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 } as ProviderFailureCounts
+    ),
     durationMs: spread(records.map(r => r.durationMs)),
     promptTokens: spread(records.map(r => r.promptTokens)),
     maxPeakContextRatio: records.reduce((max, r) => Math.max(max, r.peakContextRatio), 0),

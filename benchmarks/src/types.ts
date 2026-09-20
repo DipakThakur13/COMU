@@ -125,6 +125,32 @@ export const FAILURE_CLASSES = [
 
 export type FailureClass = (typeof FAILURE_CLASSES)[number];
 
+export interface ProviderFailureCounts {
+  /** A request that passed modelRequestTimeoutMs. Under concurrency this is usually contention. */
+  timeouts: number;
+  /** 429. The measurement is asking for more than the account is allowed. */
+  rateLimits: number;
+  /** 502, 503 and 504: the provider's front door, which correlates with request size. */
+  gateway: number;
+  /** Everything else the provider refused. */
+  other: number;
+}
+
+/**
+ * Sorts a provider failure by cause.
+ *
+ * Order matters. A timeout is raised by COMU itself and carries no HTTP status, so it has to be
+ * matched first or it would fall through to "other" and hide the one cause the benchmark is
+ * capable of creating for itself.
+ */
+export function classifyProviderFailure(text: string): keyof ProviderFailureCounts {
+  if (/timed out after/i.test(text)) return "timeouts";
+  if (/(^|[^0-9])429([^0-9]|$)/.test(text) || /rate limit/i.test(text)) return "rateLimits";
+  if (/(^|[^0-9])(502|503|504)([^0-9]|$)/.test(text)) return "gateway";
+  return "other";
+}
+
+
 export interface GraderVerdict {
   correct: boolean;
   /** Why, in words, for whoever reads the result file. */
@@ -179,8 +205,8 @@ export interface RunRecord {
   /** peakPromptTokens / contextWindow. Keeps the context trend visible without an overflow. */
   peakContextRatio: number;
 
-  /** Requests the provider's gateway refused with 502, 503 or 504. Falls as prompts get smaller. */
-  gatewayErrors: number;
+  /** Why the provider rejected a request, counted by cause: timeouts, rate limits, gateway, other. */
+  providerFailures: ProviderFailureCounts;
 
   planSteps: number;
   planVersions: number;

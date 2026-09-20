@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import type { AgentEvent } from "@comu/protocol";
-import type { Command } from "./types.js";
+import { classifyProviderFailure, type Command, type ProviderFailureCounts } from "./types.js";
 
 /**
  * Drives one task against a running COMU runtime and records what happened.
@@ -27,13 +27,15 @@ export interface TaskOutcome {
   /** True when the run stopped at a step, tool call or repair limit. */
   limitReached: boolean;
   /**
-   * Requests the provider's gateway refused with 502, 503 or 504.
+   * Why the provider rejected a request, counted by cause.
    *
-   * Its own number because it correlates with prompt size rather than with anything COMU decided,
-   * so it should fall once prompts get smaller. Counting it inside "provider error" would hide
-   * that.
+   * Kept apart because they mean different things and only some of them are COMU's. A gateway
+   * refusal tracks request size and should fall once prompts get smaller. A timeout under
+   * concurrency is usually the instrument's own contention arriving as a failed task, which is a
+   * false failure the benchmark manufactured rather than anything the agent did. A rate limit says
+   * the measurement is running too fast. Only the remainder is the provider genuinely refusing.
    */
-  gatewayErrors: number;
+  providerFailures: ProviderFailureCounts;
   finalText: string;
   /**
    * The assistant's last turn of prose, accumulated from the stream.
@@ -89,7 +91,7 @@ interface Counters {
   verificationStatus?: string;
   status: TaskOutcome["status"];
   limitReached: boolean;
-  gatewayErrors: number;
+  providerFailures: ProviderFailureCounts;
   finalText: string;
   assistantText: string;
   streamBuffer: string;
@@ -139,10 +141,7 @@ function fold(counters: Counters, event: AgentEvent): void {
       counters.verificationStatus = e.result?.status ?? counters.verificationStatus;
       break;
     case "model_request.failed": {
-      const text = String(e.error ?? "");
-      // Word boundaries matter: without them any number containing 502, such as a token
-      // count, would be read as a gateway error.
-      if (/\b(502|503|504)\b/.test(text)) counters.gatewayErrors += 1;
+      counters.providerFailures[classifyProviderFailure(String(e.error ?? ""))] += 1;
       break;
     }
     case "interaction.requested":
@@ -211,7 +210,7 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
     repairRecovered: false,
     status: "unknown",
     limitReached: false,
-    gatewayErrors: 0,
+    providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
     finalText: "",
     assistantText: "",
     streamBuffer: ""
