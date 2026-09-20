@@ -8,3 +8,9 @@ test-results
 playwright-report
 COMU_*BRIEF.md
 Claude outputs/
+
+# Local credentials for the benchmark. Never committed: the provider key is read from here so it
+# never has to be typed on a command line, where it would land in shell history and the process
+# list. See benchmarks/README.md.
+.env.local
+**/.env.local

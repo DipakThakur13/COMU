@@ -19,6 +19,9 @@ is usually the most useful part.
 | [0002](0002-autonomy-model-and-scope-keys.md) | Three autonomy levels, and grants keyed by what was actually shown | Approval |
 | [0003](0003-approval-semantics-and-expiry-as-denial.md) | Every way an approval can end resolves to approved or denied, never nothing | Approval |
 | [0004](0004-one-required-abort-signal.md) | One required `AbortSignal`, enforced by a conformance suite over the registry | Tools |
+| [0005](0005-development-export-condition.md) | Workspace packages resolve to source through an export condition | Build |
+| [0006](0006-benchmark-grading-contract.md) | The benchmark grades the workspace, never COMU's own report | Measurement |
+| [0007](0007-a-stand-in-must-behave-like-the-thing-it-replaces.md) | A stand-in that does not behave like the thing it replaces tests nothing | Testing practice |
 
 ## What belongs here
 

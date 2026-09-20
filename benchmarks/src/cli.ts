@@ -10,7 +10,7 @@ import { summarise } from "./metrics.js";
 import { appendRecord, readJournal, writeRun } from "./report.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
-import { assertNoSecretInArgv } from "./secrets.js";
+import { assertNoSecretInArgv, loadLocalEnv } from "./secrets.js";
 import type { BenchmarkRun, RunRecord, Tier } from "./types.js";
 
 /**
@@ -95,6 +95,11 @@ async function main(): Promise<void> {
   // Before anything else: a credential on the command line is visible to every process on the
   // machine and lands in shell history.
   assertNoSecretInArgv(process.argv.slice(2));
+
+  // A gitignored .env.local removes the need to type a credential at all. Names only are printed.
+  for (const name of loadLocalEnv(path.dirname(fixturesRoot()))) {
+    console.log(`Loaded ${name}`);
+  }
 
   const args = parseArgs(process.argv.slice(2));
   const root = fixturesRoot();

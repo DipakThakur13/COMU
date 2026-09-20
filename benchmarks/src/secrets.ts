@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 /**
  * Keeping the provider key out of everything the benchmark writes down.
  *
@@ -23,6 +26,38 @@ const KEY_SHAPES = [
   /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}/,
   /(?<![A-Za-z0-9_-])exp-[A-Za-z0-9_-]{16,}/
 ];
+
+/**
+ * Loads credentials from a gitignored file so they never appear in a command.
+ *
+ * The guards below protect what COMU writes. They cannot reach the shell, and the shell is the
+ * only place a key has ever actually leaked here: typed inline on a benchmark invocation, it lands
+ * in shell history, in the process list, and in any transcript of the session. Reading it from a
+ * file removes the opportunity rather than relying on remembering.
+ *
+ * An existing environment variable always wins, so an explicitly exported key is never overridden.
+ */
+export function loadLocalEnv(startDir: string): string[] {
+  const loaded: string[] = [];
+  const candidates = [path.join(startDir, ".env.local"), path.join(startDir, "..", ".env.local")];
+
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    for (const raw of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq <= 0) continue;
+      const name = line.slice(0, eq).trim();
+      const value = line.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      if (!name || process.env[name] !== undefined) continue;
+      process.env[name] = value;
+      // The name only. Printing the value would defeat the point of the file.
+      loaded.push(`${name} (from ${path.basename(path.dirname(file))}/.env.local)`);
+    }
+  }
+  return loaded;
+}
 
 export class SecretLeakError extends Error {}
 

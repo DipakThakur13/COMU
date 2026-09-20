@@ -29,11 +29,25 @@ lands in shell history. Before anything is written, the run record, the event jo
 result files are checked for the credential and for anything shaped like one; a match aborts the
 write rather than redacting it, so a broken path cannot quietly keep producing clean-looking output.
 
+Put the credential in `benchmarks/.env.local`, which is gitignored and read automatically:
+
+```
+NVIDIA_API_KEY=...
+```
+
+Then no command ever contains it:
+
 ```bash
-export NVIDIA_API_KEY=...            # or EXPERIENTIAL_API_KEY / OPENAI_API_KEY
 pnpm bench --label B0 --reps 5
 pnpm bench --label smoke --tier T1 --reps 1
 ```
+
+An exported environment variable still wins where one is set, and only variable names are ever
+printed, never values.
+
+Do not pass a key inline. A command argument is visible in the process list, lands in shell history,
+and ends up in any transcript of the session. The guards in this harness protect what COMU writes;
+they cannot reach the shell, and the shell is the only place a key has actually leaked here.
 
 Repetitions: five for B0, B1 and the final run; three for intermediate checks.
 
