@@ -1,0 +1,15 @@
+{
+  "name": "@comu/ui-state",
+  "version": "0.2.4",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@comu/protocol": "workspace:*"
+  }
+}
