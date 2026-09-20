@@ -5,7 +5,7 @@ import { DomainPolicy } from "./domain_policy.js";
 export class WebDocsTool implements AgentTool<any, WebDocResult> {
   name = "web_docs";
   description = "Fetch official documentation content safely from allowed documentation domains.";
-  capabilities: ToolCapability[] = ["execute"];
+  capabilities: ToolCapability[] = ["network"];
   inputSchema = {
     type: "object",
     properties: {

@@ -88,8 +88,8 @@ COMU is engineered to answer the **6 Fundamental Engineering Questions** in real
 - **Mode-Aware Composer** (the selected mode travels with the task request and is honoured as-is; only **Auto** classifies):
   - **Auto**: Classifies intent with a deterministic fast path (politeness prefixes ignored), falls back to a cheap model classification when the rules cannot decide, and only asks a clarification question (as an inline input card) when the model is genuinely uncertain.
   - **Agent**: Full autonomous multi-step execution, testing, and self-repair.
-  - **Plan**: Generates comprehensive architectural designs and checklists without modifying code.
-  - **Ask**: Fast codebase exploration, semantic search, and technical Q&A.
+  - **Plan**: Generates comprehensive architectural designs and checklists without modifying code (no tools are offered or executable in Plan).
+  - **Ask**: Fast codebase exploration, semantic search, and technical Q&A. Read-only by contract: mutating and command tools are neither offered to the model nor executable if it names one anyway.
   - **Chat**: Conversational software engineering guidance.
 - **First-Class Instant Cancellation (`■ Stop`)**:
   - Non-blocking, instant transition to `◌ Cancelling…` (<5ms response). Immediately stops agent execution without freezing the editor.

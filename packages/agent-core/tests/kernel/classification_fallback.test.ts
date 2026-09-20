@@ -143,7 +143,7 @@ describe("AgentKernel AUTO routing with model fallback and clarification", () =>
     await pending;
     const contract = runSpy.mock.calls[0][1] as TaskContract;
     expect(contract.mode).toBe("ASK");
-    expect(contract.allowedCapabilities).toEqual(["read"]);
+    expect(contract.allowedCapabilities).toEqual(["read", "network"]);
   });
 
   it("fails honestly when the clarification expires", async () => {

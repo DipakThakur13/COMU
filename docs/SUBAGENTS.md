@@ -14,7 +14,7 @@ Milestone 7 introduces single-level worker delegation via `SubagentManager` in `
    - No `git_commit`, `git_push`, `git_create_branch`
    - No arbitrary terminal shell command execution
 3. **Strict Depth Invariant (`maxSubagentDepth = 1`):** Worker agents are children of the primary task. Workers MUST NOT spawn child workers. Recursive agent trees are strictly rejected by the runtime.
-4. **All Tool Execution Governed:** Every worker tool call passes through `ToolRegistry`, `ToolExecutor`, and standard capability permissions.
+4. **All Tool Execution Governed:** Every worker tool call passes through `ToolRegistry`, `ToolExecutor`, and standard capability permissions. A worker runs with the parent task's permissions intersected with its own declared capabilities (`SubagentManager.buildWorkerToolContext`), so it can never hold a capability the parent lacks or one outside its declaration, whatever tool name the model produces.
 5. **Budget Inheritance:** Worker steps and tool calls count towards parent task resource budgets.
 
 ---
@@ -29,7 +29,7 @@ Milestone 7 introduces single-level worker delegation via `SubagentManager` in `
   - `search_text`
   - `get_workspace_tree`
   - `web_docs`
-- **Capabilities:** `read`, `execute` (read-only queries).
+- **Capabilities:** `read`, `network` (read-only queries; `network` covers the bounded `web_docs` reader).
 - **Output:** Structured findings, affected files, URLs visited, and evidence summaries.
 
 ### VERIFICATION Worker

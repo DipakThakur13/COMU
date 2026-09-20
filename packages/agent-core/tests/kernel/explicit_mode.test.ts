@@ -27,7 +27,7 @@ describe("AgentKernel honours an explicit mode (Phase 0.4)", () => {
     expect(runSpy).toHaveBeenCalledTimes(1);
     const contract = runSpy.mock.calls[0][1] as TaskContract;
     expect(contract.mode).toBe("AGENT");
-    expect(contract.allowedCapabilities).toEqual(["read", "write", "execute"]);
+    expect(contract.allowedCapabilities).toEqual(["read", "write", "execute", "network"]);
     expect(contract.expectedMutation).toBe(true);
 
     const resolved = events.find(e => e.type === "task.mode_resolved");
@@ -40,7 +40,7 @@ describe("AgentKernel honours an explicit mode (Phase 0.4)", () => {
     await kernel.handle({ ...baseInput, mode: "ASK", userPrompt: "fix the failing login tests", onEvent: () => {} });
     const contract = runSpy.mock.calls[0][1] as TaskContract;
     expect(contract.mode).toBe("ASK");
-    expect(contract.allowedCapabilities).toEqual(["read"]);
+    expect(contract.allowedCapabilities).toEqual(["read", "network"]);
     expect(contract.expectedMutation).toBe(false);
   });
 

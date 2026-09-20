@@ -4,7 +4,7 @@ import {
   SubagentType,
   AgentEvent
 } from "@comu/protocol";
-import { ToolRegistry, ToolExecutor, ToolContext } from "@comu/tool-core";
+import { ToolRegistry, ToolExecutor, ToolContext, ToolCapability, PermissionDecision } from "@comu/tool-core";
 import { ModelProvider, ModelMessage, ToolDefinition } from "@comu/model-core";
 
 export interface SubagentManagerOptions {
@@ -33,7 +33,7 @@ export class SubagentManager {
       case "RESEARCH":
         return {
           allowedTools: ["read_file", "list_directory", "search_text", "get_workspace_tree", "web_docs"],
-          allowedCapabilities: ["read", "execute"]
+          allowedCapabilities: ["read", "network"]
         };
       case "VERIFICATION":
         return {
@@ -50,6 +50,22 @@ export class SubagentManager {
           allowedCapabilities: ["read", "execute"]
         };
     }
+  }
+
+  /**
+   * The context a worker's tools actually run with: the parent's permissions intersected with the
+   * worker type's declared capabilities. A worker can never hold a capability its parent lacks,
+   * and never one outside its own declaration, regardless of which tool name the model produces.
+   */
+  public static buildWorkerToolContext(parent: ToolContext, type: SubagentType): ToolContext {
+    const declared = SubagentManager.getWorkerCapabilities(type).allowedCapabilities as ToolCapability[];
+    const all: ToolCapability[] = ["read", "write", "execute", "network"];
+    const capabilities = {} as Record<ToolCapability, PermissionDecision>;
+    for (const cap of all) {
+      const parentAllows = parent.permissions ? parent.permissions.capabilities[cap] === "ALLOW" : true;
+      capabilities[cap] = declared.includes(cap) && parentAllows ? "ALLOW" : "DENY";
+    }
+    return { ...parent, permissions: { capabilities } };
   }
 
   public async executeSubagent(params: {
@@ -135,9 +151,11 @@ export class SubagentManager {
     });
 
     const allowed = SubagentManager.getWorkerCapabilities(params.type);
+    const workerContext = SubagentManager.buildWorkerToolContext(params.toolContext, params.type);
     const workerTools: ToolDefinition[] = params.registry
       .getAll()
       .filter(t => allowed.allowedTools.includes(t.name))
+      .filter(t => t.capabilities.every(cap => workerContext.permissions!.capabilities[cap] === "ALLOW"))
       .map(t => ({
         name: t.name,
         description: t.description,
@@ -234,7 +252,7 @@ export class SubagentManager {
 
           let toolResult: any;
           try {
-            toolResult = await params.executor.execute(tc.name, tc.arguments, params.toolContext);
+            toolResult = await params.executor.execute(tc.name, tc.arguments, workerContext);
           } catch (e: any) {
             toolResult = { error: e.message };
           }

@@ -1,8 +1,9 @@
 import { AgentState, OrchestratorContext, AgentResult } from "./interfaces.js";
-import { TaskContract } from "./interaction/task_contract.js";
+import { TaskContract, permissionsFromContract, toolAllowedByContract, validateTaskContract } from "./interaction/task_contract.js";
+import { SubagentType } from "@comu/protocol";
 import { ModelProvider, ModelMessage, ToolDefinition, ModelRequestManager, RequestManagerConfig } from "@comu/model-core";
 import { ProviderCancelledError } from "@comu/shared";
-import { ToolExecutor, ToolRegistry, ToolContext } from "@comu/tool-core";
+import { ToolExecutor, ToolRegistry, ToolContext, ToolCapability } from "@comu/tool-core";
 import { DiffEngine, ChangeSet } from "@comu/diff-engine";
 import { TaskPlanner, PlanStateManager } from "@comu/planning-engine";
 import { VerificationEngine, WorkspaceIntegrityVerifier } from "@comu/verification-engine";
@@ -178,11 +179,12 @@ export class AgentOrchestrator {
 
     const changeSet: ChangeSet = this.diffEngine.createChangeSet(ctx.taskId);
 
+    // Model-originated tool calls run with exactly the capabilities the contract grants.
     const toolCtx: ToolContext = {
       taskId: ctx.taskId,
       workspace: { rootPath: ctx.workspaceRoot },
       limits: { maxResults: 100, maxBytes: 1000000 },
-      permissions: { capabilities: { read: "ALLOW", write: "ALLOW", execute: "ALLOW", network: "DENY" } },
+      permissions: permissionsFromContract(contract),
       abortSignal: ctx.abortSignal,
       cancellation: ctx.abortSignal ? {
         get isCancelled() { return ctx.abortSignal?.aborted ?? false; },
@@ -195,6 +197,19 @@ export class AgentOrchestrator {
         }
       } : undefined
     };
+
+    // Verification, workspace-integrity checks and git governance are runtime-authoritative:
+    // the runtime decides to run them, not the model, so they are not bound by the model's contract.
+    // They still never write files and never reach the network.
+    const runtimeToolCtx: ToolContext = {
+      ...toolCtx,
+      permissions: { capabilities: { read: "ALLOW", write: "DENY", execute: "ALLOW", network: "DENY" } }
+    };
+
+    // CHAT and PLAN never enter TOOL_CALLING (state-machine invariant): offer no tools at all.
+    const toolsEnabled = contract.mode !== "CHAT" && contract.mode !== "PLAN";
+    const validateContract = (toolName: string, capabilities: ToolCapability[]) =>
+      validateTaskContract(contract, toolName, capabilities);
 
     if (ctx.abortSignal?.aborted) {
       this.transition(ctx, "CANCELLED", "Task was cancelled");
@@ -289,13 +304,20 @@ export class AgentOrchestrator {
 
     const messages: ModelMessage[] = [{ role: "user", content: initialPrompt }];
 
-    const tools: ToolDefinition[] = this.registry.getAll().map(t => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema
-    }));
+    // Defence in depth: a read-only task is never even offered a mutating tool. Enforcement below
+    // catches the model naming one anyway.
+    const tools: ToolDefinition[] = toolsEnabled
+      ? this.registry
+          .getAll()
+          .filter(t => toolAllowedByContract(contract, t))
+          .map(t => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema
+          }))
+      : [];
 
-    tools.push({
+    if (toolsEnabled && contract.allowedCapabilities.includes("read")) tools.push({
       name: "delegate_subtask",
       description: "Delegate a bounded read-only investigation (RESEARCH) or verification task to a supervised worker agent.",
       inputSchema: {
@@ -385,7 +407,7 @@ export class AgentOrchestrator {
             lastVerification,
             startTime,
             steps,
-            toolCtx,
+            runtimeToolCtx,
             lastAssistantText
           );
         }
@@ -412,7 +434,7 @@ export class AgentOrchestrator {
           changeSet,
           userPrompt: ctx.userPrompt,
           toolExecutor: this.executor,
-          toolContext: toolCtx,
+          toolContext: runtimeToolCtx,
           abortSignal: ctx.abortSignal
         });
 
@@ -460,7 +482,7 @@ export class AgentOrchestrator {
               lastVerification,
               startTime,
               steps,
-              toolCtx,
+              runtimeToolCtx,
               lastAssistantText
             );
           }
@@ -715,13 +737,32 @@ export class AgentOrchestrator {
           lastVerification,
           startTime,
           steps,
-          toolCtx,
+          runtimeToolCtx,
           lastAssistantText
         );
       }
 
+      // A mode without tools (PLAN, CHAT) never enters TOOL_CALLING. If the model produced tool
+      // calls anyway, answer each with an error and let it continue in text.
+      if (!toolsEnabled) {
+        for (const tc of response.toolCalls) {
+          const error = `TOOLS_UNAVAILABLE: Tools cannot be executed in ${contract.mode} mode. Respond in text.`;
+          ctx.onEvent({
+            type: "tool.completed",
+            tool: tc.name,
+            result: { error },
+            eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            taskId: ctx.taskId,
+            timestamp: new Date().toISOString()
+          });
+          messages.push({ role: "tool", content: `ERROR: ${error}`, toolCallId: tc.id });
+        }
+        this.transition(ctx, "OBSERVING", "Observing results");
+        continue;
+      }
+
       // Execute tool calls
-      this.transition(ctx, "TOOL_CALLING", "Executing tools...");
+      this.transition(ctx, "TOOL_CALLING", "Executing tools...", contract);
 
       for (const tc of response.toolCalls) {
         toolCallsCount++;
@@ -749,6 +790,16 @@ export class AgentOrchestrator {
         let result: any;
         try {
           if (tc.name === "delegate_subtask") {
+            const workerType = tc.arguments?.type as SubagentType;
+            const workerCaps = SubagentManager.getWorkerCapabilities(workerType)?.allowedCapabilities as ToolCapability[] | undefined;
+            if (!workerCaps) {
+              throw new Error(`CONTRACT_REJECTED: Unknown worker type '${String(tc.arguments?.type)}'.`);
+            }
+            const delegation = validateContract("delegate_subtask", workerCaps);
+            if (!delegation.valid) {
+              throw new Error(`CONTRACT_REJECTED: ${delegation.reason}`);
+            }
+
             ctx.onEvent({
               type: "subagent.started",
               eventId: `evt-${Date.now()}`,
@@ -836,9 +887,15 @@ export class AgentOrchestrator {
               return { status: "cancelled", steps, changeSet, plan: planManager.getPlan() };
             }
 
+            // The single enforcement point for model-originated calls: parse, contract, permissions, execute.
             let toolError: any = null;
             try {
-              result = await this.executor.execute(tc.name, tc.arguments, toolCtx);
+              const outcome = await this.executor.processModelToolCall(tc, validateContract, toolCtx);
+              if (outcome.type === "success") {
+                result = outcome.result;
+              } else {
+                toolError = new Error(outcome.error || `Tool ${tc.name} returned ${outcome.type}`);
+              }
             } catch (e) {
               toolError = e;
             }

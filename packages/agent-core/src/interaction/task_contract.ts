@@ -1,6 +1,8 @@
 import { InteractionMode } from "./interaction_modes.js";
 import { AgentLimits } from "@comu/protocol";
-import { ToolCapability } from "@comu/tool-core";
+import { ToolCapability, ToolPermissions, PermissionDecision } from "@comu/tool-core";
+
+export const ALL_TOOL_CAPABILITIES: readonly ToolCapability[] = ["read", "write", "execute", "network"];
 
 export interface WorkspaceScope {
   rootPath?: string;
@@ -32,6 +34,27 @@ export interface TaskContract {
   createdAt: string;
 
   source: "user" | "follow_up" | "system";
+}
+
+/**
+ * Executor permissions derived from the contract: a capability absent from the contract is DENY.
+ * This is what the orchestrator hands to every model-originated tool call.
+ */
+export function permissionsFromContract(contract: Pick<TaskContract, "allowedCapabilities">): ToolPermissions {
+  const capabilities = {} as Record<ToolCapability, PermissionDecision>;
+  for (const cap of ALL_TOOL_CAPABILITIES) {
+    capabilities[cap] = contract.allowedCapabilities.includes(cap) ? "ALLOW" : "DENY";
+  }
+  return { capabilities };
+}
+
+/** True when every capability the tool needs is granted by the contract. Used to filter the tool list. */
+export function toolAllowedByContract(
+  contract: Pick<TaskContract, "allowedCapabilities" | "allowedTools">,
+  tool: { name: string; capabilities: ToolCapability[] }
+): boolean {
+  if (contract.allowedTools.length > 0 && !contract.allowedTools.includes(tool.name)) return false;
+  return tool.capabilities.every(cap => contract.allowedCapabilities.includes(cap));
 }
 
 /**

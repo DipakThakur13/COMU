@@ -384,9 +384,10 @@ export class AgentKernel {
     let verificationRequired = false;
 
     if (classification.mode === "ASK" || classification.mode === "PLAN") {
-      allowedCapabilities = ["read"];
+      // Read-only investigation. Network covers documentation lookups (web_docs); nothing mutates.
+      allowedCapabilities = ["read", "network"];
     } else if (classification.mode === "AGENT") {
-      allowedCapabilities = ["read", "write", "execute"];
+      allowedCapabilities = ["read", "write", "execute", "network"];
       expectedMutation = true;
       verificationRequired = true;
     }
