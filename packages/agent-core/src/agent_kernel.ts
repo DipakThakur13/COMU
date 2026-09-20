@@ -1,9 +1,9 @@
 import { AgentOrchestrator } from "./orchestrator.js";
 import { IntentRouter, IntentClassification } from "./interaction/intent_router.js";
-import { TaskContract, WorkspaceScope } from "./interaction/task_contract.js";
+import { TaskContract } from "./interaction/task_contract.js";
 import { ClarificationHandler } from "./interaction/clarification_handler.js";
 import { ModelIntentClassifier } from "./interaction/model_intent_classifier.js";
-import { OrchestratorContext, AgentResult, AgentState } from "./interfaces.js";
+import { AgentResult } from "./interfaces.js";
 import { AgentLimits, TaskMode, TASK_MODES } from "@comu/protocol";
 import { ToolCapability } from "@comu/tool-core";
 import { ModelRequestManager } from "@comu/model-core";

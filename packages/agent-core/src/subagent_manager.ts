@@ -2,7 +2,6 @@ import {
   SubagentTask,
   SubagentResult,
   SubagentType,
-  SubagentStatus,
   AgentEvent
 } from "@comu/protocol";
 import { ToolRegistry, ToolExecutor, ToolContext } from "@comu/tool-core";

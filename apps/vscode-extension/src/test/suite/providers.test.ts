@@ -1,7 +1,6 @@
 import * as assert from 'assert';
 import { ProviderManager } from '../../providers/provider_manager';
 import { SecretManager } from '../../security/secrets';
-import * as vscode from 'vscode';
 
 suite('ProviderManager Test Suite', () => {
     test('Should return built-in mock and local providers', async () => {

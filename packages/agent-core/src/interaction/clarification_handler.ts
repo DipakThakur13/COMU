@@ -13,7 +13,7 @@ export class ClarificationHandler {
   /**
    * Generates a user-facing clarification message for an ambiguous request.
    */
-  public generateClarificationRequest(message: string): string {
+  public generateClarificationRequest(_message: string): string {
     return "What would you like me to do with it — explain it, review it, plan changes, or make changes?";
   }
 

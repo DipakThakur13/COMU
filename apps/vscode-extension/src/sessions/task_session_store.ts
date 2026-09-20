@@ -129,7 +129,6 @@ export class TaskSessionStore {
       }
     } else if (event.type === 'tool.started' || event.type === 'tool.completed') {
       const te = event as any;
-      const toolName = (te.tool || '').toLowerCase();
       if (te.tool) {
         this.state.agentState = `TOOL_CALLING`;
       }

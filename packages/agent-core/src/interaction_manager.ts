@@ -1,7 +1,6 @@
 import {
   InteractionRequest,
   InteractionResponse,
-  InteractionType,
   AgentEvent
 } from "@comu/protocol";
 

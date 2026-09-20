@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { WebviewMessage, ExtensionMessage, ChatSessionStateUI } from '../protocol/messages';
+import { WebviewMessage, ExtensionMessage } from '../protocol/messages';
 import { RuntimeClient } from '../runtime/runtime_client';
 import { SSEClient } from '../runtime/sse_client';
 import { TaskSessionStore } from '../sessions/task_session_store';
@@ -24,7 +24,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        _context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken
     ) {
         const t0 = Date.now();

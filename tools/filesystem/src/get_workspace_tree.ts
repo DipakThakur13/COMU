@@ -1,4 +1,4 @@
-import { AgentTool, ToolContext } from "@comu/tool-core";
+import { AgentTool } from "@comu/tool-core";
 import { resolveAndVerifyPath } from "./security.js";
 import { ToolError } from "@comu/shared";
 import * as fs from "fs/promises";

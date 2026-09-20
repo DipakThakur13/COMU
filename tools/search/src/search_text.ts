@@ -1,4 +1,4 @@
-import { AgentTool, ToolContext } from "@comu/tool-core";
+import { AgentTool } from "@comu/tool-core";
 import { SearchBackend, SearchTextResult } from "./interfaces.js";
 import { NodeRecursiveSearchBackend } from "./backends/node_recursive.js";
 import { ToolError } from "@comu/shared";

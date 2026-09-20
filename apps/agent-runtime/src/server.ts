@@ -16,16 +16,15 @@ import { TaskPlanner } from '@comu/planning-engine';
 import { VerificationEngine } from '@comu/verification-engine';
 import { RepairEngine } from '@comu/repair-engine';
 import { ComuDiffEngine } from '@comu/diff-engine';
-import { MemoryEngine, MemoryStorage, MemorySanitizer } from '@comu/memory-engine';
+import { MemoryEngine } from '@comu/memory-engine';
 import { NvidiaProvider } from '@comu/provider-nvidia';
-import { 
-  ModelProvider, 
+import {
+  ModelProvider,
   OpenAICompatibleProvider,
   OllamaProvider,
-  ASTRA_CAPABILITY_PROFILE, 
-  DEFAULT_OPENAI_CAPABILITY_PROFILE 
+  ASTRA_CAPABILITY_PROFILE
 } from '@comu/model-core';
-import { AgentEvent, ProviderConfig, ProviderTestResult, TaskMode, TASK_MODES } from '@comu/protocol';
+import { AgentEvent, ProviderConfig, TaskMode, TASK_MODES } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
 
 export type ProviderFactory = (selection: ProviderSelection, config: Record<string, any>) => ModelProvider;

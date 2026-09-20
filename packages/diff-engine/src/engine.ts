@@ -1,4 +1,4 @@
-import { ChangeSet, ChangedFile, DiffEngine } from "./interfaces.js";
+import { ChangeSet, DiffEngine } from "./interfaces.js";
 import * as diff from "diff";
 
 export class ComuDiffEngine implements DiffEngine {

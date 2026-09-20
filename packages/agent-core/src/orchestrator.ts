@@ -16,10 +16,7 @@ import {
   TaskPlan,
   VerificationResult,
   FailureDiagnosis,
-  RepairAttempt,
-  RepairLimits,
-  WorkspaceIntegrityResult,
-  VerificationCheck
+  WorkspaceIntegrityResult
 } from "@comu/protocol";
 
 export function formatStepSummary(text?: string, maxLen = 140): string | undefined {

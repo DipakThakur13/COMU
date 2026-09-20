@@ -10,8 +10,6 @@ export class ContextEngine {
     workingSet: WorkingSet, 
     budget: ContextBudget
   ): Promise<CompiledContext> {
-    const rootPath = request.workspace.rootPath;
-    
     const compiled: CompiledContext = {
       workspace: request.workspace,
       openFiles: []

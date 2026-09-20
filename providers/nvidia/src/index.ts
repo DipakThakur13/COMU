@@ -1,4 +1,4 @@
-import { ModelProvider, ModelCapabilities, ModelRequest, ModelResponse, ToolCall, ModelMessage, ModelRequestContext, ModelContentPart } from "@comu/model-core";
+import { ModelProvider, ModelCapabilities, ModelRequest, ModelResponse, ToolCall, ModelRequestContext, ModelContentPart } from "@comu/model-core";
 import { ProviderTestResult } from "@comu/protocol";
 import { 
   ProviderError,
