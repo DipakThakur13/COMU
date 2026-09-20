@@ -5,6 +5,16 @@ import { ClarificationHandler } from "./interaction/clarification_handler.js";
 import { OrchestratorContext, AgentResult, AgentState } from "./interfaces.js";
 import { AgentLimits, TaskMode, TASK_MODES } from "@comu/protocol";
 import { ToolCapability } from "@comu/tool-core";
+import { ModelRequestManager } from "@comu/model-core";
+import { ProviderCancelledError } from "@comu/shared";
+import { basename } from "path";
+
+export const CHAT_SYSTEM_PROMPT =
+  "You are COMU, an AI software engineer working inside VS Code. " +
+  "This is a conversational turn: answer directly, concisely and helpfully. " +
+  "You have no tools in this turn and cannot read or change files or run commands; " +
+  "if the user wants work done in the repository, say what you would do and suggest switching to Agent, Plan or Ask mode. " +
+  "Do not invent details about the workspace you cannot see.";
 
 export interface AgentKernelInput {
   taskId: string;
@@ -130,17 +140,66 @@ export class AgentKernel {
     }
 
     if (classification.mode === "CHAT") {
-      const finalText = "Hi! I'm COMU, your AI software engineer. What are we working on?";
+      return this.handleChat(input);
+    }
+
+    const taskContract = this.createContract(input, classification);
+    
+    // Delegate to orchestrator but pass the contract along
+    return this.orchestrator.runWithContract(input, taskContract);
+  }
+
+  /**
+   * CHAT is a single tool-free model turn. It bypasses the engineering orchestrator, so it
+   * publishes its own status and terminal events; the VS Code session and webview receive the
+   * reply exclusively through task.completed.finalText. Model reliability (timeouts, retries,
+   * model_request.* events) comes from the same ModelRequestManager the orchestrator uses.
+   */
+  private async handleChat(input: AgentKernelInput): Promise<AgentResult> {
+    const emitStatus = (status: string) => input.onEvent({
+      type: "agent.status",
+      eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      taskId: input.taskId,
+      timestamp: new Date().toISOString(),
+      status
+    });
+
+    emitStatus("THINKING");
+
+    const model = this.orchestrator.getModel();
+    if (!model || typeof model.generate !== "function") {
+      const error = "CHAT requires a configured model provider; none is available for this task.";
+      emitStatus("FAILED");
       input.onEvent({
-        type: "agent.status",
-        eventId: `evt-${Date.now()}`,
+        type: "task.failed",
+        eventId: `evt-${Date.now()}-failed`,
         taskId: input.taskId,
         timestamp: new Date().toISOString(),
-        status: "COMPLETED"
+        error,
+        payload: { code: "NO_MODEL_PROVIDER", message: error }
       });
-      // CHAT bypasses the engineering orchestrator, so it must publish its own
-      // terminal event. The VS Code session and webview receive final responses
-      // exclusively through task.completed.finalText.
+      return { status: "failed", steps: 0, error };
+    }
+
+    const workspaceHint = input.workspaceRoot ? ` The user's open workspace folder is named "${basename(input.workspaceRoot)}".` : "";
+    const requestManager = new ModelRequestManager(model, input.onEvent);
+
+    try {
+      const response = await requestManager.execute(
+        input.taskId,
+        input.runId,
+        {
+          prompt: input.userPrompt,
+          systemPrompt: `${input.systemPrompt ? input.systemPrompt + "\n\n" : ""}${CHAT_SYSTEM_PROMPT}${workspaceHint}`,
+          messages: [{ role: "user", content: input.userPrompt }]
+          // no tools: CHAT never executes anything
+        },
+        input.abortSignal
+      );
+
+      const finalText = (response.text || "").replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
+
+      emitStatus("COMPLETED");
       input.onEvent({
         type: "task.completed",
         eventId: `evt-${Date.now()}-completed`,
@@ -148,18 +207,30 @@ export class AgentKernel {
         timestamp: new Date().toISOString(),
         finalText
       });
-      return {
-        status: "completed",
-        steps: 0,
-        // Since we are not doing a secondary LLM call right now, provide a deterministic chat fallback.
-        finalText
-      };
+      return { status: "completed", steps: 1, finalText };
+    } catch (err: any) {
+      if (err instanceof ProviderCancelledError || input.abortSignal?.aborted) {
+        emitStatus("CANCELLED");
+        input.onEvent({
+          type: "task.cancelled",
+          eventId: `evt-${Date.now()}-cancelled`,
+          taskId: input.taskId,
+          timestamp: new Date().toISOString()
+        });
+        return { status: "cancelled", steps: 0 };
+      }
+      const error = err?.message || String(err);
+      emitStatus("FAILED");
+      input.onEvent({
+        type: "task.failed",
+        eventId: `evt-${Date.now()}-failed`,
+        taskId: input.taskId,
+        timestamp: new Date().toISOString(),
+        error,
+        payload: { code: "CHAT_MODEL_ERROR", message: error }
+      });
+      return { status: "failed", steps: 0, error };
     }
-
-    const taskContract = this.createContract(input, classification);
-    
-    // Delegate to orchestrator but pass the contract along
-    return this.orchestrator.runWithContract(input, taskContract);
   }
 
   /**

@@ -90,6 +90,26 @@ describe("POST /v1/tasks honours the requested mode (Phase 0.4)", () => {
     expect(replay.find(e => e.type === "task.mode_resolved")).toBeDefined();
   }, 20000);
 
+  it("CHAT mode performs a tool-free model call and returns the model's reply", async () => {
+    const before = model.requests.length;
+    const res = await startTask({ prompt: "hi there, what can you do?", mode: "CHAT" });
+    expect(res.status).toBe(201);
+    const { taskId } = (await res.json()) as any;
+    const events = await collectTaskEvents(baseUrl, taskId);
+
+    expect(events.find(e => e.type === "task.mode_resolved")).toMatchObject({ mode: "CHAT", source: "explicit" });
+    expect(events.some(e => e.type === "model_request.succeeded")).toBe(true);
+    const completed = events.find(e => e.type === "task.completed") as any;
+    expect(completed?.finalText).toBe("Here is what I found.");
+
+    expect(model.requests.length).toBe(before + 1);
+    const chatReq = model.requests[model.requests.length - 1];
+    expect(chatReq.tools).toBeUndefined();
+    expect(chatReq.systemPrompt).toContain("conversational turn");
+    expect(chatReq.messages?.[0]).toMatchObject({ role: "user", content: "hi there, what can you do?" });
+    expect(events.some(e => e.type === "plan.created")).toBe(false);
+  }, 20000);
+
   it("rejects an invalid mode with 400 INVALID_MODE", async () => {
     const res = await startTask({ prompt: "hello", mode: "TURBO" });
     expect(res.status).toBe(400);

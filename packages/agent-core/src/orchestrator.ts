@@ -81,6 +81,11 @@ export class AgentOrchestrator {
     return this.workingSetManager.get();
   }
 
+  /** The provider this orchestrator was constructed with. Used by the kernel for tool-free CHAT turns. */
+  public getModel(): ModelProvider {
+    return this.model;
+  }
+
   public getWorkingSetManager(): WorkingSetManager {
     return this.workingSetManager;
   }

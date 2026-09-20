@@ -52,8 +52,13 @@ describe("Agent Kernel & State Machine (Batch 2)", () => {
       expect(res.finalText).toContain("What would you like me to do");
     });
 
-    it("should return immediately on CHAT", async () => {
-      const kernel = new AgentKernel(orchestrator);
+    it("should answer CHAT with a real model call and no tools", async () => {
+      const generate = vi.fn(async () => ({ text: "Hello! Ready when you are." }));
+      const chatOrchestrator = new AgentOrchestrator(
+        { id: "m", name: "m", getCapabilities: () => ({}) as any, generate } as any,
+        {} as any, {} as any, {} as any, {} as any
+      );
+      const kernel = new AgentKernel(chatOrchestrator);
       const onEvent = vi.fn();
       const res = await kernel.handle({
         taskId: "test", runId: "test",
@@ -61,12 +66,27 @@ describe("Agent Kernel & State Machine (Batch 2)", () => {
         limits: {} as any, onEvent
       });
       expect(res.status).toBe("completed");
-      expect(res.finalText).toContain("Hi! I'm COMU");
+      expect(res.finalText).toBe("Hello! Ready when you are.");
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect((generate.mock.calls[0] as any)[0].tools).toBeUndefined();
       expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
         type: "task.completed",
         taskId: "test",
         finalText: res.finalText
       }));
+    });
+
+    it("should fail CHAT honestly when no model provider is available", async () => {
+      const kernel = new AgentKernel(orchestrator);
+      const onEvent = vi.fn();
+      const res = await kernel.handle({
+        taskId: "test", runId: "test",
+        systemPrompt: "sys", userPrompt: "Hi", workspaceRoot: "/",
+        limits: {} as any, onEvent
+      });
+      expect(res.status).toBe("failed");
+      expect(res.finalText).toBeUndefined();
+      expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "task.failed", taskId: "test" }));
     });
   });
 });
