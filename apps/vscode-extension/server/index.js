@@ -4951,7 +4951,7 @@ var require_raw_body = __commonJS({
       if (done) {
         return readStream(stream, encoding, length, limit, wrap(done));
       }
-      return new Promise(function executor2(resolve2, reject) {
+      return new Promise(function executor(resolve2, reject) {
         readStream(stream, encoding, length, limit, function onRead(err, buf) {
           if (err) return reject(err);
           resolve2(buf);
@@ -21976,7 +21976,7 @@ var require_response = __commonJS({
     var encodeUrl = require_encodeurl();
     var escapeHtml = require_escape_html();
     var http = require("http");
-    var isAbsolute = require_utils2().isAbsolute;
+    var isAbsolute2 = require_utils2().isAbsolute;
     var onFinished = require_on_finished();
     var path = require("path");
     var statuses = require_statuses();
@@ -22182,7 +22182,7 @@ var require_response = __commonJS({
         done = options;
         opts = {};
       }
-      if (!opts.root && !isAbsolute(path2)) {
+      if (!opts.root && !isAbsolute2(path2)) {
         throw new TypeError("path must be absolute or specify root to res.sendFile");
       }
       var pathname = encodeURI(path2);
@@ -23153,8 +23153,8 @@ var require_dist2 = __commonJS({
       }
     };
     var ToolExecutor2 = class {
-      constructor(registry2) {
-        this.registry = registry2;
+      constructor(registry) {
+        this.registry = registry;
       }
       registry;
       parser = new CanonicalToolCallParser();
@@ -25570,8 +25570,38 @@ ${decoded.trim()}
   }
 });
 
-// ../../packages/model-core/dist/index.js
+// ../../packages/protocol/dist/index.js
 var require_dist9 = __commonJS({
+  "../../packages/protocol/dist/index.js"(exports2, module2) {
+    "use strict";
+    var __defProp2 = Object.defineProperty;
+    var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+    var __getOwnPropNames2 = Object.getOwnPropertyNames;
+    var __hasOwnProp2 = Object.prototype.hasOwnProperty;
+    var __export2 = (target, all) => {
+      for (var name in all)
+        __defProp2(target, name, { get: all[name], enumerable: true });
+    };
+    var __copyProps2 = (to, from, except, desc) => {
+      if (from && typeof from === "object" || typeof from === "function") {
+        for (let key of __getOwnPropNames2(from))
+          if (!__hasOwnProp2.call(to, key) && key !== except)
+            __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+      }
+      return to;
+    };
+    var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    var index_exports = {};
+    __export2(index_exports, {
+      TASK_MODES: () => TASK_MODES2
+    });
+    module2.exports = __toCommonJS2(index_exports);
+    var TASK_MODES2 = ["AUTO", "CHAT", "ASK", "PLAN", "AGENT"];
+  }
+});
+
+// ../../packages/model-core/dist/index.js
+var require_dist10 = __commonJS({
   "../../packages/model-core/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -25596,6 +25626,8 @@ var require_dist9 = __commonJS({
       ASTRA_CAPABILITY_PROFILE: () => ASTRA_CAPABILITY_PROFILE2,
       DEFAULT_OPENAI_CAPABILITY_PROFILE: () => DEFAULT_OPENAI_CAPABILITY_PROFILE2,
       ModelRequestManager: () => ModelRequestManager,
+      OLLAMA_CAPABILITY_PROFILE: () => OLLAMA_CAPABILITY_PROFILE,
+      OllamaProvider: () => OllamaProvider2,
       OpenAICompatibleProvider: () => OpenAICompatibleProvider2,
       RequestSanitizer: () => RequestSanitizer
     });
@@ -25839,6 +25871,29 @@ var require_dist9 = __commonJS({
       defaultEndpoint: "https://api.experiential.com/v1",
       allowedModels: ["gpt-6-astra", "astra", "gpt-6-astra-pro"]
     };
+    var OLLAMA_CAPABILITY_PROFILE = {
+      id: "ollama",
+      name: "Ollama",
+      displayName: "Ollama (Local)",
+      description: "Local on-device inference through Ollama's OpenAI-compatible API",
+      supportsTemperature: true,
+      supportsTopP: true,
+      supportsTopK: false,
+      supportsStop: true,
+      supportsLogprobs: false,
+      supportsPresencePenalty: true,
+      supportsFrequencyPenalty: true,
+      supportsSeed: true,
+      supportsStreaming: true,
+      supportsToolCalling: true,
+      supportsReasoning: true,
+      supportsVision: false,
+      maxContextTokens: 8192,
+      maxOutputTokens: 4096,
+      requiresApiKey: false,
+      defaultEndpoint: "http://127.0.0.1:11434/v1",
+      allowedModels: []
+    };
     var RequestSanitizer = class {
       /**
        * Sanitizes an outgoing model request payload against a target provider's capability profile.
@@ -25926,11 +25981,12 @@ var require_dist9 = __commonJS({
           this.name = "Experiential Labs";
           this.displayName = "GPT-6 Astra (Experiential Labs)";
         }
-        const resolvedKey = apiKey || process.env.OPENAI_API_KEY || (this.profile.id === "gpt-6-astra" ? process.env.EXPERIENTIAL_API_KEY : void 0);
-        if (!resolvedKey) {
+        const requiresKey = this.profile.requiresApiKey !== false;
+        const resolvedKey = apiKey || (requiresKey ? process.env.OPENAI_API_KEY || (this.profile.id === "gpt-6-astra" ? process.env.EXPERIENTIAL_API_KEY : void 0) : void 0);
+        if (!resolvedKey && requiresKey) {
           throw new import_shared2.ProviderError(`${this.displayName} API Key is required`);
         }
-        this.apiKey = resolvedKey;
+        this.apiKey = resolvedKey || "";
         const baseEndpoint = endpoint || this.profile.defaultEndpoint || "https://api.openai.com/v1";
         this.endpoint = _OpenAICompatibleProvider.normalizeEndpoint(baseEndpoint, this.profile.defaultEndpoint);
         this.selectedModel = modelId || (this.profile.allowedModels?.[0] ?? "gpt-4o");
@@ -25948,7 +26004,7 @@ var require_dist9 = __commonJS({
           endpoint || activeProfile.defaultEndpoint,
           activeProfile.defaultEndpoint
         );
-        if (!apiKey || !apiKey.trim()) {
+        if ((!apiKey || !apiKey.trim()) && activeProfile.requiresApiKey !== false) {
           return {
             provider: providerName,
             status: "NOT_CONFIGURED",
@@ -25968,7 +26024,7 @@ var require_dist9 = __commonJS({
         try {
           const headers = {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey.trim()}`,
+            ...apiKey && apiKey.trim() ? { "Authorization": `Bearer ${apiKey.trim()}` } : {},
             ...activeProfile.customHeaders || {}
           };
           const response = await fetch(resolvedEndpoint, {
@@ -26129,7 +26185,7 @@ var require_dist9 = __commonJS({
         try {
           const headers = {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${this.apiKey}`,
+            ...this.apiKey ? { "Authorization": `Bearer ${this.apiKey}` } : {},
             ...this.profile.customHeaders || {}
           };
           const fetchOptions = {
@@ -26143,7 +26199,7 @@ var require_dist9 = __commonJS({
           const response = await fetch(this.endpoint, fetchOptions);
           if (!response.ok) {
             const errorText = await response.text();
-            const sanitizedText = errorText.slice(0, 200).replace(this.apiKey, "[REDACTED]");
+            const sanitizedText = this.redactKey(errorText.slice(0, 200));
             const message = `${this.displayName} API Error: ${response.status} - ${sanitizedText}`;
             if (response.status === 401 || response.status === 403) {
               throw new import_shared2.ProviderAuthenticationError(message);
@@ -26200,9 +26256,13 @@ var require_dist9 = __commonJS({
           if (err.name === "AbortError" || context?.signal?.aborted) {
             throw err;
           }
-          const safeMessage = (err.message || String(err)).replace(this.apiKey, "[REDACTED]");
+          const safeMessage = this.redactKey(err.message || String(err));
           throw new import_shared2.ProviderError(`${this.displayName} request failed: ${safeMessage}`);
         }
+      }
+      redactKey(text) {
+        if (!this.apiKey) return text;
+        return text.split(this.apiKey).join("[REDACTED]");
       }
       async parseStream(streamBody, context) {
         const reader = streamBody.getReader();
@@ -26324,11 +26384,127 @@ ${joinedThoughts}` : joinedThoughts;
         return { text: cleanedContent, thinking };
       }
     };
+    var OllamaProvider2 = class _OllamaProvider extends OpenAICompatibleProvider2 {
+      static DEFAULT_BASE_URL = "http://127.0.0.1:11434";
+      static MODEL_ID_PREFIX = "ollama:";
+      static DEFAULT_MODEL = "llama3.1";
+      baseUrl;
+      constructor(endpoint, modelId) {
+        const baseUrl = _OllamaProvider.normalizeBaseUrl(endpoint);
+        super(void 0, `${baseUrl}/v1`, _OllamaProvider.toOllamaModelName(modelId), OLLAMA_CAPABILITY_PROFILE);
+        this.baseUrl = baseUrl;
+        this.id = "ollama";
+        this.providerId = "ollama";
+        this.name = "Ollama";
+        this.displayName = "Ollama (Local)";
+      }
+      /** Resolves the daemon base URL: explicit endpoint, then OLLAMA_HOST, then the default. */
+      static normalizeBaseUrl(endpoint) {
+        let raw = (endpoint || "").trim() || (process.env.OLLAMA_HOST || "").trim() || _OllamaProvider.DEFAULT_BASE_URL;
+        if (!/^https?:\/\//i.test(raw)) {
+          raw = `http://${raw}`;
+        }
+        raw = raw.replace(/\/+$/, "");
+        raw = raw.replace(/\/chat\/completions$/i, "");
+        raw = raw.replace(/\/v1$/i, "");
+        return raw;
+      }
+      /** True when a COMU model id addresses Ollama. */
+      static isOllamaModelId(modelId) {
+        const lower = (modelId || "").toLowerCase();
+        return lower.startsWith(_OllamaProvider.MODEL_ID_PREFIX) || lower.startsWith("ollama-") || lower === "ollama" || lower.includes("local");
+      }
+      /**
+       * Maps a COMU model id to the model name Ollama expects.
+       *   `ollama:qwen2.5-coder:7b` -> `qwen2.5-coder:7b`
+       *   `ollama-llama-3` (legacy id) -> `llama3`
+       *   undefined -> default model
+       */
+      static toOllamaModelName(modelId) {
+        const raw = (modelId || "").trim();
+        if (!raw) return _OllamaProvider.DEFAULT_MODEL;
+        const lower = raw.toLowerCase();
+        if (lower.startsWith(_OllamaProvider.MODEL_ID_PREFIX)) {
+          const name = raw.slice(_OllamaProvider.MODEL_ID_PREFIX.length).trim();
+          return name || _OllamaProvider.DEFAULT_MODEL;
+        }
+        if (lower === "ollama-llama-3" || lower === "ollama-local" || lower === "ollama") {
+          return lower === "ollama-llama-3" ? "llama3" : _OllamaProvider.DEFAULT_MODEL;
+        }
+        if (lower.startsWith("ollama-")) {
+          return raw.slice("ollama-".length);
+        }
+        return raw;
+      }
+      static toComuModelId(ollamaName) {
+        return `${_OllamaProvider.MODEL_ID_PREFIX}${ollamaName}`;
+      }
+      /** Lists installed models via the native `/api/tags` endpoint. Throws if the daemon is unreachable. */
+      static async listModels(endpoint, timeoutMs = 2e3) {
+        const baseUrl = _OllamaProvider.normalizeBaseUrl(endpoint);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
+          if (!res.ok) {
+            throw new Error(`Ollama /api/tags returned HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          const models = Array.isArray(data?.models) ? data.models : [];
+          return models.filter((m) => m && typeof m.name === "string").map((m) => ({
+            id: _OllamaProvider.toComuModelId(m.name),
+            name: m.name,
+            sizeBytes: typeof m.size === "number" ? m.size : void 0,
+            parameterSize: m.details?.parameter_size,
+            family: m.details?.family
+          }));
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      /**
+       * Real reachability check against the local daemon. Never contacts any remote host.
+       * (Named `probe` because the inherited static `testConnection` has a different signature.)
+       */
+      static async probe(endpoint, timeoutMs = 2e3) {
+        const baseUrl = _OllamaProvider.normalizeBaseUrl(endpoint);
+        const startTime = Date.now();
+        try {
+          const models = await _OllamaProvider.listModels(baseUrl, timeoutMs);
+          const latencyMs = Date.now() - startTime;
+          if (models.length === 0) {
+            return {
+              provider: "ollama",
+              status: "CONNECTED",
+              latencyMs,
+              message: `Ollama is running at ${baseUrl} but no models are installed. Run \`ollama pull ${_OllamaProvider.DEFAULT_MODEL}\`.`
+            };
+          }
+          return {
+            provider: "ollama",
+            status: "CONNECTED",
+            model: models[0].name,
+            latencyMs,
+            message: `${models.length} local model${models.length === 1 ? "" : "s"} available.`
+          };
+        } catch (err) {
+          const timedOut = err?.name === "AbortError";
+          return {
+            provider: "ollama",
+            status: timedOut ? "TIMEOUT" : "CONNECTION_ERROR",
+            message: timedOut ? `Ollama did not respond at ${baseUrl} within ${Math.round(timeoutMs / 1e3)}s.` : `Could not reach Ollama at ${baseUrl}. Install it from https://ollama.com and make sure \`ollama serve\` is running.`
+          };
+        }
+      }
+      async testConnection() {
+        return _OllamaProvider.probe(this.baseUrl);
+      }
+    };
   }
 });
 
 // ../../packages/planning-engine/dist/index.js
-var require_dist10 = __commonJS({
+var require_dist11 = __commonJS({
   "../../packages/planning-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -26863,7 +27039,7 @@ var require_dist10 = __commonJS({
 });
 
 // ../../packages/verification-engine/dist/index.js
-var require_dist11 = __commonJS({
+var require_dist12 = __commonJS({
   "../../packages/verification-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -27057,7 +27233,7 @@ var require_dist11 = __commonJS({
       }
     };
     var WorkspaceIntegrityVerifier = class {
-      static async verifyIntegrity(changeSet, executor2, ctx) {
+      static async verifyIntegrity(changeSet, executor, ctx) {
         const checkedAt = (/* @__PURE__ */ new Date()).toISOString();
         if (!changeSet || changeSet.changes.size === 0) {
           return {
@@ -27069,7 +27245,7 @@ var require_dist11 = __commonJS({
         const conflicts = [];
         for (const [path, record] of changeSet.changes.entries()) {
           try {
-            const readResult = await executor2.execute("read_file", { path }, ctx);
+            const readResult = await executor.execute("read_file", { path }, ctx);
             const currentHash = readResult?.hash;
             if (record.newHash && currentHash !== record.newHash) {
               conflicts.push(
@@ -27183,7 +27359,7 @@ var require_dist11 = __commonJS({
 });
 
 // ../../packages/diagnostics-engine/dist/index.js
-var require_dist12 = __commonJS({
+var require_dist13 = __commonJS({
   "../../packages/diagnostics-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -27211,25 +27387,25 @@ var require_dist12 = __commonJS({
       FingerprintGenerator: () => FingerprintGenerator
     });
     module2.exports = __toCommonJS2(index_exports);
-    var import_crypto = require("crypto");
+    var import_crypto2 = require("crypto");
     var FingerprintGenerator = class {
       static createFailureFingerprint(failureType, affectedFiles, errorSignature) {
         const normalizedFiles = [...affectedFiles].map((f) => f.trim().replace(/\\/g, "/")).sort().join(";");
         const normalizedSig = errorSignature.trim().replace(/\s+/g, " ").toLowerCase();
         const raw = `FAIL:${failureType}|FILES:${normalizedFiles}|SIG:${normalizedSig}`;
-        return (0, import_crypto.createHash)("sha256").update(raw).digest("hex").substring(0, 16);
+        return (0, import_crypto2.createHash)("sha256").update(raw).digest("hex").substring(0, 16);
       }
       static createRepairStrategyFingerprint(strategyType, targetFiles, strategyDescription) {
         const normalizedFiles = [...targetFiles].map((f) => f.trim().replace(/\\/g, "/")).sort().join(";");
         const normalizedDesc = strategyDescription.trim().replace(/\s+/g, " ").toLowerCase();
         const raw = `STRAT:${strategyType}|FILES:${normalizedFiles}|DESC:${normalizedDesc}`;
-        return (0, import_crypto.createHash)("sha256").update(raw).digest("hex").substring(0, 16);
+        return (0, import_crypto2.createHash)("sha256").update(raw).digest("hex").substring(0, 16);
       }
       static createRepairAttemptFingerprint(failureFingerprint, repairStrategyFingerprint, targetFiles, proposedDiff) {
         const normalizedFiles = [...targetFiles].map((f) => f.trim().replace(/\\/g, "/")).sort().join(";");
         const normalizedDiff = (proposedDiff || "").trim().replace(/\s+/g, " ");
         const raw = `ATTEMPT:FF:${failureFingerprint}|SF:${repairStrategyFingerprint}|FILES:${normalizedFiles}|DIFF:${normalizedDiff}`;
-        return (0, import_crypto.createHash)("sha256").update(raw).digest("hex").substring(0, 16);
+        return (0, import_crypto2.createHash)("sha256").update(raw).digest("hex").substring(0, 16);
       }
     };
     var EvidenceExtractor = class {
@@ -27404,7 +27580,7 @@ ${stderr}`;
 });
 
 // ../../packages/repair-engine/dist/index.js
-var require_dist13 = __commonJS({
+var require_dist14 = __commonJS({
   "../../packages/repair-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -27516,7 +27692,7 @@ var require_dist13 = __commonJS({
         this.attempts.delete(taskId);
       }
     };
-    var import_diagnostics_engine = require_dist12();
+    var import_diagnostics_engine = require_dist13();
     var RepairEngine2 = class {
       tracker;
       defaultLimits = DEFAULT_REPAIR_LIMITS;
@@ -27612,7 +27788,7 @@ var require_dist13 = __commonJS({
 });
 
 // ../../packages/context-engine/dist/index.js
-var require_dist14 = __commonJS({
+var require_dist15 = __commonJS({
   "../../packages/context-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -27639,8 +27815,8 @@ var require_dist14 = __commonJS({
     });
     module2.exports = __toCommonJS2(index_exports);
     var ContextEngine = class {
-      constructor(executor2) {
-        this.executor = executor2;
+      constructor(executor) {
+        this.executor = executor;
       }
       executor;
       async compile(request, workingSet, budget) {
@@ -27805,7 +27981,7 @@ var require_dist14 = __commonJS({
 });
 
 // ../../packages/agent-core/dist/index.js
-var require_dist15 = __commonJS({
+var require_dist16 = __commonJS({
   "../../packages/agent-core/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -27972,14 +28148,25 @@ var require_dist15 = __commonJS({
     });
     var agent_kernel_exports = {};
     __export2(agent_kernel_exports, {
-      AgentKernel: () => AgentKernel
+      AgentKernel: () => AgentKernel,
+      CHAT_SYSTEM_PROMPT: () => CHAT_SYSTEM_PROMPT
     });
+    var import_protocol2;
+    var import_model_core2;
+    var import_shared;
+    var import_path2;
+    var CHAT_SYSTEM_PROMPT;
     var AgentKernel;
     var init_agent_kernel = __esm({
       "src/agent_kernel.ts"() {
         "use strict";
         init_intent_router();
         init_clarification_handler();
+        import_protocol2 = require_dist9();
+        import_model_core2 = require_dist10();
+        import_shared = require_dist();
+        import_path2 = require("path");
+        CHAT_SYSTEM_PROMPT = "You are COMU, an AI software engineer working inside VS Code. This is a conversational turn: answer directly, concisely and helpfully. You have no tools in this turn and cannot read or change files or run commands; if the user wants work done in the repository, say what you would do and suggest switching to Agent, Plan or Ask mode. Do not invent details about the workspace you cannot see.";
         AgentKernel = class {
           constructor(orchestrator) {
             this.orchestrator = orchestrator;
@@ -28038,8 +28225,16 @@ var require_dist15 = __commonJS({
                 steps: 0
               };
             }
-            const classification = this.router.route(input.userPrompt, {
-              activeTaskId: input.taskId
+            const classification = this.resolveClassification(input);
+            input.onEvent({
+              type: "task.mode_resolved",
+              eventId: `evt-${Date.now()}-mode`,
+              taskId: input.taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              mode: classification.mode,
+              source: classification.source,
+              confidence: classification.confidence,
+              reasons: classification.reasons
             });
             if (classification.mode === "AMBIGUOUS") {
               if (input.abortSignal?.aborted) {
@@ -28075,14 +28270,56 @@ var require_dist15 = __commonJS({
               };
             }
             if (classification.mode === "CHAT") {
-              const finalText = "Hi! I'm COMU, your AI software engineer. What are we working on?";
+              return this.handleChat(input);
+            }
+            const taskContract = this.createContract(input, classification);
+            return this.orchestrator.runWithContract(input, taskContract);
+          }
+          /**
+           * CHAT is a single tool-free model turn. It bypasses the engineering orchestrator, so it
+           * publishes its own status and terminal events; the VS Code session and webview receive the
+           * reply exclusively through task.completed.finalText. Model reliability (timeouts, retries,
+           * model_request.* events) comes from the same ModelRequestManager the orchestrator uses.
+           */
+          async handleChat(input) {
+            const emitStatus = (status) => input.onEvent({
+              type: "agent.status",
+              eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              taskId: input.taskId,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+              status
+            });
+            emitStatus("THINKING");
+            const model = this.orchestrator.getModel();
+            if (!model || typeof model.generate !== "function") {
+              const error = "CHAT requires a configured model provider; none is available for this task.";
+              emitStatus("FAILED");
               input.onEvent({
-                type: "agent.status",
-                eventId: `evt-${Date.now()}`,
+                type: "task.failed",
+                eventId: `evt-${Date.now()}-failed`,
                 taskId: input.taskId,
                 timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-                status: "COMPLETED"
+                error,
+                payload: { code: "NO_MODEL_PROVIDER", message: error }
               });
+              return { status: "failed", steps: 0, error };
+            }
+            const workspaceHint = input.workspaceRoot ? ` The user's open workspace folder is named "${(0, import_path2.basename)(input.workspaceRoot)}".` : "";
+            const requestManager = new import_model_core2.ModelRequestManager(model, input.onEvent);
+            try {
+              const response = await requestManager.execute(
+                input.taskId,
+                input.runId,
+                {
+                  prompt: input.userPrompt,
+                  systemPrompt: `${input.systemPrompt ? input.systemPrompt + "\n\n" : ""}${CHAT_SYSTEM_PROMPT}${workspaceHint}`,
+                  messages: [{ role: "user", content: input.userPrompt }]
+                  // no tools: CHAT never executes anything
+                },
+                input.abortSignal
+              );
+              const finalText = (response.text || "").replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
+              emitStatus("COMPLETED");
               input.onEvent({
                 type: "task.completed",
                 eventId: `evt-${Date.now()}-completed`,
@@ -28090,15 +28327,50 @@ var require_dist15 = __commonJS({
                 timestamp: (/* @__PURE__ */ new Date()).toISOString(),
                 finalText
               });
+              return { status: "completed", steps: 1, finalText };
+            } catch (err) {
+              if (err instanceof import_shared.ProviderCancelledError || input.abortSignal?.aborted) {
+                emitStatus("CANCELLED");
+                input.onEvent({
+                  type: "task.cancelled",
+                  eventId: `evt-${Date.now()}-cancelled`,
+                  taskId: input.taskId,
+                  timestamp: (/* @__PURE__ */ new Date()).toISOString()
+                });
+                return { status: "cancelled", steps: 0 };
+              }
+              const error = err?.message || String(err);
+              emitStatus("FAILED");
+              input.onEvent({
+                type: "task.failed",
+                eventId: `evt-${Date.now()}-failed`,
+                taskId: input.taskId,
+                timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+                error,
+                payload: { code: "CHAT_MODEL_ERROR", message: error }
+              });
+              return { status: "failed", steps: 0, error };
+            }
+          }
+          /**
+           * An explicit mode from the user is authoritative: no regex, no model, no clarification.
+           * Only AUTO (or an absent mode) goes through the IntentRouter.
+           */
+          resolveClassification(input) {
+            const requested = input.mode;
+            if (requested && requested !== "AUTO") {
+              if (!import_protocol2.TASK_MODES.includes(requested)) {
+                throw new Error(`INVALID_MODE: '${requested}' is not one of ${import_protocol2.TASK_MODES.join(", ")}`);
+              }
               return {
-                status: "completed",
-                steps: 0,
-                // Since we are not doing a secondary LLM call right now, provide a deterministic chat fallback.
-                finalText
+                mode: requested,
+                confidence: 1,
+                source: "explicit",
+                reasons: ["mode selected by user"],
+                requiresClarification: false
               };
             }
-            const taskContract = this.createContract(input, classification);
-            return this.orchestrator.runWithContract(input, taskContract);
+            return this.router.route(input.userPrompt, { activeTaskId: input.taskId });
           }
           createContract(input, classification) {
             let allowedCapabilities = [];
@@ -28133,6 +28405,7 @@ var require_dist15 = __commonJS({
     __export2(index_exports, {
       AgentKernel: () => AgentKernel,
       AgentOrchestrator: () => AgentOrchestrator2,
+      CHAT_SYSTEM_PROMPT: () => CHAT_SYSTEM_PROMPT,
       ClarificationHandler: () => ClarificationHandler,
       IntentRouter: () => IntentRouter,
       InteractionManager: () => InteractionManager2,
@@ -28141,12 +28414,12 @@ var require_dist15 = __commonJS({
       validateTaskContract: () => validateTaskContract
     });
     module2.exports = __toCommonJS2(index_exports);
-    var import_model_core2 = require_dist9();
-    var import_shared = require_dist();
-    var import_planning_engine2 = require_dist10();
-    var import_verification_engine2 = require_dist11();
-    var import_diagnostics_engine = require_dist12();
-    var import_repair_engine2 = require_dist13();
+    var import_model_core22 = require_dist10();
+    var import_shared2 = require_dist();
+    var import_planning_engine2 = require_dist11();
+    var import_verification_engine2 = require_dist12();
+    var import_diagnostics_engine = require_dist13();
+    var import_repair_engine2 = require_dist14();
     var SubagentManager2 = class _SubagentManager {
       activeSubagents = /* @__PURE__ */ new Map();
       subagentsPerTask = /* @__PURE__ */ new Map();
@@ -28406,7 +28679,7 @@ var require_dist15 = __commonJS({
         return list;
       }
     };
-    var import_context_engine = require_dist14();
+    var import_context_engine = require_dist15();
     function formatStepSummary(text, maxLen = 140) {
       if (!text) return void 0;
       let cleaned = text.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
@@ -28422,11 +28695,11 @@ var require_dist15 = __commonJS({
       return `${truncated}...`;
     }
     var AgentOrchestrator2 = class {
-      constructor(model, registry2, executor2, diffEngine2, options) {
+      constructor(model, registry, executor, diffEngine, options) {
         this.model = model;
-        this.registry = registry2;
-        this.executor = executor2;
-        this.diffEngine = diffEngine2;
+        this.registry = registry;
+        this.executor = executor;
+        this.diffEngine = diffEngine;
         this.planner = options?.planner || new import_planning_engine2.TaskPlanner();
         this.verificationEngine = options?.verificationEngine || new import_verification_engine2.VerificationEngine();
         this.repairEngine = options?.repairEngine || new import_repair_engine2.RepairEngine();
@@ -28450,6 +28723,10 @@ var require_dist15 = __commonJS({
       workingSetManager;
       getWorkingSet() {
         return this.workingSetManager.get();
+      }
+      /** The provider this orchestrator was constructed with. Used by the kernel for tool-free CHAT turns. */
+      getModel() {
+        return this.model;
       }
       getWorkingSetManager() {
         return this.workingSetManager;
@@ -28504,6 +28781,7 @@ var require_dist15 = __commonJS({
         return kernel.handle({
           taskId: ctx.taskId,
           runId: ctx.taskId,
+          mode: ctx.mode,
           systemPrompt: ctx.systemPrompt,
           userPrompt: ctx.userPrompt,
           workspaceRoot: ctx.workspaceRoot,
@@ -28922,7 +29200,7 @@ Please implement targeted fixes to resolve this failure.`
           this.transition(ctx, "THINKING", "Thinking...");
           steps++;
           if (!this.requestManager) {
-            this.requestManager = new import_model_core2.ModelRequestManager(this.model, ctx.onEvent);
+            this.requestManager = new import_model_core22.ModelRequestManager(this.model, ctx.onEvent);
           }
           let response;
           try {
@@ -28939,7 +29217,7 @@ Please implement targeted fixes to resolve this failure.`
               ctx.abortSignal
             );
           } catch (err) {
-            if (err instanceof import_shared.ProviderCancelledError || ctx.abortSignal?.aborted) {
+            if (err instanceof import_shared2.ProviderCancelledError || ctx.abortSignal?.aborted) {
               this.transition(ctx, "CANCELLED", "Task was cancelled");
               ctx.onEvent({
                 type: "task.cancelled",
@@ -31634,7 +31912,7 @@ var require_libcjs = __commonJS({
 });
 
 // ../../packages/diff-engine/dist/index.js
-var require_dist16 = __commonJS({
+var require_dist17 = __commonJS({
   "../../packages/diff-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
@@ -31728,7 +32006,7 @@ var require_dist16 = __commonJS({
 });
 
 // ../../packages/memory-engine/dist/index.js
-var require_dist17 = __commonJS({
+var require_dist18 = __commonJS({
   "../../packages/memory-engine/dist/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
@@ -32253,7 +32531,7 @@ var require_dist17 = __commonJS({
 });
 
 // ../../providers/nvidia/dist/index.js
-var require_dist18 = __commonJS({
+var require_dist19 = __commonJS({
   "../../providers/nvidia/dist/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
@@ -32932,12 +33210,29 @@ ${joinedThoughts}` : joinedThoughts;
 // src/server.ts
 var server_exports = {};
 __export(server_exports, {
-  default: () => server_default
+  AUTH_HEADER: () => AUTH_HEADER,
+  AUTH_TOKEN_HEADER: () => AUTH_TOKEN_HEADER,
+  DEFAULT_ALLOWED_ORIGIN: () => DEFAULT_ALLOWED_ORIGIN,
+  LOOPBACK_HOST: () => LOOPBACK_HOST,
+  createAuthMiddleware: () => createAuthMiddleware,
+  createLoopbackGuard: () => createLoopbackGuard,
+  createRuntimeApp: () => createRuntimeApp,
+  default: () => server_default,
+  defaultProviderFactory: () => defaultProviderFactory,
+  extractPresentedToken: () => extractPresentedToken,
+  generateRuntimeToken: () => generateRuntimeToken,
+  isLoopbackAddress: () => isLoopbackAddress,
+  resolveWorkspaceRoot: () => resolveWorkspaceRoot,
+  safeEqual: () => safeEqual,
+  selectProvider: () => selectProvider,
+  startRuntimeServer: () => startRuntimeServer
 });
 module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require_express2());
+var import_crypto = require("crypto");
 var import_cors = __toESM(require_lib3());
 var import_path = require("path");
+var import_fs = require("fs");
 var import_tool_core = __toESM(require_dist2());
 var import_tool_filesystem = __toESM(require_dist3());
 var import_tool_search = __toESM(require_dist4());
@@ -32945,14 +33240,15 @@ var import_terminal = __toESM(require_dist5());
 var import_git = __toESM(require_dist6());
 var import_validation = __toESM(require_dist7());
 var import_tool_web_docs = __toESM(require_dist8());
-var import_agent_core = __toESM(require_dist15());
-var import_planning_engine = __toESM(require_dist10());
-var import_verification_engine = __toESM(require_dist11());
-var import_repair_engine = __toESM(require_dist13());
-var import_diff_engine = __toESM(require_dist16());
-var import_memory_engine = __toESM(require_dist17());
-var import_provider_nvidia = __toESM(require_dist18());
-var import_model_core = __toESM(require_dist9());
+var import_agent_core = __toESM(require_dist16());
+var import_planning_engine = __toESM(require_dist11());
+var import_verification_engine = __toESM(require_dist12());
+var import_repair_engine = __toESM(require_dist14());
+var import_diff_engine = __toESM(require_dist17());
+var import_memory_engine = __toESM(require_dist18());
+var import_provider_nvidia = __toESM(require_dist19());
+var import_model_core = __toESM(require_dist10());
+var import_protocol = __toESM(require_dist9());
 
 // src/event_store.ts
 var InMemoryTaskEventStore = class {
@@ -32981,527 +33277,758 @@ var InMemoryTaskEventStore = class {
 };
 
 // src/server.ts
-var app = (0, import_express.default)();
-app.use(import_express.default.json());
-app.use((0, import_cors.default)());
-var port = process.env.PORT || 3456;
-var registry = new import_tool_core.ToolRegistry();
-registry.register(import_tool_filesystem.ReadFileTool);
-registry.register(import_tool_filesystem.ListDirectoryTool);
-registry.register(import_tool_filesystem.GetWorkspaceTreeTool);
-registry.register(import_tool_filesystem.CreateFileTool);
-registry.register(import_tool_filesystem.WriteFileTool);
-registry.register(import_tool_filesystem.EditFileTool);
-registry.register(new import_terminal.TerminalTool());
-registry.register(new import_git.GitStatusTool());
-registry.register(new import_git.GitDiffTool());
-registry.register(new import_git.GitCreateBranchTool());
-registry.register(new import_git.GitStageFilesTool());
-registry.register(new import_git.GitCommitTool());
-registry.register(new import_git.GitPushTool());
-registry.register(new import_validation.RunTestsTool());
-registry.register(new import_validation.RunBuildTool());
-registry.register(new import_validation.RunLinterTool());
-registry.register(new import_validation.RunTypecheckTool());
-registry.register(new import_tool_web_docs.WebDocsTool());
-var searchBackend = new import_tool_search.NodeRecursiveSearchBackend();
-registry.register({
-  ...import_tool_search.SearchTextTool,
-  execute: async (args, ctx) => import_tool_search.SearchTextTool.execute(args, { ...ctx, searchBackend })
-});
-var executor = new import_tool_core.ToolExecutor(registry);
-var diffEngine = new import_diff_engine.ComuDiffEngine();
-var interactionManager = new import_agent_core.InteractionManager();
-var memoryEngine = new import_memory_engine.MemoryEngine();
-var subagentManager = new import_agent_core.SubagentManager();
-var runtimeConfig = {
-  providers: {}
-};
-var eventStreams = /* @__PURE__ */ new Map();
-var eventStore = new InMemoryTaskEventStore({ maxEventsPerTask: 5e3 });
-var taskChangeSets = /* @__PURE__ */ new Map();
-var taskControllers = /* @__PURE__ */ new Map();
-app.post(["/v1/config/providers", "/v1/config"], (req, res) => {
-  const providers = req.body.providers || req.body.config;
-  if (providers) {
-    runtimeConfig.providers = providers;
-    res.status(200).json({ status: "ok" });
-  } else {
-    res.status(400).json({ error: "Missing providers config" });
+var AUTH_HEADER = "authorization";
+var AUTH_TOKEN_HEADER = "x-comu-token";
+var DEFAULT_ALLOWED_ORIGIN = /^vscode-webview:\/\//i;
+var LOOPBACK_HOST = "127.0.0.1";
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ha = (0, import_crypto.createHash)("sha256").update(a).digest();
+  const hb = (0, import_crypto.createHash)("sha256").update(b).digest();
+  return (0, import_crypto.timingSafeEqual)(ha, hb);
+}
+function generateRuntimeToken() {
+  return (0, import_crypto.randomBytes)(32).toString("hex");
+}
+function extractPresentedToken(req) {
+  const explicit = req.headers[AUTH_TOKEN_HEADER];
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
+  const auth = req.headers[AUTH_HEADER];
+  if (typeof auth === "string") {
+    const match = /^Bearer\s+(.+)$/i.exec(auth.trim());
+    if (match) return match[1].trim();
   }
-});
-app.get("/v1/config/providers", (req, res) => {
-  const envNvidia = import_provider_nvidia.NvidiaProvider.detectEnvironmentCredential();
-  const hasNvidiaKey = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || envNvidia);
-  const envExperiential = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
-  const hasExperientialKey = !!(runtimeConfig.providers?.["experiential"]?.apiKey || envExperiential);
-  const envOpenAI = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("openai");
-  const hasOpenAIKey = !!(runtimeConfig.providers?.["openai"]?.apiKey || envOpenAI);
-  const providers = [
-    {
-      providerId: "nvidia",
-      displayName: "NVIDIA",
-      enabled: true,
-      endpoint: runtimeConfig.providers?.["nvidia"]?.endpoint || import_provider_nvidia.NvidiaProvider.DEFAULT_ENDPOINT,
-      selectedModel: "Nemotron 3 Ultra",
-      hasCredential: hasNvidiaKey,
-      isLocal: false,
-      status: hasNvidiaKey ? "CONNECTED" : "NOT_CONFIGURED",
-      environmentDetected: envNvidia,
-      models: [
-        { id: "nvidia-nemotron-3-ultra", name: "Nemotron 3 Ultra", description: "NVIDIA Nemotron high-performance engineering model" }
-      ],
-      description: "High performance cloud inference powered by NVIDIA Nemotron"
+  return void 0;
+}
+function createAuthMiddleware(token) {
+  return (req, res, next) => {
+    const presented = extractPresentedToken(req);
+    if (!safeEqual(presented, token)) {
+      res.status(401).json({ error: "UNAUTHORIZED", code: "UNAUTHORIZED", message: "Missing or invalid runtime token." });
+      return;
+    }
+    next();
+  };
+}
+function isLoopbackAddress(address) {
+  if (!address) return false;
+  const addr = address.toLowerCase();
+  if (addr === "::1" || addr === "::ffff:127.0.0.1" || addr === "localhost") return true;
+  if (addr.startsWith("::ffff:")) return isLoopbackAddress(addr.slice("::ffff:".length));
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(addr);
+}
+function createLoopbackGuard() {
+  return (req, res, next) => {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
+      res.status(403).json({ error: "NON_LOOPBACK_REJECTED", code: "NON_LOOPBACK_REJECTED", message: "The COMU runtime only accepts loopback connections." });
+      return;
+    }
+    next();
+  };
+}
+function startRuntimeServer(app2, port, host = LOOPBACK_HOST) {
+  return new Promise((resolvePromise, reject) => {
+    const server = app2.listen(Number(port), host, () => resolvePromise(server));
+    server.once("error", reject);
+  });
+}
+function selectProvider(modelId) {
+  const lower = (modelId || "").toLowerCase();
+  if (import_model_core.OllamaProvider.isOllamaModelId(lower)) {
+    return { modelId, providerId: "ollama" };
+  }
+  if (lower.includes("nvidia") || lower.includes("nemotron") || lower.includes("deepseek")) {
+    return { modelId, providerId: "nvidia" };
+  }
+  if (lower.includes("experiential") || lower.includes("astra")) {
+    return { modelId, providerId: "experiential" };
+  }
+  if (lower.includes("openai") || lower.includes("gpt-4")) {
+    return { modelId, providerId: "openai" };
+  }
+  return { modelId, providerId: "unknown" };
+}
+function resolveWorkspaceRoot(workspace) {
+  const ws = workspace;
+  const raw = ws && typeof ws.rootPath === "string" ? ws.rootPath.trim() : "";
+  if (!raw) {
+    return { ok: false, code: "WORKSPACE_REQUIRED", message: "Task request must include workspace.rootPath." };
+  }
+  if (!(0, import_path.isAbsolute)(raw)) {
+    return { ok: false, code: "WORKSPACE_INVALID", message: `workspace.rootPath must be an absolute path (received '${raw}').` };
+  }
+  let rootPath;
+  try {
+    rootPath = (0, import_fs.realpathSync)((0, import_path.resolve)(raw));
+    if (!(0, import_fs.statSync)(rootPath).isDirectory()) {
+      return { ok: false, code: "WORKSPACE_INVALID", message: `workspace.rootPath is not a directory: ${raw}` };
+    }
+  } catch {
+    return { ok: false, code: "WORKSPACE_INVALID", message: `workspace.rootPath does not exist or is not accessible: ${raw}` };
+  }
+  const workspaceId = ws && typeof ws.workspaceId === "string" && ws.workspaceId.trim() ? ws.workspaceId.trim() : void 0;
+  return { ok: true, rootPath, workspaceId };
+}
+function defaultProviderFactory(selection, providers) {
+  const { modelId, providerId } = selection;
+  if (providerId === "ollama") {
+    return new import_model_core.OllamaProvider(providers?.["ollama"]?.endpoint, modelId);
+  }
+  if (providerId === "experiential") {
+    const key = providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY;
+    const endpoint = providers?.["experiential"]?.endpoint;
+    return new import_model_core.OpenAICompatibleProvider(key, endpoint, "gpt-6-astra", import_model_core.ASTRA_CAPABILITY_PROFILE);
+  }
+  if (providerId === "openai") {
+    const key = providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY;
+    const endpoint = providers?.["openai"]?.endpoint;
+    return new import_model_core.OpenAICompatibleProvider(key, endpoint, modelId);
+  }
+  const nvidiaKey = providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY;
+  const nvidiaEndpoint = providers?.["nvidia"]?.endpoint;
+  return new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+}
+function createRuntimeApp(options = {}) {
+  const providerFactory = options.providerFactory || defaultProviderFactory;
+  const allowedOrigin = options.allowedOriginPattern || DEFAULT_ALLOWED_ORIGIN;
+  const app2 = (0, import_express.default)();
+  app2.use(createLoopbackGuard());
+  app2.use((0, import_cors.default)({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, false);
+      callback(null, allowedOrigin.test(origin));
     },
-    {
-      providerId: "experiential",
-      displayName: "GPT-6 Astra (Experiential Labs)",
-      enabled: true,
-      endpoint: runtimeConfig.providers?.["experiential"]?.endpoint || import_model_core.ASTRA_CAPABILITY_PROFILE.defaultEndpoint,
-      selectedModel: "gpt-6-astra",
-      hasCredential: hasExperientialKey,
-      isLocal: false,
-      status: hasExperientialKey ? "CONNECTED" : "NOT_CONFIGURED",
-      environmentDetected: envExperiential,
-      models: [
-        { id: "gpt-6-astra", name: "GPT-6 Astra", description: "Experiential Labs 1.05M context frontier model" }
-      ],
-      description: "Experiential Labs OpenAI-compatible gateway powered by GPT-6 Astra"
-    },
-    {
-      providerId: "openai",
-      displayName: "OpenAI-Compatible",
-      enabled: true,
-      endpoint: runtimeConfig.providers?.["openai"]?.endpoint || "https://api.openai.com/v1",
-      selectedModel: "gpt-4o",
-      hasCredential: hasOpenAIKey,
-      isLocal: false,
-      status: hasOpenAIKey ? "CONNECTED" : "NOT_CONFIGURED",
-      environmentDetected: envOpenAI,
-      models: [
-        { id: "gpt-4o", name: "GPT-4o", description: "OpenAI multimodal flagship" }
-      ],
-      description: "Connect any OpenAI-compatible API endpoint with your own API key"
-    },
-    {
+    allowedHeaders: ["Content-Type", "Authorization", "X-COMU-Token"],
+    methods: ["GET", "POST", "DELETE", "OPTIONS"]
+  }));
+  if (options.authToken) {
+    app2.use(createAuthMiddleware(options.authToken));
+  }
+  app2.use(import_express.default.json());
+  const registry = new import_tool_core.ToolRegistry();
+  registry.register(import_tool_filesystem.ReadFileTool);
+  registry.register(import_tool_filesystem.ListDirectoryTool);
+  registry.register(import_tool_filesystem.GetWorkspaceTreeTool);
+  registry.register(import_tool_filesystem.CreateFileTool);
+  registry.register(import_tool_filesystem.WriteFileTool);
+  registry.register(import_tool_filesystem.EditFileTool);
+  registry.register(new import_terminal.TerminalTool());
+  registry.register(new import_git.GitStatusTool());
+  registry.register(new import_git.GitDiffTool());
+  registry.register(new import_git.GitCreateBranchTool());
+  registry.register(new import_git.GitStageFilesTool());
+  registry.register(new import_git.GitCommitTool());
+  registry.register(new import_git.GitPushTool());
+  registry.register(new import_validation.RunTestsTool());
+  registry.register(new import_validation.RunBuildTool());
+  registry.register(new import_validation.RunLinterTool());
+  registry.register(new import_validation.RunTypecheckTool());
+  registry.register(new import_tool_web_docs.WebDocsTool());
+  const searchBackend = new import_tool_search.NodeRecursiveSearchBackend();
+  registry.register({
+    ...import_tool_search.SearchTextTool,
+    execute: async (args, ctx) => import_tool_search.SearchTextTool.execute(args, { ...ctx, searchBackend })
+  });
+  const executor = new import_tool_core.ToolExecutor(registry);
+  const diffEngine = new import_diff_engine.ComuDiffEngine();
+  const interactionManager = new import_agent_core.InteractionManager();
+  const memoryEngine = new import_memory_engine.MemoryEngine();
+  const subagentManager = new import_agent_core.SubagentManager();
+  let runtimeConfig = {
+    providers: {}
+  };
+  const eventStreams = /* @__PURE__ */ new Map();
+  const eventStore = new InMemoryTaskEventStore({ maxEventsPerTask: 5e3 });
+  const taskChangeSets = /* @__PURE__ */ new Map();
+  const taskControllers = /* @__PURE__ */ new Map();
+  const finishedTasks = /* @__PURE__ */ new Set();
+  app2.post(["/v1/config/providers", "/v1/config"], (req, res) => {
+    const providers = req.body.providers || req.body.config;
+    if (providers) {
+      runtimeConfig.providers = providers;
+      res.status(200).json({ status: "ok" });
+    } else {
+      res.status(400).json({ error: "Missing providers config" });
+    }
+  });
+  const OLLAMA_SUGGESTED_MODELS = [
+    { id: "ollama:llama3.1", name: "Llama 3.1 (Local)", description: "Run `ollama pull llama3.1`" },
+    { id: "ollama:qwen2.5-coder", name: "Qwen 2.5 Coder (Local)", description: "Run `ollama pull qwen2.5-coder`" },
+    { id: "ollama:deepseek-coder-v2", name: "DeepSeek Coder V2 (Local)", description: "Run `ollama pull deepseek-coder-v2`" }
+  ];
+  async function describeOllama() {
+    const endpoint = import_model_core.OllamaProvider.normalizeBaseUrl(runtimeConfig.providers?.["ollama"]?.endpoint);
+    const probe = await import_model_core.OllamaProvider.probe(endpoint, 1500);
+    let models = OLLAMA_SUGGESTED_MODELS;
+    if (probe.status === "CONNECTED") {
+      try {
+        const installed = await import_model_core.OllamaProvider.listModels(endpoint, 1500);
+        if (installed.length > 0) {
+          models = installed.map((m) => ({
+            id: m.id,
+            name: `${m.name} (Local)`,
+            description: [m.family, m.parameterSize].filter(Boolean).join(" \xB7 ") || "Installed Ollama model"
+          }));
+        }
+      } catch {
+      }
+    }
+    return {
       providerId: "ollama",
       displayName: "Ollama (Local)",
       enabled: true,
-      selectedModel: "Llama 3 (Local)",
+      endpoint,
+      selectedModel: models[0]?.name,
       hasCredential: true,
       isLocal: true,
-      status: "CONNECTED",
-      models: [
-        { id: "ollama-llama-3", name: "Llama 3 (Local)", description: "Local offline execution" }
-      ],
-      description: "Local on-device inference with zero external network calls"
-    }
-  ];
-  res.status(200).json({ providers });
-});
-app.get("/v1/config/providers/:providerId/status", (req, res) => {
-  const { providerId } = req.params;
-  if (providerId === "nvidia") {
-    const envNvidia = import_provider_nvidia.NvidiaProvider.detectEnvironmentCredential();
-    const hasKey = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || envNvidia);
-    return res.status(200).json({
-      providerId: "nvidia",
-      hasCredential: hasKey,
-      environmentDetected: envNvidia,
-      status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
-      selectedModel: "Nemotron 3 Ultra"
-    });
-  } else if (providerId === "experiential" || providerId === "gpt-6-astra") {
-    const envExp = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
-    const hasKey = !!(runtimeConfig.providers?.["experiential"]?.apiKey || envExp);
-    return res.status(200).json({
-      providerId: "experiential",
-      hasCredential: hasKey,
-      environmentDetected: envExp,
-      status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
-      selectedModel: "gpt-6-astra"
-    });
-  } else if (providerId === "openai") {
-    const envOpenAI = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("openai");
-    const hasKey = !!(runtimeConfig.providers?.["openai"]?.apiKey || envOpenAI);
-    return res.status(200).json({
-      providerId: "openai",
-      hasCredential: hasKey,
-      environmentDetected: envOpenAI,
-      status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
-      selectedModel: "gpt-4o"
-    });
-  } else if (providerId === "ollama") {
-    return res.status(200).json({
-      providerId: "ollama",
-      hasCredential: true,
-      status: "CONNECTED",
-      selectedModel: "Llama 3 (Local)"
-    });
-  }
-  res.status(404).json({ error: `Provider '${providerId}' not found` });
-});
-app.post("/v1/config/providers/:providerId/test", async (req, res) => {
-  const { providerId } = req.params;
-  if (providerId === "nvidia") {
-    const key = req.body?.apiKey || runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY;
-    const endpoint = req.body?.endpoint || runtimeConfig.providers?.["nvidia"]?.endpoint || import_provider_nvidia.NvidiaProvider.DEFAULT_ENDPOINT;
-    if (!key) {
-      return res.status(200).json({
-        provider: "nvidia",
-        status: "NOT_CONFIGURED",
-        message: "No NVIDIA API key configured."
-      });
-    }
-    const testResult = await import_provider_nvidia.NvidiaProvider.testConnection(key, endpoint);
-    return res.status(200).json(testResult);
-  } else if (providerId === "experiential" || providerId === "gpt-6-astra") {
-    const key = req.body?.apiKey || runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY;
-    const endpoint = req.body?.endpoint || runtimeConfig.providers?.["experiential"]?.endpoint;
-    if (!key) {
-      return res.status(200).json({
-        provider: "experiential",
-        status: "NOT_CONFIGURED",
-        message: "No Experiential Labs API key configured."
-      });
-    }
-    const testResult = await import_model_core.OpenAICompatibleProvider.testConnection(key, endpoint, void 0, "gpt-6-astra", import_model_core.ASTRA_CAPABILITY_PROFILE);
-    return res.status(200).json(testResult);
-  } else if (providerId === "openai") {
-    const key = req.body?.apiKey || runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY;
-    const endpoint = req.body?.endpoint || runtimeConfig.providers?.["openai"]?.endpoint;
-    if (!key) {
-      return res.status(200).json({
-        provider: "openai",
-        status: "NOT_CONFIGURED",
-        message: "No OpenAI API key configured."
-      });
-    }
-    const testResult = await import_model_core.OpenAICompatibleProvider.testConnection(key, endpoint, void 0, req.body?.model || "gpt-4o");
-    return res.status(200).json(testResult);
-  }
-  res.status(404).json({ error: `Provider '${providerId}' not testable` });
-});
-app.get("/v1/health", (req, res) => {
-  res.json({ status: "ok" });
-});
-app.post("/v1/tasks", async (req, res) => {
-  const taskReq = req.body;
-  const modelId = taskReq.modelId || "nvidia-nemotron-3-ultra";
-  const isNvidia = modelId.toLowerCase().includes("nvidia") || modelId.toLowerCase().includes("nemotron") || modelId.toLowerCase().includes("deepseek");
-  const isExperiential = modelId.toLowerCase().includes("experiential") || modelId.toLowerCase().includes("astra");
-  const isOpenAI = modelId.toLowerCase().includes("openai") || modelId.toLowerCase().includes("gpt-4");
-  const isLocal = modelId.toLowerCase().includes("ollama") || modelId.toLowerCase().includes("local");
-  if (isNvidia) {
-    const hasNvidia = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY);
-    if (!hasNvidia) {
-      return res.status(400).json({
-        error: "PROVIDER_NOT_CONFIGURED",
-        code: "PROVIDER_NOT_CONFIGURED",
-        providerId: "nvidia",
-        message: "Connect your NVIDIA API key before starting this task."
-      });
-    }
-  } else if (isExperiential) {
-    const hasExperiential = !!(runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY);
-    if (!hasExperiential) {
-      return res.status(400).json({
-        error: "PROVIDER_NOT_CONFIGURED",
-        code: "PROVIDER_NOT_CONFIGURED",
-        providerId: "experiential",
-        message: "Connect your Experiential Labs API key for GPT-6 Astra before starting this task."
-      });
-    }
-  } else if (isOpenAI) {
-    const hasOpenAI = !!(runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY);
-    if (!hasOpenAI) {
-      return res.status(400).json({
-        error: "PROVIDER_NOT_CONFIGURED",
-        code: "PROVIDER_NOT_CONFIGURED",
-        providerId: "openai",
-        message: "Connect your OpenAI API key before starting this task."
-      });
-    }
-  } else if (!isLocal && !runtimeConfig.providers?.[modelId]?.apiKey) {
-    return res.status(400).json({
-      error: "PROVIDER_NOT_CONFIGURED",
-      code: "PROVIDER_NOT_CONFIGURED",
-      providerId: modelId,
-      message: `Provider '${modelId}' requires an API key before starting this task.`
-    });
-  }
-  const taskId = `task-${Date.now()}`;
-  const workspaceRoot = (0, import_path.resolve)(process.cwd());
-  const controller = new AbortController();
-  taskControllers.set(taskId, controller);
-  res.status(201).json({ taskId });
-  setTimeout(async () => {
-    try {
-      let model;
-      if (isExperiential) {
-        const key = runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY || "dummy-key";
-        const endpoint = runtimeConfig.providers?.["experiential"]?.endpoint;
-        model = new import_model_core.OpenAICompatibleProvider(key, endpoint, "gpt-6-astra", import_model_core.ASTRA_CAPABILITY_PROFILE);
-      } else if (isOpenAI) {
-        const key = runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY || "dummy-key";
-        const endpoint = runtimeConfig.providers?.["openai"]?.endpoint;
-        model = new import_model_core.OpenAICompatibleProvider(key, endpoint, modelId);
-      } else {
-        const nvidiaKey = runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY || "dummy-key";
-        const nvidiaEndpoint = runtimeConfig.providers?.["nvidia"]?.endpoint;
-        model = new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint);
-      }
-      const orchestrator = new import_agent_core.AgentOrchestrator(model, registry, executor, diffEngine, {
-        planner: new import_planning_engine.TaskPlanner(),
-        verificationEngine: new import_verification_engine.VerificationEngine(),
-        repairEngine: new import_repair_engine.RepairEngine(),
-        interactionManager,
-        memoryEngine,
-        subagentManager
-      });
-      const ctx = {
-        taskId,
-        workspaceRoot,
-        systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
-        userPrompt: taskReq.description || taskReq.prompt || "",
-        limits: {
-          maxSteps: 30,
-          maxToolCalls: 100,
-          maxExecutionTimeMs: 5 * 60 * 1e3,
-          // 5 mins
-          maxRepairAttempts: 3,
-          maxValidationRuns: 6,
-          maxRepairFiles: 5,
-          maxRepairTimeMs: 18e4
-        },
-        onEvent: (event) => {
-          console.log(`[Event ${event.type}]`, event);
-          eventStore.append(event);
-          const streams2 = eventStreams.get(taskId) || [];
-          streams2.forEach((stream) => {
-            stream.write(`id: ${event.eventId}
-`);
-            stream.write(`event: ${event.type}
-`);
-            stream.write(`data: ${JSON.stringify(event)}
-
-`);
-          });
-        },
-        abortSignal: controller.signal
-      };
-      const result = await orchestrator.run(ctx);
-      console.log(`[Task ${taskId}] finished with status: ${result.status}`);
-      if (result.changeSet) {
-        taskChangeSets.set(taskId, result.changeSet);
-      }
-      const streams = eventStreams.get(taskId) || [];
-      streams.forEach((stream) => stream.end());
-      eventStreams.delete(taskId);
-      setTimeout(() => {
-        eventStore.clear(taskId);
-        taskChangeSets.delete(taskId);
-        taskControllers.delete(taskId);
-      }, 5 * 60 * 1e3);
-    } catch (e) {
-      console.error(`Error executing task ${taskId}:`, e);
-      const streams = eventStreams.get(taskId) || [];
-      streams.forEach((stream) => stream.end());
-      eventStreams.delete(taskId);
-      setTimeout(() => {
-        eventStore.clear(taskId);
-        taskChangeSets.delete(taskId);
-        taskControllers.delete(taskId);
-      }, 5 * 60 * 1e3);
-    }
-  }, 0);
-});
-app.post("/v1/tasks/:id/cancel", (req, res) => {
-  const taskId = req.params.id;
-  const controller = taskControllers.get(taskId);
-  if (controller) {
-    controller.abort();
-    interactionManager.cancelTaskInteractions(taskId);
-    const cancelEvt = {
-      type: "task.cancelled",
-      eventId: `evt-${Date.now()}`,
-      taskId,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      status: probe.status,
+      models,
+      description: probe.status === "CONNECTED" ? "Local on-device inference through Ollama. No API key, no external network calls." : probe.message || "Ollama is not reachable."
     };
-    eventStore.append(cancelEvt);
+  }
+  app2.get("/v1/config/providers", async (req, res) => {
+    const envNvidia = import_provider_nvidia.NvidiaProvider.detectEnvironmentCredential();
+    const hasNvidiaKey = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || envNvidia);
+    const envExperiential = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
+    const hasExperientialKey = !!(runtimeConfig.providers?.["experiential"]?.apiKey || envExperiential);
+    const envOpenAI = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("openai");
+    const hasOpenAIKey = !!(runtimeConfig.providers?.["openai"]?.apiKey || envOpenAI);
+    const providers = [
+      {
+        providerId: "nvidia",
+        displayName: "NVIDIA",
+        enabled: true,
+        endpoint: runtimeConfig.providers?.["nvidia"]?.endpoint || import_provider_nvidia.NvidiaProvider.DEFAULT_ENDPOINT,
+        selectedModel: "Nemotron 3 Ultra",
+        hasCredential: hasNvidiaKey,
+        isLocal: false,
+        status: hasNvidiaKey ? "CONNECTED" : "NOT_CONFIGURED",
+        environmentDetected: envNvidia,
+        models: [
+          { id: "nvidia-nemotron-3-ultra", name: "Nemotron 3 Ultra", description: "NVIDIA Nemotron high-performance engineering model" }
+        ],
+        description: "High performance cloud inference powered by NVIDIA Nemotron"
+      },
+      {
+        providerId: "experiential",
+        displayName: "GPT-6 Astra (Experiential Labs)",
+        enabled: true,
+        endpoint: runtimeConfig.providers?.["experiential"]?.endpoint || import_model_core.ASTRA_CAPABILITY_PROFILE.defaultEndpoint,
+        selectedModel: "gpt-6-astra",
+        hasCredential: hasExperientialKey,
+        isLocal: false,
+        status: hasExperientialKey ? "CONNECTED" : "NOT_CONFIGURED",
+        environmentDetected: envExperiential,
+        models: [
+          { id: "gpt-6-astra", name: "GPT-6 Astra", description: "Experiential Labs 1.05M context frontier model" }
+        ],
+        description: "Experiential Labs OpenAI-compatible gateway powered by GPT-6 Astra"
+      },
+      {
+        providerId: "openai",
+        displayName: "OpenAI-Compatible",
+        enabled: true,
+        endpoint: runtimeConfig.providers?.["openai"]?.endpoint || "https://api.openai.com/v1",
+        selectedModel: "gpt-4o",
+        hasCredential: hasOpenAIKey,
+        isLocal: false,
+        status: hasOpenAIKey ? "CONNECTED" : "NOT_CONFIGURED",
+        environmentDetected: envOpenAI,
+        models: [
+          { id: "gpt-4o", name: "GPT-4o", description: "OpenAI multimodal flagship" }
+        ],
+        description: "Connect any OpenAI-compatible API endpoint with your own API key"
+      },
+      await describeOllama()
+    ];
+    res.status(200).json({ providers });
+  });
+  app2.get("/v1/config/providers/:providerId/status", async (req, res) => {
+    const { providerId } = req.params;
+    if (providerId === "nvidia") {
+      const envNvidia = import_provider_nvidia.NvidiaProvider.detectEnvironmentCredential();
+      const hasKey = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || envNvidia);
+      return res.status(200).json({
+        providerId: "nvidia",
+        hasCredential: hasKey,
+        environmentDetected: envNvidia,
+        status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
+        selectedModel: "Nemotron 3 Ultra"
+      });
+    } else if (providerId === "experiential" || providerId === "gpt-6-astra") {
+      const envExp = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
+      const hasKey = !!(runtimeConfig.providers?.["experiential"]?.apiKey || envExp);
+      return res.status(200).json({
+        providerId: "experiential",
+        hasCredential: hasKey,
+        environmentDetected: envExp,
+        status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
+        selectedModel: "gpt-6-astra"
+      });
+    } else if (providerId === "openai") {
+      const envOpenAI = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("openai");
+      const hasKey = !!(runtimeConfig.providers?.["openai"]?.apiKey || envOpenAI);
+      return res.status(200).json({
+        providerId: "openai",
+        hasCredential: hasKey,
+        environmentDetected: envOpenAI,
+        status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
+        selectedModel: "gpt-4o"
+      });
+    } else if (providerId === "ollama") {
+      const described = await describeOllama();
+      return res.status(200).json({
+        providerId: "ollama",
+        hasCredential: true,
+        status: described.status,
+        endpoint: described.endpoint,
+        selectedModel: described.selectedModel,
+        message: described.description
+      });
+    }
+    res.status(404).json({ error: `Provider '${providerId}' not found` });
+  });
+  app2.post("/v1/config/providers/:providerId/test", async (req, res) => {
+    const { providerId } = req.params;
+    if (providerId === "nvidia") {
+      const key = req.body?.apiKey || runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY;
+      const endpoint = req.body?.endpoint || runtimeConfig.providers?.["nvidia"]?.endpoint || import_provider_nvidia.NvidiaProvider.DEFAULT_ENDPOINT;
+      if (!key) {
+        return res.status(200).json({
+          provider: "nvidia",
+          status: "NOT_CONFIGURED",
+          message: "No NVIDIA API key configured."
+        });
+      }
+      const testResult = await import_provider_nvidia.NvidiaProvider.testConnection(key, endpoint);
+      return res.status(200).json(testResult);
+    } else if (providerId === "experiential" || providerId === "gpt-6-astra") {
+      const key = req.body?.apiKey || runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY;
+      const endpoint = req.body?.endpoint || runtimeConfig.providers?.["experiential"]?.endpoint;
+      if (!key) {
+        return res.status(200).json({
+          provider: "experiential",
+          status: "NOT_CONFIGURED",
+          message: "No Experiential Labs API key configured."
+        });
+      }
+      const testResult = await import_model_core.OpenAICompatibleProvider.testConnection(key, endpoint, void 0, "gpt-6-astra", import_model_core.ASTRA_CAPABILITY_PROFILE);
+      return res.status(200).json(testResult);
+    } else if (providerId === "openai") {
+      const key = req.body?.apiKey || runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY;
+      const endpoint = req.body?.endpoint || runtimeConfig.providers?.["openai"]?.endpoint;
+      if (!key) {
+        return res.status(200).json({
+          provider: "openai",
+          status: "NOT_CONFIGURED",
+          message: "No OpenAI API key configured."
+        });
+      }
+      const testResult = await import_model_core.OpenAICompatibleProvider.testConnection(key, endpoint, void 0, req.body?.model || "gpt-4o");
+      return res.status(200).json(testResult);
+    } else if (providerId === "ollama") {
+      const endpoint = req.body?.endpoint || runtimeConfig.providers?.["ollama"]?.endpoint;
+      const testResult = await import_model_core.OllamaProvider.probe(endpoint);
+      return res.status(200).json(testResult);
+    }
+    res.status(404).json({ error: `Provider '${providerId}' not testable` });
+  });
+  app2.get("/v1/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+  app2.post("/v1/tasks", async (req, res) => {
+    const taskReq = req.body || {};
+    const modelId = taskReq.modelId || "nvidia-nemotron-3-ultra";
+    const selection = selectProvider(modelId);
+    if (selection.providerId === "nvidia") {
+      const hasNvidia = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY);
+      if (!hasNvidia) {
+        return res.status(400).json({
+          error: "PROVIDER_NOT_CONFIGURED",
+          code: "PROVIDER_NOT_CONFIGURED",
+          providerId: "nvidia",
+          message: "Connect your NVIDIA API key before starting this task."
+        });
+      }
+    } else if (selection.providerId === "experiential") {
+      const hasExperiential = !!(runtimeConfig.providers?.["experiential"]?.apiKey || process.env.EXPERIENTIAL_API_KEY);
+      if (!hasExperiential) {
+        return res.status(400).json({
+          error: "PROVIDER_NOT_CONFIGURED",
+          code: "PROVIDER_NOT_CONFIGURED",
+          providerId: "experiential",
+          message: "Connect your Experiential Labs API key for GPT-6 Astra before starting this task."
+        });
+      }
+    } else if (selection.providerId === "openai") {
+      const hasOpenAI = !!(runtimeConfig.providers?.["openai"]?.apiKey || process.env.OPENAI_API_KEY);
+      if (!hasOpenAI) {
+        return res.status(400).json({
+          error: "PROVIDER_NOT_CONFIGURED",
+          code: "PROVIDER_NOT_CONFIGURED",
+          providerId: "openai",
+          message: "Connect your OpenAI API key before starting this task."
+        });
+      }
+    } else if (selection.providerId === "ollama") {
+      const endpoint = import_model_core.OllamaProvider.normalizeBaseUrl(runtimeConfig.providers?.["ollama"]?.endpoint);
+      const probe = await import_model_core.OllamaProvider.probe(endpoint, 2e3);
+      if (probe.status !== "CONNECTED") {
+        return res.status(400).json({
+          error: "PROVIDER_NOT_REACHABLE",
+          code: "PROVIDER_NOT_REACHABLE",
+          providerId: "ollama",
+          message: probe.message || `Ollama is not reachable at ${endpoint}.`
+        });
+      }
+    } else if (selection.providerId === "unknown" && !runtimeConfig.providers?.[modelId]?.apiKey) {
+      return res.status(400).json({
+        error: "PROVIDER_NOT_CONFIGURED",
+        code: "PROVIDER_NOT_CONFIGURED",
+        providerId: modelId,
+        message: `Provider '${modelId}' requires an API key before starting this task.`
+      });
+    }
+    const workspace = resolveWorkspaceRoot(taskReq.workspace);
+    if (!workspace.ok) {
+      return res.status(400).json({
+        error: workspace.code,
+        code: workspace.code,
+        message: workspace.message
+      });
+    }
+    const workspaceRoot = workspace.rootPath;
+    const workspaceId = workspace.workspaceId;
+    let mode = "AUTO";
+    if (taskReq.mode !== void 0 && taskReq.mode !== null) {
+      const requested = String(taskReq.mode).toUpperCase();
+      if (!import_protocol.TASK_MODES.includes(requested)) {
+        return res.status(400).json({
+          error: "INVALID_MODE",
+          code: "INVALID_MODE",
+          message: `mode must be one of ${import_protocol.TASK_MODES.join(", ")} (received '${taskReq.mode}').`
+        });
+      }
+      mode = requested;
+    }
+    const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const controller = new AbortController();
+    taskControllers.set(taskId, controller);
+    res.status(201).json({ taskId, workspaceRoot });
+    const emit = (event) => {
+      eventStore.append(event);
+      const streams = eventStreams.get(taskId) || [];
+      streams.forEach((stream) => {
+        stream.write(`id: ${event.eventId}
+`);
+        stream.write(`event: ${event.type}
+`);
+        stream.write(`data: ${JSON.stringify(event)}
+
+`);
+      });
+    };
+    const closeStreams = () => {
+      finishedTasks.add(taskId);
+      const streams = eventStreams.get(taskId) || [];
+      streams.forEach((stream) => stream.end());
+      eventStreams.delete(taskId);
+    };
+    const scheduleCleanup = () => {
+      setTimeout(() => {
+        eventStore.clear(taskId);
+        taskChangeSets.delete(taskId);
+        taskControllers.delete(taskId);
+        finishedTasks.delete(taskId);
+      }, 5 * 60 * 1e3);
+    };
+    setTimeout(async () => {
+      try {
+        const model = providerFactory(selection, runtimeConfig.providers);
+        const orchestrator = new import_agent_core.AgentOrchestrator(model, registry, executor, diffEngine, {
+          planner: new import_planning_engine.TaskPlanner(),
+          verificationEngine: new import_verification_engine.VerificationEngine(),
+          repairEngine: new import_repair_engine.RepairEngine(),
+          interactionManager,
+          memoryEngine,
+          subagentManager
+        });
+        const ctx = {
+          taskId,
+          workspaceRoot,
+          workspaceId,
+          mode,
+          systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
+          userPrompt: taskReq.description || taskReq.prompt || "",
+          limits: {
+            maxSteps: 30,
+            maxToolCalls: 100,
+            maxExecutionTimeMs: 5 * 60 * 1e3,
+            // 5 mins
+            maxRepairAttempts: 3,
+            maxValidationRuns: 6,
+            maxRepairFiles: 5,
+            maxRepairTimeMs: 18e4
+          },
+          onEvent: (event) => {
+            console.log(`[Event ${event.type}]`, event);
+            emit(event);
+          },
+          abortSignal: controller.signal
+        };
+        const result = await orchestrator.run(ctx);
+        console.log(`[Task ${taskId}] finished with status: ${result.status}`);
+        if (result.changeSet) {
+          taskChangeSets.set(taskId, result.changeSet);
+        }
+        closeStreams();
+        scheduleCleanup();
+      } catch (e) {
+        console.error(`Error executing task ${taskId}:`, e);
+        const history = eventStore.getEvents(taskId);
+        const hasTerminal = history.some((ev) => ev.type === "task.completed" || ev.type === "task.failed" || ev.type === "task.cancelled");
+        if (!hasTerminal) {
+          emit({
+            type: "task.failed",
+            eventId: `evt-${Date.now()}-runtime-error`,
+            taskId,
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            error: e?.message || String(e),
+            payload: { code: "RUNTIME_ERROR", message: e?.message || String(e) }
+          });
+        }
+        closeStreams();
+        scheduleCleanup();
+      }
+    }, 0);
+  });
+  app2.post("/v1/tasks/:id/cancel", (req, res) => {
+    const taskId = req.params.id;
+    const controller = taskControllers.get(taskId);
+    if (controller) {
+      controller.abort();
+      interactionManager.cancelTaskInteractions(taskId);
+      const cancelEvt = {
+        type: "task.cancelled",
+        eventId: `evt-${Date.now()}`,
+        taskId,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      eventStore.append(cancelEvt);
+      const streams = eventStreams.get(taskId) || [];
+      streams.forEach((stream) => {
+        stream.write(`id: ${cancelEvt.eventId}
+`);
+        stream.write(`event: ${cancelEvt.type}
+`);
+        stream.write(`data: ${JSON.stringify(cancelEvt)}
+
+`);
+      });
+      res.status(200).json({ status: "cancelled" });
+    } else {
+      res.status(404).json({ error: "Task not found or already completed" });
+    }
+  });
+  app2.get("/v1/tasks/:id/events", (req, res) => {
+    const taskId = req.params.id;
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    });
     const streams = eventStreams.get(taskId) || [];
-    streams.forEach((stream) => {
-      stream.write(`id: ${cancelEvt.eventId}
+    streams.push(res);
+    eventStreams.set(taskId, streams);
+    const history = eventStore.getEvents(taskId);
+    for (const event of history) {
+      res.write(`id: ${event.eventId}
 `);
-      stream.write(`event: ${cancelEvt.type}
+      res.write(`event: ${event.type}
 `);
-      stream.write(`data: ${JSON.stringify(cancelEvt)}
+      res.write(`data: ${JSON.stringify(event)}
 
 `);
+    }
+    if (finishedTasks.has(taskId)) {
+      eventStreams.set(taskId, (eventStreams.get(taskId) || []).filter((s) => s !== res));
+      res.end();
+      return;
+    }
+    req.on("close", () => {
+      const activeStreams = eventStreams.get(taskId) || [];
+      eventStreams.set(taskId, activeStreams.filter((s) => s !== res));
     });
-    res.status(200).json({ status: "cancelled" });
-  } else {
-    res.status(404).json({ error: "Task not found or already completed" });
-  }
-});
-app.get("/v1/tasks/:id/events", (req, res) => {
-  const taskId = req.params.id;
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive"
   });
-  const streams = eventStreams.get(taskId) || [];
-  streams.push(res);
-  eventStreams.set(taskId, streams);
-  const history = eventStore.getEvents(taskId);
-  for (const event of history) {
-    res.write(`id: ${event.eventId}
+  app2.get("/v1/tasks/:id/diff", (req, res) => {
+    const taskId = req.params.id;
+    const path = req.query.path;
+    const changeSet = taskChangeSets.get(taskId);
+    if (!changeSet) {
+      return res.status(404).json({ error: "ChangeSet not found for task" });
+    }
+    const change = changeSet.changes.get(path);
+    if (!change) {
+      return res.status(404).json({ error: "No changes found for path" });
+    }
+    res.json({
+      originalContent: change.originalContent,
+      newContent: change.newContent
+    });
+  });
+  app2.get("/v1/tasks/:id/interactions", (req, res) => {
+    const taskId = req.params.id;
+    const pending = interactionManager.getPendingInteraction(taskId);
+    if (pending) {
+      res.json({ interaction: pending });
+    } else {
+      res.json({ interaction: null });
+    }
+  });
+  app2.post("/v1/tasks/:taskId/interactions/:interactionId/respond", (req, res) => {
+    const { taskId, interactionId } = req.params;
+    const { response } = req.body;
+    if (!response || !response.type) {
+      return res.status(400).json({ error: "Missing response or response.type" });
+    }
+    const pending = interactionManager.getPendingInteraction(taskId);
+    if (!pending || pending.interactionId !== interactionId) {
+      return res.status(404).json({ error: "Interaction not found, expired, or already resolved" });
+    }
+    if (pending.type === "INPUT" && response.type !== "INPUT") {
+      return res.status(400).json({ error: "Invalid response type for INPUT interaction" });
+    }
+    if (pending.type === "APPROVAL" && response.type !== "APPROVE" && response.type !== "DENY") {
+      return res.status(400).json({ error: "Invalid response type for APPROVAL interaction" });
+    }
+    const success = interactionManager.resolveInteraction(taskId, interactionId, response, (event) => {
+      eventStore.append(event);
+      const streams = eventStreams.get(taskId) || [];
+      streams.forEach((stream) => {
+        stream.write(`id: ${event.eventId}
 `);
-    res.write(`event: ${event.type}
+        stream.write(`event: ${event.type}
 `);
-    res.write(`data: ${JSON.stringify(event)}
+        stream.write(`data: ${JSON.stringify(event)}
 
 `);
-  }
-  req.on("close", () => {
-    const activeStreams = eventStreams.get(taskId) || [];
-    eventStreams.set(taskId, activeStreams.filter((s) => s !== res));
+      });
+    });
+    if (success) {
+      res.status(200).json({ status: "resolved" });
+    } else {
+      res.status(400).json({ error: "Failed to resolve interaction" });
+    }
   });
-});
-app.get("/v1/tasks/:id/diff", (req, res) => {
-  const taskId = req.params.id;
-  const path = req.query.path;
-  const changeSet = taskChangeSets.get(taskId);
-  if (!changeSet) {
-    return res.status(404).json({ error: "ChangeSet not found for task" });
-  }
-  const change = changeSet.changes.get(path);
-  if (!change) {
-    return res.status(404).json({ error: "No changes found for path" });
-  }
-  res.json({
-    originalContent: change.originalContent,
-    newContent: change.newContent
+  app2.get("/v1/workspace/memory", async (req, res) => {
+    try {
+      const workspaceId = req.query.workspaceId;
+      if (!workspaceId) {
+        return res.status(400).json({ error: "workspaceId query parameter is required." });
+      }
+      const text = req.query.query || req.query.text;
+      const type = req.query.type;
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
+      const result = await memoryEngine.query({
+        workspaceId,
+        text,
+        types: type ? [type] : void 0,
+        limit: Math.min(limit, 50)
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
-});
-app.get("/v1/tasks/:id/interactions", (req, res) => {
-  const taskId = req.params.id;
-  const pending = interactionManager.getPendingInteraction(taskId);
-  if (pending) {
-    res.json({ interaction: pending });
-  } else {
-    res.json({ interaction: null });
-  }
-});
-app.post("/v1/tasks/:taskId/interactions/:interactionId/respond", (req, res) => {
-  const { taskId, interactionId } = req.params;
-  const { response } = req.body;
-  if (!response || !response.type) {
-    return res.status(400).json({ error: "Missing response or response.type" });
-  }
-  const pending = interactionManager.getPendingInteraction(taskId);
-  if (!pending || pending.interactionId !== interactionId) {
-    return res.status(404).json({ error: "Interaction not found, expired, or already resolved" });
-  }
-  if (pending.type === "INPUT" && response.type !== "INPUT") {
-    return res.status(400).json({ error: "Invalid response type for INPUT interaction" });
-  }
-  if (pending.type === "APPROVAL" && response.type !== "APPROVE" && response.type !== "DENY") {
-    return res.status(400).json({ error: "Invalid response type for APPROVAL interaction" });
-  }
-  const success = interactionManager.resolveInteraction(taskId, interactionId, response, (event) => {
-    eventStore.append(event);
-    const streams = eventStreams.get(taskId) || [];
-    streams.forEach((stream) => {
-      stream.write(`id: ${event.eventId}
-`);
-      stream.write(`event: ${event.type}
-`);
-      stream.write(`data: ${JSON.stringify(event)}
-
-`);
+  app2.post("/v1/workspace/memory", async (req, res) => {
+    try {
+      const { workspaceId, type, content, source, trustLevel, confidence, scope, evidence } = req.body;
+      if (!workspaceId || !type || !content) {
+        return res.status(400).json({ error: "Missing required fields: workspaceId, type, and content are required." });
+      }
+      if (!["CONVENTION", "LESSON", "EPISODE"].includes(type)) {
+        return res.status(400).json({ error: `Invalid memory type: ${type}. Must be CONVENTION, LESSON, or EPISODE.` });
+      }
+      const assignedSource = source === "USER" || !source ? "USER" : source;
+      const assignedTrust = assignedSource === "USER" ? "USER_VERIFIED" : trustLevel || "AGENT_DERIVED";
+      const entry = await memoryEngine.record({
+        workspaceId,
+        type,
+        content,
+        source: assignedSource,
+        trustLevel: assignedTrust,
+        confidence: confidence || 1,
+        status: "ACTIVE",
+        scope: scope || { workspaceId },
+        evidence
+      });
+      res.status(201).json({ entry });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app2.delete("/v1/workspace/memory/:id", async (req, res) => {
+    try {
+      const memoryId = req.params.id;
+      const workspaceId = req.query.workspaceId || req.body?.workspaceId;
+      const reason = req.query.reason || req.body?.reason || "Manual deletion / invalidation";
+      if (!workspaceId) {
+        return res.status(400).json({ error: "workspaceId is required to invalidate memory." });
+      }
+      await memoryEngine.invalidate(workspaceId, memoryId, reason);
+      res.json({ status: "invalidated", memoryId });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  app2.get("/v1/tasks/:taskId/subagents", (req, res) => {
+    const { taskId } = req.params;
+    const events = eventStore.getEvents(taskId);
+    const subagentEvents = events.filter((e) => e.type.startsWith("subagent."));
+    res.json({
+      taskId,
+      subagents: subagentEvents
     });
   });
-  if (success) {
-    res.status(200).json({ status: "resolved" });
-  } else {
-    res.status(400).json({ error: "Failed to resolve interaction" });
+  return app2;
+}
+function resolveStartupToken() {
+  const fromEnv = process.env.COMU_RUNTIME_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  if (require.main === module) {
+    const generated = generateRuntimeToken();
+    console.log(`[COMU] COMU_RUNTIME_TOKEN not set; generated session token: ${generated}`);
+    return generated;
   }
-});
-app.get("/v1/workspace/memory", async (req, res) => {
-  try {
-    const workspaceId = req.query.workspaceId || (0, import_path.resolve)(process.cwd());
-    const text = req.query.query || req.query.text;
-    const type = req.query.type;
-    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 20;
-    const result = await memoryEngine.query({
-      workspaceId,
-      text,
-      types: type ? [type] : void 0,
-      limit: Math.min(limit, 50)
-    });
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-app.post("/v1/workspace/memory", async (req, res) => {
-  try {
-    const { workspaceId, type, content, source, trustLevel, confidence, scope, evidence } = req.body;
-    if (!workspaceId || !type || !content) {
-      return res.status(400).json({ error: "Missing required fields: workspaceId, type, and content are required." });
-    }
-    if (!["CONVENTION", "LESSON", "EPISODE"].includes(type)) {
-      return res.status(400).json({ error: `Invalid memory type: ${type}. Must be CONVENTION, LESSON, or EPISODE.` });
-    }
-    const assignedSource = source === "USER" || !source ? "USER" : source;
-    const assignedTrust = assignedSource === "USER" ? "USER_VERIFIED" : trustLevel || "AGENT_DERIVED";
-    const entry = await memoryEngine.record({
-      workspaceId,
-      type,
-      content,
-      source: assignedSource,
-      trustLevel: assignedTrust,
-      confidence: confidence || 1,
-      status: "ACTIVE",
-      scope: scope || { workspaceId },
-      evidence
-    });
-    res.status(201).json({ entry });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-app.delete("/v1/workspace/memory/:id", async (req, res) => {
-  try {
-    const memoryId = req.params.id;
-    const workspaceId = req.query.workspaceId || req.body?.workspaceId;
-    const reason = req.query.reason || req.body?.reason || "Manual deletion / invalidation";
-    if (!workspaceId) {
-      return res.status(400).json({ error: "workspaceId is required to invalidate memory." });
-    }
-    await memoryEngine.invalidate(workspaceId, memoryId, reason);
-    res.json({ status: "invalidated", memoryId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-app.get("/v1/tasks/:taskId/subagents", (req, res) => {
-  const { taskId } = req.params;
-  const events = eventStore.getEvents(taskId);
-  const subagentEvents = events.filter((e) => e.type.startsWith("subagent."));
-  res.json({
-    taskId,
-    subagents: subagentEvents
-  });
-});
+  return void 0;
+}
+var app = createRuntimeApp({ authToken: resolveStartupToken() });
 if (require.main === module) {
-  app.listen(port, () => {
-    console.log(`Agent runtime server listening on port ${port}`);
+  const port = process.env.PORT || 3456;
+  startRuntimeServer(app, port).then(() => console.log(`Agent runtime server listening on http://${LOOPBACK_HOST}:${port} (loopback only, token required)`)).catch((err) => {
+    console.error(`[COMU] Failed to bind runtime on ${LOOPBACK_HOST}:${port}: ${err?.message || err}`);
+    process.exit(1);
   });
 }
 var server_default = app;
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  AUTH_HEADER,
+  AUTH_TOKEN_HEADER,
+  DEFAULT_ALLOWED_ORIGIN,
+  LOOPBACK_HOST,
+  createAuthMiddleware,
+  createLoopbackGuard,
+  createRuntimeApp,
+  defaultProviderFactory,
+  extractPresentedToken,
+  generateRuntimeToken,
+  isLoopbackAddress,
+  resolveWorkspaceRoot,
+  safeEqual,
+  selectProvider,
+  startRuntimeServer
+});
 /*! Bundled license information:
 
 depd/index.js:
