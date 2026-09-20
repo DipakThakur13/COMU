@@ -36,6 +36,12 @@ export const ASTRA_CAPABILITY_PROFILE: ProviderCapabilityProfile = {
   supportsVision: false,
   maxContextTokens: 1_050_000,
   maxOutputTokens: 128_000,
-  defaultEndpoint: "https://api.experiential.com/v1",
+  /**
+   * Deliberately no pricePerMillionTokens. Experiential Labs currently lists GPT-6 Astra on a
+   * promotional tier, and a promotional price is not a price COMU should bake in and report as
+   * fact. Until there is a stable published rate the header shows token counts and says the cost
+   * is unknown, which is true, rather than a number that would be wrong either way.
+   */
+  defaultEndpoint: "https://api.experientiallabs.ai/v1",
   allowedModels: ["gpt-6-astra", "astra", "gpt-6-astra-pro"]
 };

@@ -23938,6 +23938,7 @@ var require_executable_resolver = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.isBatchFile = isBatchFile;
     exports2.resolveExecutable = resolveExecutable;
+    exports2.quoteForCmd = quoteForCmd;
     exports2.buildSpawnTarget = buildSpawnTarget;
     var fs = __importStar(require("fs"));
     var path = __importStar(require("path"));
@@ -23986,13 +23987,18 @@ var require_executable_resolver = __commonJS({
       }
       return { file: name, kind: "unresolved" };
     }
+    function quoteForCmd(value) {
+      const escaped = value.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, "$1$1");
+      return `"${escaped}"`;
+    }
     function buildSpawnTarget(executable, args, env = process.env) {
       const resolved = resolveExecutable(executable, env);
       if (resolved.kind === "batch") {
         const comspec = env.ComSpec ?? env.COMSPEC ?? "cmd.exe";
-        return { command: comspec, args: ["/d", "/s", "/c", resolved.file, ...args], viaCmd: true };
+        const line = [resolved.file, ...args].map(quoteForCmd).join(" ");
+        return { command: comspec, args: ["/d", "/s", "/c", `"${line}"`], viaCmd: true, verbatim: true };
       }
-      return { command: resolved.file, args, viaCmd: false };
+      return { command: resolved.file, args, viaCmd: false, verbatim: false };
     }
   }
 });
@@ -24328,6 +24334,7 @@ var require_process_manager = __commonJS({
             cwd: plan.cwd,
             env,
             shell: false,
+            windowsVerbatimArguments: target.verbatim,
             windowsHide: true,
             detached: process.platform !== "win32"
             // Useful for killing process trees on POSIX

@@ -66,6 +66,19 @@ If the daemon is not reachable, COMU refuses to start the task and says so; it n
 
 ---
 
+### 2b. GPT-6 Astra (Experiential Labs)
+
+An OpenAI-compatible gateway. Base URL `https://api.experientiallabs.ai/v1`, model id `gpt-6-astra`,
+authenticated with an Experiential Labs API key.
+
+Verified reachable on 2026-09-20: the host resolves and the API answers `401` without a key, which
+is what a real key-gated endpoint should do. COMU previously shipped `https://api.experiential.com/v1`,
+which does not resolve at all, so the entry would have sat in `NOT_CONFIGURED` and then failed with
+a network error for anyone who added a key. That endpoint is corrected.
+
+COMU shows token counts for this model but no cost estimate. The listed price is promotional, and
+COMU does not present a promotional rate as a fact.
+
 ### 3. OpenAI & Anthropic Compatible Providers
 
 Connect custom endpoints or compatible API proxies:

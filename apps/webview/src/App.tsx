@@ -7,6 +7,7 @@ import { ActivityStream } from "./components/activity/ActivityStream.js";
 import { ApprovalCard } from "./components/approval/ApprovalCard.js";
 import { PlanRibbon } from "./components/plan/PlanRibbon.js";
 import { ChangesPanel } from "./components/changes/ChangesPanel.js";
+import { SettingsView } from "./components/settings/SettingsView.js";
 import { Button, ErrorBoundary } from "./components/primitives/index.js";
 import styles from "./app.module.css";
 
@@ -16,6 +17,9 @@ export function App() {
   const providers = useStore(s => s.providers);
   const banner = useStore(s => s.banner);
   const store = useStore();
+
+  const providerTests = useStore(s => s.providerTests);
+  const testingProvider = useStore(s => s.testingProvider);
 
   const busy = session.status === "running" || session.status === "cancelling";
 
@@ -30,6 +34,24 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, store]);
+
+  if (ui.settingsOpen) {
+    return (
+      <div className={styles.shell}>
+        <ErrorBoundary region="settings">
+          <SettingsView
+            providers={providers}
+            testResults={providerTests}
+            testing={testingProvider}
+            onClose={() => store.setSettingsOpen(false)}
+            onSave={store.saveProviderKey}
+            onRemove={store.removeProviderKey}
+            onTest={store.testProvider}
+          />
+        </ErrorBoundary>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.shell}>

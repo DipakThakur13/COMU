@@ -38,6 +38,9 @@ export function mountHarness(rootElement: HTMLElement) {
   if (surface === "changes" || surface === "activity") {
     useStore.getState().setSurface(surface);
   }
+  if (params.get("settings") === "1") {
+    useStore.getState().setSettingsOpen(true);
+  }
 
   createRoot(rootElement).render(
     <StrictMode>

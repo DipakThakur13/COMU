@@ -1,0 +1,183 @@
+.view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--comu-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-2) var(--comu-space-3);
+  border-bottom: 1px solid var(--comu-border);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--comu-text-md);
+  font-weight: 600;
+}
+
+.intro {
+  margin: 0;
+  padding: var(--comu-space-2) var(--comu-space-3);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--comu-space-3) var(--comu-space-3);
+}
+
+/* ── Card ───────────────────────────────────────────────────────── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-2);
+  margin-bottom: var(--comu-space-3);
+  padding: var(--comu-space-3);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-md);
+  background: var(--comu-surface-raised);
+  min-width: 0;
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--comu-space-2);
+  min-width: 0;
+}
+
+/*
+ * A provider name wraps on word boundaries and never inside a word. "OpenAI-Compatible" and
+ * "GPT-6 Astra (Experiential Labs)" used to split mid-token at sidebar width.
+ */
+.name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--comu-text-sm);
+  font-weight: 600;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  hyphens: none;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--comu-space-1);
+  margin: 0;
+}
+
+/* A tag is a single unit: it wraps to the next line, never inside itself. */
+.tag {
+  padding: 0 var(--comu-space-1);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  white-space: nowrap;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.models {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--comu-space-2);
+  font-size: var(--comu-text-xs);
+  min-width: 0;
+}
+
+.modelName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelMeta,
+.modelMore {
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-xs);
+  white-space: nowrap;
+}
+
+/* ── Fields ─────────────────────────────────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.field label {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.field input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--comu-space-1) var(--comu-space-2);
+  border: 1px solid var(--vscode-input-border, var(--comu-border));
+  border-radius: var(--comu-radius-sm);
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: var(--comu-text-xs);
+}
+
+.readOnlyInput {
+  opacity: 0.7;
+}
+
+.fieldHint {
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--comu-space-1);
+}
+
+.testOk,
+.testFail {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--comu-space-1);
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  /* A provider message can contain a URL, which is the one thing here that may break anywhere. */
+  overflow-wrap: anywhere;
+}
+
+.testOk { color: var(--comu-status-ok); }
+.testFail { color: var(--comu-status-error); }

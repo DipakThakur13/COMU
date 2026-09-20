@@ -19,6 +19,8 @@ const PROVIDERS: ProviderConfig[] = [
   {
     providerId: "nvidia",
     displayName: "NVIDIA",
+    description: "NVIDIA NIM high-performance engineering models.",
+    endpoint: "https://integrate.api.nvidia.com/v1/chat/completions",
     enabled: true,
     hasCredential: true,
     isLocal: false,
@@ -29,8 +31,32 @@ const PROVIDERS: ProviderConfig[] = [
     ]
   },
   {
+    providerId: "experiential",
+    displayName: "GPT-6 Astra (Experiential Labs)",
+    description: "Frontier reasoning and coding with a 1.05M token context window.",
+    endpoint: "https://api.experientiallabs.ai/v1",
+    enabled: true,
+    hasCredential: false,
+    isLocal: false,
+    status: "NOT_CONFIGURED",
+    models: [{ id: "gpt-6-astra", name: "GPT-6 Astra", description: "1.05M context", contextTokens: 1050000 }]
+  },
+  {
+    providerId: "openai",
+    displayName: "OpenAI-Compatible",
+    description: "Connect any OpenAI-compatible endpoint with your own key.",
+    endpoint: "https://api.openai.com/v1",
+    enabled: true,
+    hasCredential: false,
+    isLocal: false,
+    status: "INVALID_CREDENTIAL",
+    models: [{ id: "gpt-4o", name: "GPT-4o", contextTokens: 128000 }]
+  },
+  {
     providerId: "ollama",
     displayName: "Ollama (Local)",
+    description: "Local on-device inference. No API key, nothing leaves your machine.",
+    endpoint: "http://127.0.0.1:11434",
     enabled: true,
     hasCredential: true,
     isLocal: true,

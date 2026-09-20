@@ -19,11 +19,15 @@ const FIXTURES = [
   "completed",
   "changes",
   "failed",
+  "settings",
   "long"
 ] as const;
 
 /** The Changes fixture is only meaningful with that surface selected. */
 const SURFACE: Partial<Record<(typeof FIXTURES)[number], string>> = { changes: "changes" };
+
+/** Settings is a full-panel view rather than an event fixture. */
+const SETTINGS = new Set<string>(["settings"]);
 const THEMES = ["dark", "light", "hc-dark"] as const;
 const WIDTHS = [280, 400, 900] as const;
 
@@ -34,7 +38,9 @@ async function openPanel(page: Page, fixture: string, theme: string, width: numb
   await page.clock.install({ time: FROZEN_NOW });
   const surface = SURFACE[fixture as (typeof FIXTURES)[number]];
   // speed=0 delivers the whole fixture at once: no paced replay, nothing in flight.
-  await page.goto(`/?fixture=${fixture}&theme=${theme}&width=${width}&speed=0${surface ? `&surface=${surface}` : ""}`);
+  const settings = SETTINGS.has(fixture) ? "&settings=1" : "";
+  const fixtureId = SETTINGS.has(fixture) ? "idle" : fixture;
+  await page.goto(`/?fixture=${fixtureId}&theme=${theme}&width=${width}&speed=0${surface ? `&surface=${surface}` : ""}${settings}`);
   await page.waitForSelector("body[data-comu-harness-settled='1']");
   await page.waitForFunction(() => document.fonts.status === "loaded");
   const frame = page.locator("#comu-harness-frame");
@@ -79,6 +85,24 @@ test.describe("layout invariants", () => {
       expect(result.panelScrolls).toBe(false);
     });
   }
+
+  test("provider names and tags never break mid-word at 280px", async ({ page }) => {
+    await openPanel(page, "settings", "dark", 280);
+    const offenders = await page.evaluate(() => {
+      const frame = document.getElementById("comu-harness-frame");
+      if (!frame) return [];
+      const bad: string[] = [];
+      for (const el of frame.querySelectorAll<HTMLElement>("h2, h3, span, label, button")) {
+        const style = getComputedStyle(el);
+        if (style.overflowWrap === "anywhere" || style.wordBreak === "break-all") {
+          bad.push(`${el.tagName.toLowerCase()}: ${el.textContent?.slice(0, 40)}`);
+        }
+      }
+      return bad;
+    });
+    // A provider message may contain a URL; nothing else in settings may break inside a word.
+    expect(offenders.filter(o => !/Reachable|Could not connect/.test(o))).toEqual([]);
+  });
 
   test("no text is broken mid-word at 280px", async ({ page }) => {
     await openPanel(page, "approval", "dark", 280);

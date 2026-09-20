@@ -95,7 +95,7 @@
             providerId: 'experiential',
             displayName: 'GPT-6 Astra (Experiential Labs)',
             description: 'Frontier reasoning and coding model with 1.05M context window.',
-            defaultEndpoint: 'https://api.experiential.com/v1',
+            defaultEndpoint: 'https://api.experientiallabs.ai/v1',
             hasCredential: false,
             isLocal: false,
             status: 'NOT_CONFIGURED',

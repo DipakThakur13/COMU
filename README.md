@@ -32,7 +32,7 @@
 | **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI-compatible, Ollama (local, keyless) |
 | **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
 | **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck, Lint & Build |
-| **Automated Test Suite** | **56 Test Files · 554 Tests Passing · 90 Visual Baselines** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
+| **Automated Test Suite** | **57 Test Files · 569 Tests Passing · 99 Visual Baselines** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
 | **VS Code Package** | `comu-ai-0.2.4.vsix` | Built & Ready to Install |
 
 ---
@@ -127,7 +127,7 @@ Bring Your Own Key directly to VS Code. COMU does not resell inference credits o
   - `Meta Muse Glimmer 30B` (Multimodal Specialist)
   - `Nemotron 3 Ultra` (High Compute)
 - **GPT-6 Astra via Experiential Labs Gateway**:
-  - Frontier reasoning and coding with up to **1,050,000 token** context window.
+  - Frontier reasoning and coding with up to a **1,050,000 token** context window, through `https://api.experientiallabs.ai/v1`. COMU reports token counts but no cost for this model: the listed price is promotional, and a promotional rate is not something to bake in and present as fact.
 - **Generic OpenAI-Compatible Gateway**:
   - Connect any OpenAI-compatible API endpoint with your own API key (e.g. OpenAI `gpt-4o`, custom vLLM, OpenRouter).
 - **Ollama (Local & Offline)**:

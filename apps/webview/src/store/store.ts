@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { InteractionResponse, ProviderConfig, TaskAutonomy, TaskMode } from "@comu/protocol";
+import type { InteractionResponse, ProviderConfig, ProviderTestResult, TaskAutonomy, TaskMode } from "@comu/protocol";
 import {
   HostToWebviewMessage,
   SessionState,
@@ -22,6 +22,8 @@ export interface StoreState {
   session: SessionState;
   ui: UiState;
   providers: ProviderConfig[];
+  providerTests: Record<string, ProviderTestResult>;
+  testingProvider?: string;
   banner?: { message: string; hint?: string };
 
   applyHostMessage: (message: HostToWebviewMessage) => void;
@@ -39,6 +41,9 @@ export interface StoreState {
   submit: () => void;
   cancel: () => void;
   respondInteraction: (response: InteractionResponse) => void;
+  saveProviderKey: (providerId: string, key: string, endpoint?: string) => void;
+  removeProviderKey: (providerId: string) => void;
+  testProvider: (providerId: string, key?: string, endpoint?: string) => void;
   openFile: (path: string) => void;
   requestDiff: (path: string) => void;
   dismissBanner: () => void;
@@ -62,6 +67,7 @@ export const useStore = create<StoreState>((set, get) => ({
   session: createInitialSessionState(),
   ui: initialUi,
   providers: [],
+  providerTests: {},
 
   post: message => {
     vscodeApi?.postMessage(message);
@@ -89,6 +95,13 @@ export const useStore = create<StoreState>((set, get) => ({
 
       case "providers_update":
         set({ providers: message.providers });
+        break;
+
+      case "provider_test_result":
+        set(state => ({
+          providerTests: { ...state.providerTests, [message.providerId]: message.result },
+          testingProvider: state.testingProvider === message.providerId ? undefined : state.testingProvider
+        }));
         break;
 
       case "settings_update":
@@ -173,6 +186,24 @@ export const useStore = create<StoreState>((set, get) => ({
     post({ type: "respond_interaction", taskId: session.taskId, interactionId, response });
     // Clear optimistically: the authoritative interaction.responded event confirms it.
     set(state => ({ session: { ...state.session, pendingApproval: undefined, pendingInteraction: undefined } }));
+  },
+
+  saveProviderKey: (providerId, key, endpoint) => {
+    get().post({ type: "save_provider_key", providerId, key, endpoint });
+  },
+
+  removeProviderKey: providerId => {
+    get().post({ type: "remove_provider_key", providerId });
+    set(state => {
+      const next = { ...state.providerTests };
+      delete next[providerId];
+      return { providerTests: next };
+    });
+  },
+
+  testProvider: (providerId, key, endpoint) => {
+    set({ testingProvider: providerId });
+    get().post({ type: "test_provider", providerId, key, endpoint });
   },
 
   openFile: path => get().post({ type: "open_file", path }),

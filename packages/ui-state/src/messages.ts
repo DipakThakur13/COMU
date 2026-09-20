@@ -121,6 +121,25 @@ export interface WebviewRequestProvidersMessage {
   type: "request_providers";
 }
 
+export interface WebviewSaveProviderKeyMessage {
+  type: "save_provider_key";
+  providerId: string;
+  key: string;
+  endpoint?: string;
+}
+
+export interface WebviewRemoveProviderKeyMessage {
+  type: "remove_provider_key";
+  providerId: string;
+}
+
+export interface WebviewTestProviderMessage {
+  type: "test_provider";
+  providerId: string;
+  key?: string;
+  endpoint?: string;
+}
+
 export interface WebviewTelemetryMessage {
   type: "telemetry_metric";
   name: string;
@@ -139,4 +158,7 @@ export type WebviewToHostMessage =
   | WebviewSelectModelMessage
   | WebviewSetAutonomyMessage
   | WebviewRequestProvidersMessage
+  | WebviewSaveProviderKeyMessage
+  | WebviewRemoveProviderKeyMessage
+  | WebviewTestProviderMessage
   | WebviewTelemetryMessage;

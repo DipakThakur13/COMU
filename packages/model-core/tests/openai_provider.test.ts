@@ -97,7 +97,7 @@ describe("OpenAICompatibleProvider & RequestSanitizer (Provider-Neutral Gateway 
 
   describe("OpenAICompatibleProvider Initialization & Normalization", () => {
     it("auto-detects Astra profile when model is gpt-6-astra", () => {
-      const provider = new OpenAICompatibleProvider("test-key", "https://api.experiential.com/v1", "gpt-6-astra");
+      const provider = new OpenAICompatibleProvider("test-key", "https://api.experientiallabs.ai/v1", "gpt-6-astra");
       expect(provider.profile.id).toBe("gpt-6-astra");
       expect(provider.id).toBe("experiential");
       expect(provider.displayName).toContain("Astra");
@@ -107,8 +107,8 @@ describe("OpenAICompatibleProvider & RequestSanitizer (Provider-Neutral Gateway 
       expect(OpenAICompatibleProvider.normalizeEndpoint("https://api.openai.com/v1")).toBe(
         "https://api.openai.com/v1/chat/completions"
       );
-      expect(OpenAICompatibleProvider.normalizeEndpoint("https://api.experiential.com/v1/chat/completions")).toBe(
-        "https://api.experiential.com/v1/chat/completions"
+      expect(OpenAICompatibleProvider.normalizeEndpoint("https://api.experientiallabs.ai/v1/chat/completions")).toBe(
+        "https://api.experientiallabs.ai/v1/chat/completions"
       );
       expect(OpenAICompatibleProvider.normalizeEndpoint("https://custom.gateway.ai")).toBe(
         "https://custom.gateway.ai/chat/completions"
@@ -161,7 +161,7 @@ describe("OpenAICompatibleProvider & RequestSanitizer (Provider-Neutral Gateway 
         };
       });
 
-      const provider = new OpenAICompatibleProvider("mock-key", "https://api.experiential.com/v1", "gpt-6-astra");
+      const provider = new OpenAICompatibleProvider("mock-key", "https://api.experientiallabs.ai/v1", "gpt-6-astra");
 
       const response = await provider.generate({
         prompt: "Write a function",
@@ -225,7 +225,7 @@ describe("OpenAICompatibleProvider & RequestSanitizer (Provider-Neutral Gateway 
 
       const res = await OpenAICompatibleProvider.testConnection(
         "test-key",
-        "https://api.experiential.com/v1",
+        "https://api.experientiallabs.ai/v1",
         5000,
         "gpt-6-astra"
       );
