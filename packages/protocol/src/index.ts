@@ -115,6 +115,12 @@ export interface ModelTokenDeltaEvent extends AgentEventBase {
   delta: string;
   /** Monotonic per (requestId, kind), starting at 0, so a consumer can detect a gap. */
   index: number;
+  /**
+   * Last index contained in this message when several consecutive deltas were coalesced into one
+   * before forwarding. Absent means the message carries exactly `index`. Coalescing must preserve
+   * the range, otherwise the receiver's gap detection would fire on its own batching.
+   */
+  endIndex?: number;
 }
 
 export interface ModelRequestFailedEvent extends ModelRequestEventBase {
