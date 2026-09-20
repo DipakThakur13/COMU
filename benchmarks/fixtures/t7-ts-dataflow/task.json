@@ -1,0 +1,117 @@
+{
+  "id": "t7-ts-dataflow",
+  "tier": "T7",
+  "ecosystem": "typescript",
+  "description": "An ingestion pipeline whose data flow hides five traps: content sniffing, a lossy ring, fake backpressure, a layering loop, and rows that are not readable until a segment seals.",
+  "prompt": "You have just been handed this repository and know nothing about it. Trace a single record all the way through: from the moment it is read off disk to the moment a caller could get it back out of a query. Name every module it passes through and say what each one does to it. Then explain what is surprising about the design, including how the input format is chosen, what happens when the system cannot keep up, where the record is checked for correctness, and why a record that has just been ingested might not come back from a query. Answer in your final message. Do not modify any file.",
+  "mode": "ASK",
+  "autonomy": "readonly",
+  "grader": {
+    "kind": "rubric",
+    "passThreshold": 0.7,
+    "points": [
+      {
+        "id": "entry-and-assembly",
+        "description": "src/index.ts is the entry point; buildPipeline in src/pipeline/build.ts fixes the stage order and runPipeline in src/pipeline/runner.ts drives it.",
+        "anyOf": [
+          "src/index\\.ts",
+          "buildPipeline",
+          "pipeline/build\\.ts",
+          "runPipeline"
+        ]
+      },
+      {
+        "id": "source-factory",
+        "description": "createSource in src/sources/sourceFactory.ts swaps PollingSource for the one-shot FileSource when watchIntervalMs is zero.",
+        "anyOf": [
+          "sourceFactory\\.ts",
+          "createSource",
+          "PollingSource",
+          "watchIntervalMs"
+        ]
+      },
+      {
+        "id": "decoder-sniffs-content",
+        "description": "decoderFor in src/decode/decoderRegistry.ts picks the decoder from the first non-whitespace character and ignores the file extension entirely.",
+        "anyOf": [
+          "decoderRegistry\\.ts",
+          "decoderFor",
+          "first\\s+non-whitespace",
+          "extension\\s+is\\s+(?:deliberately\\s+)?ignored"
+        ]
+      },
+      {
+        "id": "ring-buffer-drops-silently",
+        "description": "RingBuffer in src/buffer/ringBuffer.ts overwrites the oldest record when full and only bumps a dropped counter.",
+        "anyOf": [
+          "RingBuffer",
+          "buffer/ringBuffer\\.ts",
+          "overwrit\\w*\\s+the\\s+oldest",
+          "dropped\\s+counter"
+        ]
+      },
+      {
+        "id": "backpressure-is-advisory",
+        "description": "shouldPause in src/buffer/backpressure.ts is only logged by the runner; no backpressure is ever applied.",
+        "anyOf": [
+          "buffer/backpressure\\.ts",
+          "shouldPause",
+          "advisory",
+          "never\\s+actually\\s+applied"
+        ]
+      },
+      {
+        "id": "timestamps-not-utc",
+        "description": "timestampStage stores observedAt in exchange-local time via toExchangeLocal, not UTC, and src/query/reader.ts shifts it back with fromExchangeLocal.",
+        "anyOf": [
+          "toExchangeLocal",
+          "normalise/timestamps\\.ts",
+          "not\\s+(?:stored\\s+)?in\\s+UTC",
+          "fromExchangeLocal"
+        ]
+      },
+      {
+        "id": "enrich-depends-on-query",
+        "description": "src/enrich/sectorTagger.ts imports src/query/reader.ts and calls lastKnownSector, so the ingest path depends on the query layer and the layering forms a loop.",
+        "anyOf": [
+          "sectorTagger\\.ts",
+          "lastKnownSector",
+          "enrich[\\s\\S]{0,20}depends\\s+on[\\s\\S]{0,20}query",
+          "imports[\\s\\S]{0,30}query/reader\\.ts"
+        ]
+      },
+      {
+        "id": "validation-at-the-sink",
+        "description": "validateQuote in src/schema/validate.ts is called from the sink stage, the last stage, so both enrichment stages run before anything is checked.",
+        "anyOf": [
+          "validateQuote",
+          "schema/validate\\.ts",
+          "[Vv]alidation[\\s\\S]{0,40}sink\\s+stage",
+          "after\\s+both\\s+enrichment\\s+stages"
+        ]
+      },
+      {
+        "id": "seal-controls-visibility",
+        "description": "Rows land in an in-memory staging segment and only sealed segments are readable; the Indexer in src/query/indexer.ts seals every flushEvery records, so a row is not queryable until then.",
+        "anyOf": [
+          "query/indexer\\.ts",
+          "flushEvery",
+          "sealed\\s+segments?",
+          "not\\s+queryable\\s+until"
+        ]
+      },
+      {
+        "id": "dedupe-at-the-sink",
+        "description": "Deduplication happens in ColumnStore.append using quoteKey from src/util/ids.ts, and the key set is per staging segment so a duplicate straddling a seal survives.",
+        "anyOf": [
+          "quoteKey",
+          "util/ids\\.ts",
+          "straddles\\s+a\\s+seal",
+          "columnStore\\.ts"
+        ]
+      }
+    ]
+  },
+  "allowedPaths": [],
+  "notes": "Deliberate oddities: (1) decoderFor sniffs the first non-whitespace byte and ignores the file extension, so a .csv file holding JSON decodes as JSON; (2) RingBuffer overwrites the oldest record when full and only increments a counter, and backpressure.shouldPause is consulted by the runner but only logged, so backpressure is decorative; (3) timestampStage stores observedAt in exchange-local time, not UTC, and query/reader.ts shifts it back, so the two cancel; (4) enrich/sectorTagger.ts imports query/reader.ts for its fallback, making the layering a loop and forcing selectSink to be built before the stage list; (5) validateQuote is called from the last stage, sinkSelector.sinkStage, so enrichment runs on records that turn out to be invalid; (6) ColumnStore.append dedupes by quoteKey but resets the key set on seal, and only sealed segments are visible to reader.ts, so a row is not queryable until the Indexer seals after flushEvery writes. docs/runbook.md alludes to symptoms 2, 3 and 6 without explaining any of them."
+}

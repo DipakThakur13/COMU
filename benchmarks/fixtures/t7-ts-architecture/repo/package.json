@@ -1,0 +1,12 @@
+{
+  "name": "dispatch-core",
+  "version": "2.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Consignment intake and dispatch service.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node --experimental-transform-types src/main.ts",
+    "test": "node --experimental-transform-types --test test/*.test.ts"
+  }
+}

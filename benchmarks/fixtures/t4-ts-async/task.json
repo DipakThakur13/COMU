@@ -1,0 +1,38 @@
+{
+  "id": "t4-ts-async",
+  "tier": "T4",
+  "ecosystem": "typescript",
+  "description": "A worker pool collects its results in completion order rather than input order, so three ordering tests fail.",
+  "prompt": "Three tests are failing, in src/concurrency.test.ts and src/catalogue.test.ts. Work out why and fix the repository so that the whole suite passes. Do not change the tests.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "node",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "--test-reporter=junit",
+        "--test-reporter-destination=reports/junit.xml"
+      ]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "a result comes back for every item, in the order the items were given",
+      "rows come back in the order they were asked for",
+      "the summary lists the labels in the order they were asked for",
+      "an unsorted input keeps its own order",
+      "a repeated item keeps its own slot",
+      "a limit of one keeps the order too",
+      "a limit wider than the input is allowed",
+      "one result per item, however fast the worker is",
+      "rows keep the request order even when the ids are unsorted",
+      "a batch wider than the read limit stays in order",
+      "an id asked for twice appears twice, in place",
+      "the summary follows the request order"
+    ]
+  },
+  "allowedPaths": ["src/concurrency.ts"],
+  "notes": "One root cause: the lanes in mapConcurrent append with results.push, so the array is in completion order, not input order. Every item still gets exactly one result, which is why the length and the concurrency limit tests stay green and only the three ordering tests fail: the direct one, loadRows and summarize. The fix is to write each result to its own index, results[index] = value, with the array sized to the input. A symptom-by-symptom fix is available and wrong: the three visible failures all use inputs whose request order is also their sorted order ([1, 2, 3, 4] and the ids a, b, c), so sorting the results in each caller, or sorting inside mapConcurrent, turns them green. The withheld tests use unsorted inputs, duplicate items and results with no sortable key, so a sort cannot recover the order; src/catalogue.ts is also outside allowedPaths, so patching the two call sites counts as unnecessary changes. Dropping the pool and awaiting the items one at a time would also fix the order, so the visible test 'no more than the limit run at once' asserts that the peak is exactly the limit; serialising it turns that test from green to red and is recorded as a regression."
+}

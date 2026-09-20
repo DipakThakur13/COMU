@@ -1,0 +1,10 @@
+{
+  "name": "accounts-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test",
+    "typecheck": "node --experimental-strip-types --check src/api/createUser.ts"
+  }
+}

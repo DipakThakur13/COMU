@@ -35,6 +35,14 @@ export interface TaskOutcome {
    */
   gatewayErrors: number;
   finalText: string;
+  /**
+   * The assistant's last turn of prose, accumulated from the stream.
+   *
+   * The rubric tier grades what the agent said, and `finalText` carries that only when the task
+   * ends cleanly: on a failure it holds the error instead. Without this, an onboarding answer was
+   * graded against a runtime error message and scored zero however good the answer was.
+   */
+  assistantText: string;
   events: AgentEvent[];
   approvalsRequested: number;
   clarificationsRequested: number;
@@ -83,6 +91,8 @@ interface Counters {
   limitReached: boolean;
   gatewayErrors: number;
   finalText: string;
+  assistantText: string;
+  streamBuffer: string;
 }
 
 function fold(counters: Counters, event: AgentEvent): void {
@@ -91,8 +101,20 @@ function fold(counters: Counters, event: AgentEvent): void {
     case "tool.started":
       counters.toolCalls += 1;
       break;
+    case "model.token_delta": {
+      // The assistant's own turn only. A worker's deltas arrive on their own channel and are not
+      // the answer to the user's question.
+      if (e.channel === "main" && e.kind === "text" && typeof e.delta === "string") {
+        counters.streamBuffer += e.delta;
+      }
+      break;
+    }
     case "model_request.succeeded": {
       counters.modelRequests += 1;
+      if (counters.streamBuffer.trim()) {
+        counters.assistantText = counters.streamBuffer;
+      }
+      counters.streamBuffer = "";
       const usage = e.usage ?? {};
       const prompt = Number(usage.promptTokens ?? usage.prompt_tokens ?? 0);
       counters.promptTokens += prompt;
@@ -118,7 +140,9 @@ function fold(counters: Counters, event: AgentEvent): void {
       break;
     case "model_request.failed": {
       const text = String(e.error ?? "");
-      if (/(502|503|504)/.test(text)) counters.gatewayErrors += 1;
+      // Word boundaries matter: without them any number containing 502, such as a token
+      // count, would be read as a gateway error.
+      if (/\b(502|503|504)\b/.test(text)) counters.gatewayErrors += 1;
       break;
     }
     case "interaction.requested":
@@ -188,7 +212,9 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
     status: "unknown",
     limitReached: false,
     gatewayErrors: 0,
-    finalText: ""
+    finalText: "",
+    assistantText: "",
+    streamBuffer: ""
   };
   const events: AgentEvent[] = [];
 
@@ -207,8 +233,9 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
 
   if (created.status !== 201) {
     const body = await created.text();
+    const { streamBuffer: _unused, ...partial } = counters;
     return {
-      ...counters,
+      ...partial,
       events,
       limits: {},
       harnessError: `Task creation failed with ${created.status}: ${body.slice(0, 500)}`
@@ -271,7 +298,9 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
     clearTimeout(timer);
   }
 
-  return { ...counters, events, limits: limits ?? {}, harnessError };
+  // streamBuffer is scratch for accumulating the current turn; it is not part of the outcome.
+  const { streamBuffer: _discard, ...outcome } = counters;
+  return { ...outcome, events, limits: limits ?? {}, harnessError };
 }
 
 /** Starts a runtime on an ephemeral loopback port and returns how to talk to it. */

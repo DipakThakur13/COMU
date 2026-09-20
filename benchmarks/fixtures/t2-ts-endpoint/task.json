@@ -1,0 +1,36 @@
+{
+  "id": "t2-ts-endpoint",
+  "tier": "T2",
+  "ecosystem": "typescript",
+  "description": "An in-memory order store can list everything but cannot answer for one user; the filtered per-user query has to be added.",
+  "prompt": "src/store.ts is an in-memory users-and-orders store. Add and export a `getUserOrders` function alongside the ones already there.\n\nIt takes a user id and an optional query object, and returns that user's orders — nobody else's — newest first by placement date, with ties broken by ascending order id. That is the same total ordering `listOrders` already produces.\n\nEvery field of the query is optional, and when several are given the result has to satisfy all of them:\n\n- `status`: keep only orders with exactly that status.\n- `minTotal`: keep only orders whose total is at least that much, inclusive.\n- `since`: keep only orders placed on or after that ISO-8601 date, inclusive.\n- `limit`: return at most that many orders, applied after the filtering and the sorting, so it keeps the first `limit` of the ordered result. A limit of zero returns nothing. A limit that is not a non-negative integer is a caller mistake rather than an empty result: throw a RangeError.\n\nA user id the store has never seen is an error, and should be rejected the same way `addOrder` already rejects an unknown user. A user the store does know but who has no matching orders gets an empty array back, not an error.\n\nLike the rest of the module, the function hands back copies: nothing a caller does to the returned array, or to the objects inside it, may change what the store holds.\n\nThe existing tests in src/store.test.ts pass today and must still pass. Do not change them, and do not change the behaviour they cover.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "node",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "--test-reporter=junit",
+        "--test-reporter-destination=reports/junit.xml"
+      ]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "getUserOrders returns only that user's orders, newest first",
+      "getUserOrders throws for an unknown user",
+      "getUserOrders filters by status",
+      "getUserOrders filters by minimum total inclusively",
+      "getUserOrders filters by date inclusively",
+      "getUserOrders combines every filter",
+      "getUserOrders returns an empty array when nothing matches",
+      "getUserOrders applies the limit after sorting",
+      "getUserOrders rejects a limit that is not a non-negative integer",
+      "getUserOrders hands out copies, not the store's records"
+    ]
+  },
+  "allowedPaths": ["src/store.ts"],
+  "notes": "The feature is absent, so no visible test can cover it and every required name comes from the withheld suite. The visible suite is green in the starting tree and is the regression signal for this tier: it pins listOrders' newest-first ordering, the unknown-user rejection message that getUserOrders has to reuse, and the fact that the store hands out copies. The cheap implementations fail the withheld tests: filtering without re-sorting keeps insertion order, slicing before sorting returns the wrong orders for a limit, an exclusive minTotal or since drops the boundary order, and returning the internal records lets a caller mutate the store. The golden solution touches src/store.ts only; a new file is not needed and counts as an unnecessary change."
+}

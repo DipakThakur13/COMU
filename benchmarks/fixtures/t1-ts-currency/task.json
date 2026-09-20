@@ -1,0 +1,31 @@
+{
+  "id": "t1-ts-currency",
+  "tier": "T1",
+  "ecosystem": "typescript",
+  "description": "Money is converted to cents by truncating a floating point product, so some prices lose a cent.",
+  "prompt": "The tests in src/money.test.ts are failing. Find and fix the bug in this repository so that every test passes. Do not change the tests.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "node",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "--test-reporter=junit",
+        "--test-reporter-destination=reports/junit.xml"
+      ]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "an amount is converted to the nearest cent",
+      "awkward amounts land on the nearest cent",
+      "an amount already on a cent boundary is not pushed up",
+      "a refund rounds the same way a charge does",
+      "a basket total is exact"
+    ]
+  },
+  "allowedPaths": ["src/money.ts"],
+  "notes": "toCents truncates amount * 100 instead of rounding it. Binary floating point puts 1.15 * 100 at 114.99999999999999, so truncation drops a cent on the amounts that land just under. The fix is Math.round. The withheld tests cover amounts that are already exact and a refund, so hard-coding the one visible amount, adding an epsilon before truncating, or switching to Math.ceil all fail: ceil turns 1.1 into 111 cents and 0.07 into 8."
+}

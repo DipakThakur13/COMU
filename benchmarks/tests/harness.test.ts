@@ -9,6 +9,7 @@ import {
   assertWorkspaceIsPristine,
   fixturesRoot,
   loadFixtures,
+  listFiles,
   materialise,
   unnecessaryChanges
 } from "../src/fixture.js";
@@ -130,6 +131,41 @@ describe("Scope", () => {
   });
 });
 
+describe("What counts as a file in the workspace", () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "comu-listfiles-"));
+    const write = (rel: string) => {
+      const target = path.join(dir, rel);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, "x", "utf8");
+    };
+    write("src/index.ts");
+    write("src/reports/exporter.ts");
+    write("reports/junit.xml");
+    write("node_modules/dep/index.js");
+    write(".pytest_cache/v/cache/lastfailed");
+    write("pkg/__pycache__/mod.pyc");
+  });
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it("ignores tool artefacts wherever they appear", () => {
+    const files = listFiles(dir);
+    expect(files.some(f => f.includes("node_modules"))).toBe(false);
+    expect(files.some(f => f.includes(".pytest_cache"))).toBe(false);
+    expect(files.some(f => f.includes("__pycache__"))).toBe(false);
+  });
+
+  it("ignores the grader's report directory at the root only", () => {
+    // "reports" is an ordinary name for a source directory. Skipping it at every depth made a real
+    // src/reports/ invisible to the pristine check, to change detection and to the forbidden-string
+    // scan, so a refactor could leave the old symbol there and be graded as complete.
+    const files = listFiles(dir);
+    expect(files).toContain("src/reports/exporter.ts");
+    expect(files).not.toContain("reports/junit.xml");
+  });
+});
+
 describe("Rubric grading", () => {
   const spec = {
     kind: "rubric" as const,
@@ -158,6 +194,7 @@ describe("Failure classification", () => {
   const outcome = (over: Partial<TaskOutcome> = {}): TaskOutcome => ({
     status: "failed",
     finalText: "",
+    assistantText: "",
     events: [],
     approvalsRequested: 0,
     clarificationsRequested: 0,
@@ -304,9 +341,47 @@ describe("The fixture set", () => {
     expect(fixtures.length).toBeGreaterThan(0);
     for (const fixture of fixtures) {
       expect(fixture.spec.prompt.length, fixture.spec.id).toBeGreaterThan(10);
-      expect(fixture.spec.allowedPaths.length, fixture.spec.id).toBeGreaterThan(0);
+      expect(Array.isArray(fixture.spec.allowedPaths), fixture.spec.id).toBe(true);
+      // A rubric fixture asks a question and expects no edit, so an empty allow list is correct
+      // there and means "anything you change is an unnecessary change".
+      if (fixture.spec.grader.kind !== "rubric") {
+        expect(fixture.spec.allowedPaths.length, fixture.spec.id).toBeGreaterThan(0);
+      }
       expect(fs.existsSync(path.join(fixture.dir, "repo")), fixture.spec.id).toBe(true);
     }
+  });
+
+  it("covers every tier three times, across both ecosystems", () => {
+    // The suite's shape is part of the measurement. A tier with one fixture cannot distinguish a
+    // real change from that fixture's quirks, and a single ecosystem would hide exactly the
+    // multi-language gaps Phase 2 is meant to close.
+    const fixtures = loadFixtures(fixturesRoot());
+    const byTier = new Map<string, string[]>();
+    for (const f of fixtures) {
+      byTier.set(f.spec.tier, [...(byTier.get(f.spec.tier) ?? []), f.spec.id]);
+    }
+    for (const tier of ["T1", "T2", "T3", "T4", "T7"]) {
+      expect(byTier.get(tier)?.length ?? 0, `${tier}: ${JSON.stringify(byTier.get(tier) ?? [])}`).toBeGreaterThanOrEqual(3);
+    }
+    const ecosystems = new Set(fixtures.map(f => f.spec.ecosystem));
+    expect([...ecosystems].sort()).toEqual(["python", "typescript"]);
+    // Every tier must have at least one Python fixture, or "verified ecosystems" is a claim about
+    // TypeScript with a Python footnote.
+    for (const [tier, ids] of byTier) {
+      const hasPython = fixtures.some(f => f.spec.tier === tier && f.spec.ecosystem === "python");
+      expect(hasPython, `${tier} has no Python fixture: ${ids.join(", ")}`).toBe(true);
+    }
+  });
+
+  it("keeps a Python fixture whose root package.json triggers the misclassification", () => {
+    // Deliberately not designed around. ProjectDetector checks package.json before pyproject.toml,
+    // so this repository is treated as Node and its verification cannot run. Removing it would
+    // hide the defect rather than measure it.
+    const fixtures = loadFixtures(fixturesRoot());
+    const trap = fixtures.filter(
+      f => f.spec.ecosystem === "python" && fs.existsSync(path.join(f.dir, "repo", "package.json"))
+    );
+    expect(trap.length, "no Python fixture carries a root package.json").toBeGreaterThanOrEqual(1);
   });
 
   it("never puts the answer or the grader's tests in the starting workspace", () => {

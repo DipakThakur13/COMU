@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { TIER_NAMES, type BenchmarkRun, type Tier } from "./types.js";
+import { TIER_NAMES, type BenchmarkRun, type RunRecord, type Tier } from "./types.js";
 import { summarise } from "./metrics.js";
 import { assertNoSecret } from "./secrets.js";
 
@@ -12,6 +12,35 @@ import { assertNoSecret } from "./secrets.js";
  * per-fixture success out of repetitions rather than a single rate: an agent that succeeds three
  * times in five is a different product from one that succeeds five in five, and a mean hides that.
  */
+
+/**
+ * Appends one finished run to a journal beside the results.
+ *
+ * A full benchmark takes hours. Writing only at the end means a crash, a dropped connection or a
+ * closed laptop lid throws away everything measured so far, and the provider time with it. Each
+ * record is written the moment it exists, and a later run can pick up where this one stopped.
+ */
+export function appendRecord(record: RunRecord, outDir: string, label: string): void {
+  fs.mkdirSync(outDir, { recursive: true });
+  const line = `${JSON.stringify(record)}\n`;
+  assertNoSecret(line, `the run journal for ${label}`);
+  fs.appendFileSync(path.join(outDir, `${journalStem(label)}.jsonl`), line, "utf8");
+}
+
+/** Records already measured for this label, so a resumed run does not pay for them twice. */
+export function readJournal(outDir: string, label: string): RunRecord[] {
+  const file = path.join(outDir, `${journalStem(label)}.jsonl`);
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter(line => line.trim())
+    .map(line => JSON.parse(line) as RunRecord);
+}
+
+function journalStem(label: string): string {
+  return `${new Date().toISOString().slice(0, 10)}-${label}`;
+}
 
 export function writeRun(run: BenchmarkRun, outDir: string): { jsonPath: string; markdownPath: string } {
   fs.mkdirSync(outDir, { recursive: true });

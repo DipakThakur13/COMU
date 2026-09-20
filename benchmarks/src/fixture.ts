@@ -50,19 +50,32 @@ export function loadFixtures(root: string, filter?: { tier?: Tier; ids?: string[
 }
 
 /**
- * Directories a test runner creates, which are not the agent's work.
+ * Directories a tool creates, which are not the agent's work.
  *
  * Counting them turned a clean Python run into five unnecessary changes, which would have been
  * recorded as the agent touching files outside the golden set and could have classified a correct
  * run as a failure.
+ *
+ * These names are artefacts wherever they appear, so they are skipped at any depth.
  */
-const RUNNER_ARTEFACTS = [".git", "node_modules", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "reports", ".tox"];
+const RUNNER_ARTEFACTS = [".git", "node_modules", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox"];
+
+/**
+ * Artefacts only at the top of the workspace.
+ *
+ * The grader writes its JUnit report to `reports/junit.xml` in the workspace root. "reports" is an
+ * ordinary name for a source directory, though, so skipping it at every depth would make a real
+ * `src/reports/` invisible to the pristine check, to change detection and to the forbidden-string
+ * scan: a refactor could leave the old symbol there and be graded as complete.
+ */
+const ROOT_ONLY_ARTEFACTS = ["reports"];
 
 export function listFiles(root: string, skip: Set<string> = new Set(RUNNER_ARTEFACTS)): string[] {
   const out: string[] = [];
   const walk = (dir: string, prefix: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (skip.has(entry.name)) continue;
+      if (prefix === "" && ROOT_ONLY_ARTEFACTS.includes(entry.name)) continue;
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full, rel);

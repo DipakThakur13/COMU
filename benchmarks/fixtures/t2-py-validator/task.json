@@ -1,0 +1,42 @@
+{
+  "id": "t2-py-validator",
+  "tier": "T2",
+  "ecosystem": "python",
+  "description": "An orders package can check individual fields but cannot check a whole payload; the structured validator has to be added.",
+  "prompt": "orders/validation.py can say whether one value is usable, but nothing checks a whole order payload. Add a `validate_order` function to that module.\n\nIt takes the decoded payload and returns a list of `FieldError`. An empty list means the payload is usable. At most one error per field: the first thing wrong with a field is the only thing worth saying about it.\n\nEach error's `code` is `\"missing\"` when the key is simply not there and `\"invalid\"` when it is there but unusable. Each error's `field` is the path to the offending value: a plain key at the top level, and for something inside an order line the index in brackets followed by the key, as in `items[2].quantity`. Each error's `message` is a non-empty sentence a human can read; nothing depends on its exact wording.\n\nAn order needs `id`, `customer`, `currency` and `items`.\n\n- `id` and `customer` are strings with something other than whitespace in them.\n- `currency` is three uppercase ASCII letters.\n- `items` is a list with at least one entry in it. If it is absent, or is not a list, or is empty, that is the one thing to report about it and there are no line-level errors to look for.\n\nEvery entry of `items` must itself be a mapping. One that is not is reported once, against its own indexed path, and nothing inside it is examined. Otherwise each entry needs:\n\n- `sku`, a string with something other than whitespace in it.\n- `quantity`, a whole number of at least one. A boolean is not a quantity.\n- `unit_price`, a number that is not negative, so zero is fine. A boolean is not a price.\n\nKeys nobody asked for are ignored rather than reported. A payload that is not a mapping at all cannot be picked apart, so report exactly one error for it, against the field name `payload`, with the code `\"invalid\"`.\n\nThe errors come back in the order a reader would go looking for them: the top-level fields in the order listed above, then the line-level ones by ascending index, and within one line in the order listed above.\n\nThe existing tests in orders/test_validation.py pass today and must still pass. Do not change them, and do not change the behaviour they cover.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "setup": {
+    "commands": [
+      { "executable": "python", "args": ["-m", "venv", ".venv"] },
+      { "executable": "{PYTHON}", "args": ["-m", "pip", "install", "--quiet", "--disable-pip-version-check", "pytest==9.1.1"] }
+    ]
+  },
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "{PYTHON}",
+      "args": ["-m", "pytest", "-q", "--junit-xml=reports/junit.xml"]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "test_a_valid_order_has_no_errors",
+      "test_missing_top_level_fields_are_reported_in_order",
+      "test_a_blank_id_is_invalid_rather_than_missing",
+      "test_a_bad_currency_code_is_invalid",
+      "test_a_missing_items_key_is_missing_not_invalid",
+      "test_items_must_be_a_non_empty_list",
+      "test_item_error_paths_carry_the_index",
+      "test_quantity_must_be_a_whole_number_of_at_least_one",
+      "test_a_boolean_is_not_a_quantity_or_a_price",
+      "test_a_unit_price_of_zero_is_allowed_but_a_negative_one_is_not",
+      "test_a_non_mapping_item_is_reported_once",
+      "test_a_non_mapping_payload_is_reported",
+      "test_unknown_keys_are_ignored",
+      "test_every_error_carries_a_message",
+      "test_several_fields_are_all_reported_together"
+    ]
+  },
+  "allowedPaths": ["orders/validation.py"],
+  "notes": "The module already holds FieldError and the four predicates, and the visible suite pins them; that suite is the regression signal, because the obvious way to make validate_order pass is to loosen is_count or is_money. The withheld traps are the missing/invalid distinction for a blank string, the bracketed index in a nested path, booleans passing an isinstance(int) check, a unit_price of zero being rejected by a truthiness test, reporting every field of a non-mapping line rather than the line itself, and the error ordering. No root package.json here, unlike t1-py-interval: this fixture measures the feature, not the project-type misclassification."
+}

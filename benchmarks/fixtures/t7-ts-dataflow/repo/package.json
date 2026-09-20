@@ -1,0 +1,12 @@
+{
+  "name": "feed-normaliser",
+  "version": "0.17.3",
+  "private": true,
+  "type": "module",
+  "description": "Turns vendor quote drops into queryable segments.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node --experimental-transform-types src/index.ts",
+    "test": "node --experimental-transform-types --test test/*.test.ts"
+  }
+}

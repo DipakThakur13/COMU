@@ -1,0 +1,38 @@
+{
+  "id": "t4-py-parser",
+  "tier": "T4",
+  "ecosystem": "python",
+  "description": "The config parser trims keys but not values, so three typed accessors read the padded value and mis-parse it.",
+  "prompt": "Three tests in config/test_settings.py are failing. Work out why and fix the repository so that the whole suite passes. Do not change the tests.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "setup": {
+    "commands": [
+      { "executable": "python", "args": ["-m", "venv", ".venv"] },
+      { "executable": "{PYTHON}", "args": ["-m", "pip", "install", "--quiet", "--disable-pip-version-check", "pytest==9.1.1"] }
+    ]
+  },
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "{PYTHON}",
+      "args": ["-m", "pytest", "-q", "--junit-xml=reports/junit.xml"]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "test_a_flag_is_read_as_a_boolean",
+      "test_a_number_is_read_as_a_whole_number",
+      "test_the_endpoint_joins_the_host_and_the_port",
+      "test_a_value_is_trimmed_like_its_key",
+      "test_spaces_inside_a_value_are_kept",
+      "test_a_tab_around_the_separator_is_trimmed",
+      "test_an_empty_value_stays_empty",
+      "test_a_value_containing_an_equals_sign_is_kept_whole",
+      "test_comments_and_blank_lines_are_still_ignored",
+      "test_a_list_value_splits_into_items",
+      "test_a_flag_written_without_spaces_is_still_a_flag"
+    ]
+  },
+  "allowedPaths": ["config/parser.py"],
+  "notes": "One root cause: parse_config strips the key but stores the value as partition left it, so every value written as 'key = value' keeps the space after the separator. The three failing tests are three faces of that: get_bool sees ' true' and does not recognise it, get_int sees ' 8080' whose isdigit() is False and raises, and endpoint builds ' example.com:...'. The fix is one call, value.strip(), in config/parser.py. A symptom-by-symptom fix is available and wrong: an agent can trim the value inside get_bool, inside get_int and inside endpoint, or loosen get_int to int(value) because int() tolerates whitespace, and turn the three visible tests green while the parser still returns padded values. The withheld tests compare parse_config's mapping directly and exercise get_list, a fourth accessor nobody patched, so that route fails; config/settings.py is also outside allowedPaths, so editing it counts as an unnecessary change. One withheld test keeps a value with two spaces inside it, so a fix that removes all whitespace rather than trimming the ends fails too."
+}

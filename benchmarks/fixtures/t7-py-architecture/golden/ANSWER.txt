@@ -1,0 +1,67 @@
+How the permits service is put together, following a decision from the socket to the database and
+out to the letter, plus the five things that are not where you would look for them.
+
+Entry and wiring. permits/__main__.py is the entry point. It loads settings, calls build_app in
+permits/wiring.py, starts the spool worker on a daemon thread and only then calls serve in
+permits/transport/wsgi.py. build_app is the composition root: the single function where a concrete
+class is handed to a port, and the reason handlers can call the module-level app() accessor instead
+of being passed anything.
+
+Finding a handler, the first surprise. There is no route table in this codebase. Dispatch happens
+in permits/transport/dispatch.py, where resolve_handler turns the URL into a module name and a
+function name by convention: the first path segment names a module inside
+permits.transport.handlers, the HTTP method names the function, so POST /reviews/P2024-00007
+resolves to permits.transport.handlers.reviews.handle_post and the remaining segments are passed
+through as positional arguments. A segment that is not a plain lowercase identifier is rejected
+before anything is imported, which is the only guard between a URL and importlib.
+
+The second surprise falls out of that. The handler module is imported lazily, by import_module on
+the first request that needs it, and then cached. Adding a file to the handlers package adds an
+endpoint with no registration step anywhere, and a handler module with a broken import deploys
+perfectly green and only produces a 500 when somebody first calls that path.
+
+Intake and validation. POST /applications reaches handle_post in the applications handler, which
+calls IntakeService.submit in permits/services/intake_service.py. Field validation lives in the
+domain: build_or_raise in permits/domain/rules.py runs check_payload and raises InvalidApplication,
+so a malformed body is refused synchronously with a 422 before anything is stored. The application
+is then moved to submitted by transition in permits/domain/state_machine.py and saved.
+
+Storage, and the third surprise. The store is chosen by build_repository in
+permits/adapters/repository_factory.py: an empty PERMITS_DSN gives MemoryRepository, a set one
+gives SqliteRepository. The line that matters is the last one, because whichever store is chosen is
+always wrapped in AuditedRepository, so no caller anywhere holds a bare store and the wrapper's
+behaviour cannot be configured away. And that wrapper does two jobs nobody expects to find in
+persistence. Authorisation happens in the repository decorator:
+AuditedRepository.save calls assert_caller_may_write from permits/domain/rules.py, which is the
+only access control in the service and is called nowhere in transport. An unauthorised caller
+therefore runs the entire service method and fails at the moment of the write, not at the edge. The
+same method is the only writer of the AuditTrail in permits/audit/trail.py, so the trail is exactly
+the set of writes that reached storage and any path that bypasses the store leaves no record.
+
+Recording a decision. POST /reviews/<reference> calls ReviewService.record_decision in
+permits/services/review_service.py, which loads the application, moves it to in_review if it is not
+there already, transitions it to granted or refused, and saves it through the same decorated
+repository.
+
+The fourth surprise is the cache. DecisionCache in permits/cache/decision_cache.py sits between the
+review service and the store for decision reads, and record_decision refreshes it only when the
+outcome is a grant. Nothing calls invalidate anywhere in the package, so a refusal, a resubmission
+or a withdrawal leaves the previous cached decision in place until the DECISION_TTL_S window
+expires. That is the ticket about the portal still showing the old decision.
+
+Notification. The service never sends anything on the request path. The handler, not the review
+service, calls NotifyService in permits/services/notify_service.py, which only appends to the Spool
+in permits/queue/spool.py. The single caller of the notifier port is SpoolWorker in
+permits/queue/worker.py, whose drain_once takes a batch, sends it, requeues on Undeliverable and
+buries an entry after SPOOL_MAX_ATTEMPTS, running on the daemon thread started in __main__.
+
+The fifth surprise is that notifier's imports. permits/adapters/spool_notifier.py imports
+render_decision_letter from permits/services/review_service.py to build the letter body, so an
+adapter depends upward on a service. It is the only import in the adapters package that points at
+services, and it is the one place where the layering is inverted.
+
+Two details worth knowing about the workflow itself. TRANSITIONS in
+permits/domain/state_machine.py is the whole workflow in one dict: withdrawn is reachable from
+every state except the two terminal ones, which is why the withdraw endpoint never has to ask what
+state it is looking at, and refused is deliberately not terminal, so a refused application can be
+resubmitted and one reference can therefore carry two decisions over its life.

@@ -1,0 +1,36 @@
+{
+  "id": "t4-ts-cache",
+  "tier": "T4",
+  "ecosystem": "typescript",
+  "description": "A memo helper keys its cache on the first argument only, so three unrelated lookups return each other's answers.",
+  "prompt": "Three tests in src/pricing.test.ts are failing. Work out why and fix the repository so that the whole suite passes. Do not change the tests.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "node",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "--test-reporter=junit",
+        "--test-reporter-destination=reports/junit.xml"
+      ]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "the same product has a different price in each region",
+      "a region has one tax rate per category",
+      "shipping depends on the weight of the parcel",
+      "every argument takes part in the cache key",
+      "arguments past the second count too",
+      "a repeated call still reuses the first result",
+      "a call with no arguments is cached",
+      "every sku keeps its own price in every region",
+      "every region keeps both of its tax rates",
+      "shipping varies with weight in every region"
+    ]
+  },
+  "allowedPaths": ["src/memo.ts"],
+  "notes": "One root cause: cacheKey in src/memo.ts is String(args[0]), so the second argument never reaches the key and each memoized lookup returns its first answer for every later call. The three failing tests are three faces of that: price by sku and region, tax by region and category, shipping by region and weight. The fix is to key on all of the arguments. A symptom-by-symptom fix is available and wrong: an agent can give each of the three lookups in src/pricing.ts its own correctly keyed cache, or fold the second argument into the first, and turn the three visible tests green while leaving memoize broken. The withheld tests in tests/memo.withheld.test.ts call memoize directly, so that route fails, and src/pricing.ts is outside allowedPaths so editing it also counts as an unnecessary change. The withheld memo tests also count calls, so disabling the cache altogether does not pass."
+}

@@ -60,7 +60,18 @@ export async function executeFixture(input: ExecuteInput): Promise<RunRecord> {
     assertNoSecret(outcome.events, `the event journal for ${fixture.spec.id}`);
 
     const changed = changedFiles(workspace);
-    const verdict = await grade(fixture, workspace, outcome.finalText);
+    /*
+     * What the agent actually said.
+     *
+     * finalText is the assistant's closing message only when the task completed. On any other
+     * ending it holds the error instead, so preferring it graded an onboarding answer against a
+     * runtime error message and scored zero however good the answer was. The streamed prose is the
+     * fallback, and it is what the rubric tier is really grading.
+     */
+    const streamed = outcome.assistantText.trim();
+    const answer =
+      outcome.status === "completed" && outcome.finalText.trim() ? outcome.finalText : streamed || outcome.finalText;
+    const verdict = await grade(fixture, workspace, answer);
 
     const record = assembleRecord({
       fixtureId: fixture.spec.id,
@@ -71,7 +82,7 @@ export async function executeFixture(input: ExecuteInput): Promise<RunRecord> {
       startedAt,
       durationMs: Date.now() - began,
       contextWindow: input.contextWindow,
-      outcome,
+      outcome: { ...outcome, finalText: answer },
       verdict,
       filesChanged: changed,
       unnecessary: unnecessaryChanges(changed, fixture.spec.allowedPaths)

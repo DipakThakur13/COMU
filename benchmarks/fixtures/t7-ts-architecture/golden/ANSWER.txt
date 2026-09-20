@@ -1,0 +1,69 @@
+How a request travels through dispatch-core, and the four things that surprised me.
+
+1. Entry and wiring. src/main.ts is the entry point. It loads configuration with loadConfig from
+src/boot/config.ts, calls buildContainer in src/boot/container.ts, starts the background drain with
+startDrain from src/queue/drain.ts, and only then opens the socket through createServer in
+src/http/server.ts. src/boot/container.ts is the composition root: it is the single file in the
+process where a concrete class is handed to a port.
+
+2. The edge. src/http/server.ts composes a fixed, very short middleware chain. withTrace from
+src/http/middleware/trace.ts stamps an x-trace-id and echoes it on the way out; withBody from
+src/http/middleware/body.ts parses the body and rejects only malformed JSON; then control reaches
+route in src/http/router.ts. Nothing on this path inspects what the payload means.
+
+3. Dispatch is a registry, not a table. There is no route table anywhere in this repository. Every
+module under src/http/routes calls registerRoute from src/boot/registry.ts at import time, and
+src/http/router.ts answers a request by asking lookupRoute what happens to be registered. The
+registry is filled purely as a side effect of the three side-effect imports of the route modules in
+src/boot/container.ts; delete one of those import lines and the endpoint silently ceases to exist.
+Because route modules are loaded before the container is built, handlers cannot be given their
+dependencies as arguments and instead reach back through the module-level container() accessor.
+
+4. Intake. POST /consignments in src/http/routes/consignments.ts calls IntakeService.accept in
+src/services/intake.ts. Intake mints an id, stamps the injected clock and calls Outbox.enqueue. It
+answers 202 Accepted rather than 201, because at that moment nothing has been stored and nothing
+has even been checked.
+
+5. First surprise: validation happens in the outbox, not at the edge. Outbox.enqueue in
+src/queue/outbox.ts is the only caller of validateConsignment in src/validation/validate.ts, which
+checks the payload against the field list in src/validation/schema.ts. The HTTP layer performs no
+validation at all; the queue between the two services is the gate.
+
+6. Second surprise: a rejected payload is invisible to the caller. When validateConsignment fails,
+enqueue pushes the envelope onto the dead letter list inside the outbox and returns normally. The
+response has already gone out as 202 Accepted, so the client never sees the rejection. It surfaces
+only as the dead counter on GET /health and a dead_letter line in the log.
+
+7. The write path. startDrain in src/queue/drain.ts is the only writer to storage. It is a timer
+started by main that fires every 250 ms (DRAIN_INTERVAL_MS), takes batches of 32 off the outbox and
+hands each consignment to DispatchService.dispatch in src/services/dispatch.ts. Dispatch prices the
+consignment with PricingService from src/services/pricing.ts and appends it through the Ledger
+interface declared in src/ports/ledger.ts. Nothing in the HTTP request waits for any of this.
+
+8. Choosing the store. The concrete ledger comes from selectLedger in
+src/adapters/ledgerSelector.ts, the adapter that swaps the ledger implementation behind the port. It
+picks SqlLedger only when LEDGER_DSN is set and the region is not sandbox; when the region is
+sandbox it returns MemoryLedger even though a perfectly good DSN is configured, which is the second
+condition an unwary reader misses. Whichever store wins is then wrapped in the RetryingLedger
+decorator from src/adapters/retryingLedger.ts (three attempts, doubling backoff, writes only, reads
+deliberately not retried), so nothing above adapters/ ever holds a bare store.
+
+9. Third surprise: the dependency direction inverts at the bottom. src/adapters/sqlLedger.ts imports
+src/services/pricing.ts and builds its own PricingService. On every append it recomputes the tariff
+and writes its own priced_minor, ignoring the figure the dispatch service worked out and logging
+price_rewritten when the two disagree. So the storage adapter depends upward on the service layer,
+the only place in the tree where the arrow points the wrong way, and a pricing change silently
+alters what is persisted even for rows written by a backfill.
+
+10. Fourth surprise: the cache is never invalidated. ReadThroughCache in
+src/cache/readThroughCache.ts sits between the read path and the ledger and caches misses as well as
+hits. It exposes invalidate, but nothing in the repository calls invalidate. The write path runs
+intake to outbox to drain to dispatch to ledger and never touches the cache, so a consignment read
+back immediately after its 202 can be reported as missing for up to the 30 second CACHE_TTL_MS
+window. That is exactly the support complaint recorded in docs/operations.md.
+
+In short: main to container to server to trace and body middleware to the registry-backed router to
+the consignments route to IntakeService to the Outbox, where validation really happens, then
+asynchronously drain to DispatchService to PricingService to the RetryingLedger wrapper around
+either SqlLedger or MemoryLedger, with ReadThroughCache serving reads from a separate, never
+invalidated path.

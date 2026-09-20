@@ -1,0 +1,33 @@
+{
+  "id": "t3-py-rename",
+  "tier": "T3",
+  "ecosystem": "python",
+  "description": "Renames an arithmetic helper across six modules of a ledger package.",
+  "prompt": "The helper `calc_total` in ledger/totals.py is named inconsistently with the rest of the package. Rename it to `compute_total` everywhere it is defined, imported, re-exported or called, across the whole of the ledger package. Nothing else about the behaviour should change, and no test should change what it asserts.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "setup": {
+    "commands": [
+      { "executable": "python", "args": ["-m", "venv", ".venv"] },
+      { "executable": "{PYTHON}", "args": ["-m", "pip", "install", "--quiet", "--disable-pip-version-check", "pytest==9.1.1"] }
+    ]
+  },
+  "grader": {
+    "kind": "refactor",
+    "tests": {
+      "kind": "tests",
+      "command": {
+        "executable": "{PYTHON}",
+        "args": ["-m", "pytest", "-q", "--junit-xml=reports/junit.xml"]
+      },
+      "junitPath": "reports/junit.xml"
+    },
+    "forbidden": ["calc_total"],
+    "required": [
+      { "path": "ledger/totals.py", "contains": ["def compute_total"] },
+      { "path": "ledger/api.py", "contains": ["compute_total"] }
+    ]
+  },
+  "allowedPaths": ["ledger/"],
+  "notes": "calc_total appears in six modules: ledger/totals.py (the definition), ledger/invoice.py, ledger/report.py, ledger/export.py, ledger/cli.py and ledger/api.py. pytest only ever imports the first three, through ledger/test_invoice.py and the withheld report tests. The CSV export, the command line entry point and the public facade are never imported by a test, so a rename applied to three of the six modules leaves the suite entirely green while ledger.api and ledger.cli raise ImportError for anyone who actually uses them: passing tests are necessary but not sufficient here, and the forbidden-string check is what catches the leftovers. Every test asserts through names the rename does not touch, so the suite passes on the untouched tree as well as on the finished one."
+}

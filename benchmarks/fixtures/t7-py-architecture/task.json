@@ -1,0 +1,117 @@
+{
+  "id": "t7-py-architecture",
+  "tier": "T7",
+  "ecosystem": "python",
+  "description": "A layered Python workflow service where handlers are resolved by naming convention, access control lives in the persistence decorator, and an adapter imports a service.",
+  "prompt": "You have just been handed this codebase and know nothing about it. Explain, in prose, how a request to record a decision on a permit travels from the process entry point through to persistence, and what happens afterwards to the applicant's letter. Name every module involved and say what each one contributes. Then call out what is surprising about the design: how a handler is located, where the caller is checked for permission, where the payload is checked for correctness, what is between the service layer and the mail transport, and any dependency that points in the wrong direction. Answer in your final message. Do not modify any file.",
+  "mode": "ASK",
+  "autonomy": "readonly",
+  "grader": {
+    "kind": "rubric",
+    "passThreshold": 0.7,
+    "points": [
+      {
+        "id": "entry-and-composition-root",
+        "description": "permits/__main__.py is the entry point and build_app in permits/wiring.py is the composition root that handlers reach through the module-level app() accessor.",
+        "anyOf": [
+          "permits/__main__\\.py",
+          "wiring\\.py",
+          "build_app",
+          "composition\\s+root"
+        ]
+      },
+      {
+        "id": "dispatch-by-naming-convention",
+        "description": "resolve_handler in permits/transport/dispatch.py maps the first path segment to a module under permits.transport.handlers and the method to handle_<method>; there is no route table.",
+        "anyOf": [
+          "transport/dispatch\\.py",
+          "resolve_handler",
+          "handle_(?:post|get|put)",
+          "no\\s+route\\s+table"
+        ]
+      },
+      {
+        "id": "handlers-imported-lazily",
+        "description": "Handler modules are imported by importlib on the first request that needs them, so a broken handler deploys green and fails only when its endpoint is first called.",
+        "anyOf": [
+          "importlib",
+          "import_module",
+          "imported\\s+lazily",
+          "first\\s+request"
+        ]
+      },
+      {
+        "id": "repository-factory-always-wraps",
+        "description": "build_repository in permits/adapters/repository_factory.py picks SqliteRepository or MemoryRepository from the DSN and always wraps the result in AuditedRepository.",
+        "anyOf": [
+          "repository_factory\\.py",
+          "build_repository",
+          "always\\s+wrapped",
+          "SqliteRepository"
+        ]
+      },
+      {
+        "id": "authorisation-in-the-persistence-decorator",
+        "description": "AuditedRepository.save calls assert_caller_may_write from permits/domain/rules.py; access control lives in the storage decorator and nowhere in transport, and the same method is the only writer of the AuditTrail.",
+        "anyOf": [
+          "assert_caller_may_write",
+          "AuditedRepository",
+          "[Aa]uthoris\\w+[\\s\\S]{0,60}repository",
+          "audit/trail\\.py"
+        ]
+      },
+      {
+        "id": "field-validation-in-the-domain",
+        "description": "Payload validation is build_or_raise and check_payload in permits/domain/rules.py, called by IntakeService.submit, so a malformed body is refused synchronously with a 422.",
+        "anyOf": [
+          "build_or_raise",
+          "domain/rules\\.py",
+          "IntakeService",
+          "check_payload"
+        ]
+      },
+      {
+        "id": "notification-through-the-spool",
+        "description": "Notification is queued into the Spool in permits/queue/spool.py and only SpoolWorker.drain_once in permits/queue/worker.py calls the notifier port, on the daemon thread started by __main__.",
+        "anyOf": [
+          "queue/spool\\.py",
+          "SpoolWorker",
+          "drain_once",
+          "daemon\\s+thread"
+        ]
+      },
+      {
+        "id": "adapter-imports-service",
+        "description": "permits/adapters/spool_notifier.py imports render_decision_letter from permits/services/review_service.py, so an adapter depends upward on a service.",
+        "anyOf": [
+          "spool_notifier\\.py",
+          "render_decision_letter",
+          "adapter[\\s\\S]{0,30}depends\\s+upward",
+          "upward\\s+on\\s+(?:a|the)\\s+service"
+        ]
+      },
+      {
+        "id": "decision-cache-refreshed-only-on-grant",
+        "description": "DecisionCache in permits/cache/decision_cache.py is refreshed by record_decision only when the outcome is a grant and invalidate is never called, so a refusal or withdrawal serves a stale decision until the TTL expires.",
+        "anyOf": [
+          "decision_cache\\.py",
+          "DecisionCache",
+          "only\\s+when\\s+the\\s+outcome\\s+is\\s+a\\s+grant",
+          "[Nn]othing\\s+calls\\s+invalidate"
+        ]
+      },
+      {
+        "id": "state-machine-shape",
+        "description": "TRANSITIONS in permits/domain/state_machine.py is the whole workflow: withdrawn is reachable from every non-terminal state and refused is not terminal, so a refused application can be resubmitted.",
+        "anyOf": [
+          "state_machine\\.py",
+          "TRANSITIONS",
+          "withdrawn",
+          "resubmitted"
+        ]
+      }
+    ]
+  },
+  "allowedPaths": [],
+  "notes": "Deliberate oddities: (1) transport/dispatch.py has no route table and resolves handlers by naming convention through importlib, importing the module lazily on first use, so a handler with a broken import deploys green; (2) build_repository always wraps the chosen store in AuditedRepository, and that decorator is where assert_caller_may_write runs, so authorisation happens at the moment of the write and nowhere in transport, and it is also the only writer of the audit trail; (3) field validation is in domain/rules.py and does run synchronously, which contrasts with the authorisation placement and is the trap for a reader who assumes both live in the same layer; (4) NotifyService never sends anything, it appends to queue/spool.py, and SpoolWorker on a daemon thread is the only caller of the notifier port; (5) adapters/spool_notifier.py imports services/review_service.render_decision_letter, the one upward import; (6) DecisionCache is refreshed only on a grant and invalidate is never called, so refusals and withdrawals serve a stale decision for DECISION_TTL_S. docs/operations.md lists these as symptoms without explaining any of them."
+}

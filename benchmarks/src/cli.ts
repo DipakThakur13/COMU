@@ -7,7 +7,7 @@ import { createRuntimeApp } from "../../apps/agent-runtime/src/server.js";
 import { fixturesRoot, loadFixtures } from "./fixture.js";
 import { executeFixture } from "./execute.js";
 import { summarise } from "./metrics.js";
-import { writeRun } from "./report.js";
+import { appendRecord, readJournal, writeRun } from "./report.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
 import { assertNoSecretInArgv } from "./secrets.js";
@@ -130,11 +130,25 @@ async function main(): Promise<void> {
     console.log(`Model ${model.id} via ${model.provider} (key from ${resolved.envVar}).`);
   }
 
-  const records: RunRecord[] = [];
+  /*
+   * Anything already measured under this label today.
+   *
+   * A full benchmark takes hours, so a crash, a dropped connection or a closed laptop must not
+   * throw away the provider time already spent. Re-running the same label resumes where it stopped.
+   */
+  const previous = args.selftest ? [] : readJournal(args.outDir, args.label);
+  const done = new Set(previous.map(r => `${r.fixtureId}#${r.rep}`));
+  if (previous.length > 0) {
+    console.log(`Resuming '${args.label}': ${previous.length} runs already recorded.`);
+  }
+
+  const records: RunRecord[] = [...previous];
   const startedAt = new Date().toISOString();
 
   for (const fixture of fixtures) {
     for (let rep = 1; rep <= args.reps; rep++) {
+      if (done.has(`${fixture.spec.id}#${rep}`)) continue;
+
       // A fresh runtime per run, so no state, cache or session grant crosses between measurements.
       if (args.selftest) {
         const golden = path.join(fixture.dir, "golden");
@@ -169,10 +183,20 @@ async function main(): Promise<void> {
           limits: args.limits
         });
         records.push(record);
+        // Written the moment it exists, not at the end of a run that may not reach the end.
+        if (!args.selftest) appendRecord(record, args.outDir, args.label);
         console.log(
           record.grader.correct ? "correct" : `incorrect (${record.failureClass ?? "unclassified"})`,
           record.harnessError ? `[harness: ${record.harnessError}]` : ""
         );
+        if (!record.grader.correct) {
+          // The class alone does not tell anyone what to do about it. The reason and the offending
+          // paths are what make a failed run diagnosable without opening the result file.
+          console.log(`    ${record.grader.reason}`);
+          if (record.unnecessaryChanges.length > 0) {
+            console.log(`    outside the allowed paths: ${record.unnecessaryChanges.slice(0, 8).join(", ")}`);
+          }
+        }
       } catch (error) {
         console.log("harness error");
         console.error(error instanceof Error ? error.message : String(error));

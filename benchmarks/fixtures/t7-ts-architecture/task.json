@@ -1,0 +1,111 @@
+{
+  "id": "t7-ts-architecture",
+  "tier": "T7",
+  "ecosystem": "typescript",
+  "description": "A layered TypeScript service whose request flow only becomes visible by reading it: dispatch is a side-effect registry, validation lives in the queue, and storage depends upward on a service.",
+  "prompt": "You have just been handed this repository and know nothing about it. Explain, in prose, how a single POST /consignments request flows through the codebase from the process entry point all the way to storage. Name every module involved and say what each one contributes. Then call out anything surprising about the design: where the request is validated, how a handler is found, how the storage implementation is chosen, and anything that depends on something it has no business depending on. Answer in your final message. Do not modify any file.",
+  "mode": "ASK",
+  "autonomy": "readonly",
+  "grader": {
+    "kind": "rubric",
+    "passThreshold": 0.7,
+    "points": [
+      {
+        "id": "entry-and-composition-root",
+        "description": "Names src/main.ts as the entry point and src/boot/container.ts (buildContainer) as the composition root.",
+        "anyOf": [
+          "src/main\\.ts",
+          "boot/container\\.ts",
+          "buildContainer"
+        ]
+      },
+      {
+        "id": "cache-never-invalidated",
+        "description": "ReadThroughCache in src/cache/readThroughCache.ts sits in front of the ledger on the read path and its invalidate method is never called, because the write path never holds the cache.",
+        "anyOf": [
+          "ReadThroughCache",
+          "readThroughCache\\.ts",
+          "nothing[\\s\\S]{0,40}calls[\\s\\S]{0,20}invalidate",
+          "30[ -]?second"
+        ]
+      },
+      {
+        "id": "registry-dispatch",
+        "description": "Dispatch is by a registry filled at import time by the route modules, not a route table: registerRoute in boot/registry.ts, read by router.ts through lookupRoute.",
+        "anyOf": [
+          "boot/registry\\.ts",
+          "registerRoute",
+          "lookupRoute",
+          "no\\s+(?:static\\s+|literal\\s+|explicit\\s+)?route\\s+table"
+        ]
+      },
+      {
+        "id": "validation-in-the-outbox",
+        "description": "Validation happens inside Outbox.enqueue in src/queue/outbox.ts, which is the only caller of validateConsignment; the HTTP layer does none.",
+        "anyOf": [
+          "queue/outbox\\.ts",
+          "validateConsignment",
+          "validation\\s+happens\\s+in[\\s\\S]{0,40}outbox",
+          "validation/validate\\.ts"
+        ]
+      },
+      {
+        "id": "dead-letter-behind-202",
+        "description": "An invalid payload is dead lettered after the caller has already received 202, so the rejection is invisible to the client.",
+        "anyOf": [
+          "dead[ -]letter",
+          "202\\s+Accepted",
+          "client\\s+never\\s+sees"
+        ]
+      },
+      {
+        "id": "drain-is-the-only-writer",
+        "description": "startDrain in src/queue/drain.ts is the only writer to storage, polling the outbox on a timer.",
+        "anyOf": [
+          "queue/drain\\.ts",
+          "startDrain",
+          "only\\s+writer",
+          "250\\s?ms"
+        ]
+      },
+      {
+        "id": "ledger-selector",
+        "description": "selectLedger in src/adapters/ledgerSelector.ts is the adapter that swaps the storage implementation behind the Ledger port.",
+        "anyOf": [
+          "ledgerSelector\\.ts",
+          "selectLedger",
+          "swaps?\\s+the\\s+(?:storage|ledger)\\s+implementation"
+        ]
+      },
+      {
+        "id": "sandbox-region-rule",
+        "description": "The selector falls back to MemoryLedger not only on an empty DSN but also whenever the region is sandbox, even with a DSN set.",
+        "anyOf": [
+          "region\\s+is\\s+not\\s+sandbox",
+          "region\\s+is\\s+sandbox",
+          "sandbox[\\s\\S]{0,80}MemoryLedger"
+        ]
+      },
+      {
+        "id": "retrying-decorator",
+        "description": "Whatever store is chosen is wrapped in the RetryingLedger decorator before it leaves the adapters layer.",
+        "anyOf": [
+          "RetryingLedger",
+          "RetryingLedger\\s+decorator",
+          "wrapped\\s+in[\\s\\S]{0,24}RetryingLedger"
+        ]
+      },
+      {
+        "id": "inverted-dependency",
+        "description": "src/adapters/sqlLedger.ts imports src/services/pricing.ts and recomputes priced_minor on write, so the storage adapter depends upward on the service layer.",
+        "anyOf": [
+          "sqlLedger\\.ts[\\s\\S]{0,24}imports",
+          "storage\\s+adapter\\s+depends\\s+upward\\s+on\\s+the\\s+service",
+          "recomputes[\\s\\S]{0,60}priced_minor"
+        ]
+      }
+    ]
+  },
+  "allowedPaths": [],
+  "notes": "Deliberate oddities, none of them stated in any README: (1) http/router.ts has no route table, the three route modules register themselves at import time via boot/registry.ts and are imported for effect by boot/container.ts; (2) validation lives in Outbox.enqueue, not at the edge, so an invalid payload is dead lettered after the client already received 202; (3) selectLedger falls back to MemoryLedger both on an empty DSN and whenever region is sandbox, and always wraps the result in RetryingLedger; (4) adapters/sqlLedger.ts imports services/pricing.ts and rewrites priced_minor on append, the one upward dependency; (5) ReadThroughCache.invalidate is never called because the write path never holds the cache, so reads can be stale for the whole TTL. docs/operations.md hints at the last two as runbook symptoms without explaining them."
+}

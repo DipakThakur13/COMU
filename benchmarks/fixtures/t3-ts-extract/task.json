@@ -1,0 +1,33 @@
+{
+  "id": "t3-ts-extract",
+  "tier": "T3",
+  "ecosystem": "typescript",
+  "description": "Extracts a validation block that is copy-pasted into five handlers into one shared module.",
+  "prompt": "The same `checkUserFields` helper has been copy-pasted into five handlers under src/. Extract it into a new module src/validation.ts that exports a single function named `assertUserFields`, then have every one of those five handlers import and call it and delete their local copy. The rules, the error messages and the order they are checked in must stay exactly as they are, and no test should change what it asserts.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "refactor",
+    "tests": {
+      "command": {
+        "executable": "node",
+        "args": [
+          "--experimental-strip-types",
+          "--test",
+          "--test-reporter=junit",
+          "--test-reporter-destination=reports/junit.xml"
+        ]
+      },
+      "junitPath": "reports/junit.xml",
+      "kind": "tests"
+    },
+    "forbidden": ["checkUserFields"],
+    "required": [
+      { "path": "src/validation.ts", "contains": ["export function assertUserFields", "email is malformed", "name is too short"] },
+      { "path": "src/api/createUser.ts", "contains": ["assertUserFields"] },
+      { "path": "src/admin/resetPassword.ts", "contains": ["assertUserFields"] }
+    ]
+  },
+  "allowedPaths": ["src/"],
+  "notes": "checkUserFields is duplicated verbatim in five files: src/api/createUser.ts, src/api/updateUser.ts, src/api/inviteUser.ts, src/api/importUsers.ts and src/admin/resetPassword.ts. The tests reach only the first three, through src/api/users.test.ts and the withheld handler tests. The bulk import and the support-console reset are never called by a test, and because each copy is self-contained an unconverted one still compiles and still behaves correctly, so an extraction applied to three of the five call sites leaves the suite entirely green. The forbidden-string check, not the suite, is what notices the two survivors. The tests pin the messages and their order so that the extraction cannot quietly change behaviour, and they pass on the untouched tree as well as on the finished one."
+}

@@ -1,0 +1,32 @@
+{
+  "id": "t3-ts-rename",
+  "tier": "T3",
+  "ecosystem": "typescript",
+  "description": "Renames a repository function across six files of a store/repository/service/controller layering.",
+  "prompt": "The repository function `fetchRecord` in src/records/repository.ts is named inconsistently with the rest of the data layer. Rename it to `loadRecord` everywhere it is declared, imported, re-exported or called, across the whole of src/. Nothing else about the behaviour should change, and no test should change what it asserts.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "refactor",
+    "tests": {
+      "command": {
+        "executable": "node",
+        "args": [
+          "--experimental-strip-types",
+          "--test",
+          "--test-reporter=junit",
+          "--test-reporter-destination=reports/junit.xml"
+        ]
+      },
+      "junitPath": "reports/junit.xml",
+      "kind": "tests"
+    },
+    "forbidden": ["fetchRecord"],
+    "required": [
+      { "path": "src/records/repository.ts", "contains": ["export function loadRecord"] },
+      { "path": "src/index.ts", "contains": ["loadRecord"] }
+    ]
+  },
+  "allowedPaths": ["src/"],
+  "notes": "fetchRecord appears in six files: src/records/repository.ts (the declaration), src/records/cache.ts, src/records/service.ts, src/reporting/exporter.ts, src/admin/backfill.ts and src/index.ts. The suite only loads the first three, by way of src/records/service.test.ts and the withheld controller and cache tests. The batch jobs in src/reporting and src/admin and the barrel in src/index.ts are never imported by a test, so a half-applied rename leaves the suite entirely green: passing tests are necessary but not sufficient here, and the forbidden-string check is what catches the leftovers. Every test asserts through names the rename does not touch, so the suite passes on the untouched tree as well as on the finished one."
+}

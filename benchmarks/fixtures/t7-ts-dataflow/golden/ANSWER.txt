@@ -1,0 +1,68 @@
+What happens to one vendor quote in feed-normaliser, from the file on disk to a row a query can
+return, and the five things that are not what you would guess.
+
+Assembly. src/index.ts is the entry point. It resolves the named profile with profileByName from
+src/config/profiles.ts, loads settings, then calls createSource and buildPipeline before handing
+both to runPipeline. buildPipeline in src/pipeline/build.ts fixes the stage order and is the real
+contract of this program; runPipeline in src/pipeline/runner.ts is the loop that feeds it.
+
+Reading. createSource in src/sources/sourceFactory.ts chooses the source implementation. It returns
+PollingSource, which re-lists the inbox on an interval and remembers the file names it has already
+handled in memory, unless watchIntervalMs is zero, in which case it returns the one-shot FileSource
+that backfills use. The seen set is not persisted, so a restart re-reads whatever is still in the
+inbox and produces duplicates on purpose, trusting the sink to absorb them.
+
+Decoding, and the first surprise. Each chunk goes to decoderFor in src/decode/decoderRegistry.ts,
+which sniffs the content: the first non-whitespace character decides, a brace or a bracket meaning
+JSON lines and anything else meaning CSV. The file name is passed in but the file extension is
+deliberately ignored, because vendors ship JSON in files called .csv and CSV in files called .json.
+Renaming a file therefore cannot change how it parses, and a CSV whose header begins with a stray
+brace is handed to JsonlDecoder and blows up.
+
+Buffering, and the second surprise. Decoded records are pushed into a RingBuffer from
+src/buffer/ringBuffer.ts, sized by bufferSlots. When it is full it overwrites the oldest entry
+rather than blocking, and the only trace is the dropped counter that ends up in the run summary.
+The module next to it, src/buffer/backpressure.ts, looks like the safety valve but is not:
+shouldPause is advisory, the runner logs a backpressure_advised line and carries straight on, so
+backpressure is never actually applied anywhere in this repository.
+
+Transformation. Records drained from the buffer pass through the stages in order. fieldMapStage in
+src/normalise/fieldMap.ts renames vendor columns to canonical names using profile.columns and keeps
+unknown columns under an x_ prefix. currencyStage in src/normalise/currency.ts turns the price into
+integer minor units via toMinorUnits and records baseCurrency; there is no FX anywhere.
+timestampStage in src/normalise/timestamps.ts is the third surprise: it calls toExchangeLocal and
+stores observedAt shifted by profile.exchangeOffsetMinutes, so records are not stored in UTC at all.
+src/query/reader.ts undoes it with fromExchangeLocal on the way out, so the two cancel and the API
+still speaks UTC while the stored bytes do not.
+
+Enrichment, and the fourth surprise. instrumentStage in src/enrich/instrumentLookup.ts attaches the
+ISIN and lot size from a static table. sectorStage in src/enrich/sectorTagger.ts then tags a sector,
+and when its static table misses it calls lastKnownSector, which means src/enrich/sectorTagger.ts
+imports src/query/reader.ts and reads back out of the very store the pipeline is writing into. The
+enrich layer depends on the query layer, query depends on the sink, and the sink is downstream of
+enrich, so the layering is a loop rather than a line. It is also why selectSink has to run before
+the stage list is built.
+
+Sinking, and where validation lives. The last stage is sinkStage from src/sink/sinkSelector.ts.
+Validation runs in the sink stage, not at the edge and not at decode: validateQuote in
+src/schema/validate.ts is called there, after both enrichment stages have already run, so every
+record that ends up quarantined has already paid for an instrument lookup and a sector tag. A
+record that passes is appended to the WriteAheadLog in src/sink/writeAheadLog.ts first and then to
+the ColumnStore in src/sink/columnStore.ts.
+
+Deduplication. It happens at the sink rather than at the source that creates the duplicates,
+keyed by quoteKey from src/util/ids.ts, which joins symbol, venue, the exchange-local observedAt
+and the minor price. The key set belongs to the open staging segment and is thrown away on seal, so
+a duplicate that straddles a seal boundary is stored twice.
+
+Visibility, and the fifth surprise. ColumnStore.append lands in an in-memory staging segment, and
+src/query/reader.ts only ever scans sealed segments; the write ahead log is not readable by the
+query layer at all. Sealing is driven by the Indexer in src/query/indexer.ts, which counts writes
+and seals every flushEvery records, one thousand by default, with no timer to force the issue. A
+row is therefore ingested, journalled and deduplicated long before it is queryable, and on a quiet
+feed it is not queryable until another thousand rows arrive or the process shuts down and calls
+sealNow. That is the runbook complaint about rows being in the file but not in the query.
+
+In one line: index to sourceFactory to decoderRegistry to RingBuffer to fieldMap, currency and
+timestamps, to instrumentLookup and sectorTagger, to sinkSelector where validation finally happens,
+to the write ahead log and the staging segment, and only visible once the indexer seals.

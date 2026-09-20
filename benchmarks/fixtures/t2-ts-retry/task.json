@@ -1,0 +1,40 @@
+{
+  "id": "t2-ts-retry",
+  "tier": "T2",
+  "ecosystem": "typescript",
+  "description": "A JSON client gives up on the first failure; a reusable retry helper has to be added and wired into it.",
+  "prompt": "The catalog client in src/client.ts gives up the moment a request fails. Add retrying, in two parts.\n\nFirst, a new module src/retry.ts exporting a `withRetry` helper. It takes the function to call and an options object, and returns a promise.\n\n- `attempts` is the total number of tries, the first one included, so one means no repeating. It must be an integer of at least one; anything else is a caller mistake, so reject with a RangeError without ever calling the function.\n- The function being retried is called with the number of the attempt, counting from one.\n- The first successful call wins: its value is the result, and nothing is called again.\n- When a call fails and attempts remain, `shouldRetry` decides. It is given the error and the number of the attempt that produced it, and returning false stops immediately. It is optional; when it is not supplied every failure is repeated. It is never consulted after the final attempt, because there is nothing left to decide.\n- When the attempts run out, or `shouldRetry` says to stop, the promise rejects with the error from the last call that was actually made.\n- There is no waiting between attempts.\n\nSecond, make the client use it. `ApiClient` takes an optional second constructor argument, an options object whose `attempts` is passed through to the helper; with no options given a request is still made exactly once. What is worth repeating: a status of 500 or above, and a transport that rejected outright. What is not: a status the server chose below 500, which is a considered refusal and will be the same next time. A body that came back whole but does not parse is also not worth another request — the server already said what it had to say, so the request itself must not be repeated because of it.\n\nThe existing tests in src/client.test.ts pass today and must still pass. Do not change them, and do not change the behaviour they cover.",
+  "mode": "AGENT",
+  "autonomy": "ask",
+  "grader": {
+    "kind": "tests",
+    "command": {
+      "executable": "node",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "--test-reporter=junit",
+        "--test-reporter-destination=reports/junit.xml"
+      ]
+    },
+    "junitPath": "reports/junit.xml",
+    "mustPass": [
+      "withRetry returns the first successful result without repeating",
+      "withRetry repeats until the call succeeds",
+      "withRetry gives up after the configured number of attempts",
+      "withRetry rejects with the last error",
+      "withRetry numbers the attempts from one",
+      "withRetry stops as soon as shouldRetry says no",
+      "withRetry hands shouldRetry the error and the attempt number",
+      "withRetry does not consult shouldRetry after the final attempt",
+      "withRetry rejects an attempts count below one",
+      "the client repeats a request the server failed to serve",
+      "the client repeats a request the transport could not make",
+      "the client does not repeat a request the server refused",
+      "the client does not repeat a request whose body would not parse",
+      "the client makes a single request when no attempts are configured"
+    ]
+  },
+  "allowedPaths": ["src/retry.ts", "src/client.ts"],
+  "notes": "Two files rather than one, so the tier exercises adding a module and wiring it in. The visible suite is the regression signal: it pins the HttpError message and status, the transport-failure passthrough, and one request per successful call, all of which a careless retry wrapper breaks. The traps in the withheld suite are off-by-one attempt counting (a loop that retries `attempts` times makes one call too many), consulting shouldRetry after the last attempt, rejecting with the first error rather than the last, defaulting the client to more than one attempt, and wrapping the JSON parse inside the retry so a malformed body is fetched again."
+}

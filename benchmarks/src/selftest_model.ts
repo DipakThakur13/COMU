@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ModelProvider, ModelRequest, ModelResponse } from "@comu/model-core";
+import type { ModelProvider, ModelRequest, ModelRequestContext, ModelResponse } from "@comu/model-core";
 
 /**
  * A stand-in model for exercising the harness without a provider key.
@@ -56,10 +56,21 @@ export class SelfTestModel implements ModelProvider {
     walk(this.goldenDir, "");
   }
 
-  async generate(_request: ModelRequest): Promise<ModelResponse> {
+  async generate(_request: ModelRequest, context?: ModelRequestContext): Promise<ModelResponse> {
     this.load();
 
     if (this.behaviour === "answer") {
+      /*
+       * Streamed, like a real provider.
+       *
+       * The rubric tier grades the assistant's prose, which the harness collects from token
+       * deltas. A stand-in that returned the whole answer in one lump emitted no deltas, so the
+       * self test graded an empty answer and scored zero while the real path worked. A stand-in
+       * that does not behave like the thing it stands in for tests nothing.
+       */
+      for (const chunk of this.answer.match(/[\s\S]{1,80}/g) ?? []) {
+        context?.onDelta?.({ kind: "text", text: chunk });
+      }
       return { text: this.answer };
     }
 
