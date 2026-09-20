@@ -236,6 +236,9 @@ cd apps/vscode-extension && npx @vscode/vsce package --no-dependencies
 
 ---
 
+### Toolchain notes
+- `package.json` pins `confbox` to `0.1.8` through `pnpm.overrides`. `confbox@0.1.9` (a transitive dependency of `vitest` via `local-pkg` → `pkg-types`) was unpublished from npm on 2026-09-03 while still recorded in the lockfile, which made every dependency re-resolution fail. `0.1.8` is the last published `0.1.x` release and satisfies `pkg-types`' range. Remove the override once `vitest` (or `pkg-types`) moves to a range that no longer resolves to the unpublished version, then run `pnpm install` and confirm the lockfile no longer mentions `0.1.9`.
+
 ## 📜 License & Community
 
 - **License**: [MIT License](LICENSE)

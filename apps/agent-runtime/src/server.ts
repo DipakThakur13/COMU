@@ -100,6 +100,29 @@ export function createLoopbackGuard() {
   };
 }
 
+type AsyncRouteHandler = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
+
+/**
+ * Express 4 does not observe the promise an async handler returns: a rejection leaves the request
+ * hanging with no response. Wrap every async route so rejections reach the JSON error handler.
+ */
+export function asyncRoute(handler: AsyncRouteHandler) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    handler(req, res, next).catch(next);
+  };
+}
+
+/** Terminal error middleware: always answer with JSON, never Express's default HTML page. */
+export function jsonErrorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error('[COMU runtime] Unhandled route error:', err);
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res.status(500).json({ error: 'INTERNAL_ERROR', code: 'INTERNAL_ERROR', message });
+}
+
 /** Binds the runtime to the loopback interface only. */
 export function startRuntimeServer(app: Express, port: number | string, host: string = LOOPBACK_HOST): Promise<Server> {
   return new Promise((resolvePromise, reject) => {
@@ -299,7 +322,7 @@ async function describeOllama(): Promise<ProviderConfig> {
 }
 
 // Safe Provider Configuration List (No API Keys returned)
-app.get('/v1/config/providers', async (req, res) => {
+app.get('/v1/config/providers', asyncRoute(async (req, res) => {
   const envNvidia = NvidiaProvider.detectEnvironmentCredential();
   const hasNvidiaKey = !!(runtimeConfig.providers?.['nvidia']?.apiKey || envNvidia);
 
@@ -358,10 +381,10 @@ app.get('/v1/config/providers', async (req, res) => {
     await describeOllama()
   ];
   res.status(200).json({ providers });
-});
+}));
 
 // Safe Single Provider Status (No API Key returned)
-app.get('/v1/config/providers/:providerId/status', async (req, res) => {
+app.get('/v1/config/providers/:providerId/status', asyncRoute(async (req, res) => {
   const { providerId } = req.params;
   if (providerId === 'nvidia') {
     const envNvidia = NvidiaProvider.detectEnvironmentCredential();
@@ -405,10 +428,10 @@ app.get('/v1/config/providers/:providerId/status', async (req, res) => {
     });
   }
   res.status(404).json({ error: `Provider '${providerId}' not found` });
-});
+}));
 
 // Test Connection Endpoint
-app.post('/v1/config/providers/:providerId/test', async (req, res) => {
+app.post('/v1/config/providers/:providerId/test', asyncRoute(async (req, res) => {
   const { providerId } = req.params;
   if (providerId === 'nvidia') {
     const key = req.body?.apiKey || runtimeConfig.providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY;
@@ -452,14 +475,14 @@ app.post('/v1/config/providers/:providerId/test', async (req, res) => {
     return res.status(200).json(testResult);
   }
   res.status(404).json({ error: `Provider '${providerId}' not testable` });
-});
+}));
 
 // Basic health check
 app.get("/v1/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.post('/v1/tasks', async (req, res) => {
+app.post('/v1/tasks', asyncRoute(async (req, res) => {
   const taskReq = req.body || {};
   const modelId: string = taskReq.modelId || 'nvidia-nemotron-3-ultra';
   const selection = selectProvider(modelId);
@@ -574,8 +597,8 @@ app.post('/v1/tasks', async (req, res) => {
     }, 5 * 60 * 1000);
   };
 
-  // Run asynchronously
-  setTimeout(async () => {
+  // Run asynchronously. runTask handles every failure internally, so the timer callback stays void.
+  const runTask = async () => {
     try {
       const model = providerFactory(selection, runtimeConfig.providers);
 
@@ -640,8 +663,9 @@ app.post('/v1/tasks', async (req, res) => {
       closeStreams();
       scheduleCleanup();
     }
-  }, 0);
-});
+  };
+  setTimeout(() => { void runTask(); }, 0);
+}));
 
 app.post('/v1/tasks/:id/cancel', (req, res) => {
   const taskId = req.params.id;
@@ -779,7 +803,7 @@ app.post('/v1/tasks/:taskId/interactions/:interactionId/respond', (req, res) => 
 // Milestone 7: Memory API Endpoints
 // ==========================================
 
-app.get('/v1/workspace/memory', async (req, res) => {
+app.get('/v1/workspace/memory', asyncRoute(async (req, res) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
     if (!workspaceId) {
@@ -800,9 +824,9 @@ app.get('/v1/workspace/memory', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
-app.post('/v1/workspace/memory', async (req, res) => {
+app.post('/v1/workspace/memory', asyncRoute(async (req, res) => {
   try {
     const { workspaceId, type, content, source, trustLevel, confidence, scope, evidence } = req.body;
 
@@ -833,9 +857,9 @@ app.post('/v1/workspace/memory', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
-app.delete('/v1/workspace/memory/:id', async (req, res) => {
+app.delete('/v1/workspace/memory/:id', asyncRoute(async (req, res) => {
   try {
     const memoryId = req.params.id;
     const workspaceId = (req.query.workspaceId as string) || (req.body?.workspaceId as string);
@@ -850,7 +874,7 @@ app.delete('/v1/workspace/memory/:id', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 // ==========================================
 // Milestone 7: Subagent Inspection Endpoint
@@ -866,6 +890,8 @@ app.get('/v1/tasks/:taskId/subagents', (req, res) => {
     subagents: subagentEvents
   });
 });
+
+app.use(jsonErrorHandler);
 
 return app;
 }
