@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ProviderConfig, TaskAutonomy, TaskMode } from "@comu/protocol";
+import type { InteractionResponse, ProviderConfig, TaskAutonomy, TaskMode } from "@comu/protocol";
 import {
   HostToWebviewMessage,
   SessionState,
@@ -38,6 +38,9 @@ export interface StoreState {
   setShowElided: (show: boolean) => void;
   submit: () => void;
   cancel: () => void;
+  respondInteraction: (response: InteractionResponse) => void;
+  openFile: (path: string) => void;
+  requestDiff: (path: string) => void;
   dismissBanner: () => void;
 }
 
@@ -160,6 +163,20 @@ export const useStore = create<StoreState>((set, get) => ({
     get().post({ type: "cancel_task" });
     set(state => ({ session: { ...state.session, status: "cancelling" } }));
   },
+
+  respondInteraction: response => {
+    const { session, post } = get();
+    const pending = session.pendingApproval ?? session.pendingInteraction;
+    if (!pending || !session.taskId) return;
+    const interactionId = "interactionId" in pending ? pending.interactionId : undefined;
+    if (!interactionId) return;
+    post({ type: "respond_interaction", taskId: session.taskId, interactionId, response });
+    // Clear optimistically: the authoritative interaction.responded event confirms it.
+    set(state => ({ session: { ...state.session, pendingApproval: undefined, pendingInteraction: undefined } }));
+  },
+
+  openFile: path => get().post({ type: "open_file", path }),
+  requestDiff: path => get().post({ type: "request_diff", path }),
 
   dismissBanner: () => set({ banner: undefined })
 }));

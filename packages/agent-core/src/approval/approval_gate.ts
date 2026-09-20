@@ -237,11 +237,16 @@ export class ApprovalGate {
     }
     const counts = ApprovalGate.countChanges(diff);
     const operation = exists ? "MODIFY" : "CREATE";
+    // A new file has nothing to diff against, so carry the content and let the card show the file.
+    let content: string | undefined;
+    if (operation === "CREATE") {
+      content = proposed.length > MAX_DIFF_CHARS ? proposed.slice(0, MAX_DIFF_CHARS) : proposed;
+    }
     return {
       kind,
       tool,
       summary: `${operation === "CREATE" ? "Create" : "Modify"} ${ApprovalGate.normalizeRelativePath(path)} (+${counts.additions} -${counts.deletions})`,
-      file: { path, operation, diff, additions: counts.additions, deletions: counts.deletions, truncated, note },
+      file: { path, operation, diff, additions: counts.additions, deletions: counts.deletions, truncated, note, content },
       scopes: []
     };
   }

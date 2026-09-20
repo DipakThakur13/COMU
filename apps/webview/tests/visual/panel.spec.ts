@@ -9,7 +9,21 @@ import { test, expect, Page } from "@playwright/test";
  * or a DOM assertion.
  */
 
-const FIXTURES = ["idle", "running", "approval", "completed", "failed", "long"] as const;
+const FIXTURES = [
+  "idle",
+  "running",
+  "approval",
+  "approval-create",
+  "approval-command",
+  "approval-push",
+  "completed",
+  "changes",
+  "failed",
+  "long"
+] as const;
+
+/** The Changes fixture is only meaningful with that surface selected. */
+const SURFACE: Partial<Record<(typeof FIXTURES)[number], string>> = { changes: "changes" };
 const THEMES = ["dark", "light", "hc-dark"] as const;
 const WIDTHS = [280, 400, 900] as const;
 
@@ -18,8 +32,9 @@ const FROZEN_NOW = new Date("2026-09-20T10:04:30.000Z");
 
 async function openPanel(page: Page, fixture: string, theme: string, width: number) {
   await page.clock.install({ time: FROZEN_NOW });
+  const surface = SURFACE[fixture as (typeof FIXTURES)[number]];
   // speed=0 delivers the whole fixture at once: no paced replay, nothing in flight.
-  await page.goto(`/?fixture=${fixture}&theme=${theme}&width=${width}&speed=0`);
+  await page.goto(`/?fixture=${fixture}&theme=${theme}&width=${width}&speed=0${surface ? `&surface=${surface}` : ""}`);
   await page.waitForSelector("body[data-comu-harness-settled='1']");
   await page.waitForFunction(() => document.fonts.status === "loaded");
   const frame = page.locator("#comu-harness-frame");

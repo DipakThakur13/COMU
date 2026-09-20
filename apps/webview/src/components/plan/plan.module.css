@@ -1,0 +1,118 @@
+.ribbon {
+  border-bottom: 1px solid var(--comu-border);
+  background: var(--comu-surface-raised);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-2);
+  width: 100%;
+  padding: var(--comu-space-1) var(--comu-space-3);
+  text-align: left;
+  min-width: 0;
+}
+
+.summary:hover {
+  background: var(--comu-hover);
+}
+
+.summaryIcon {
+  color: var(--comu-text-muted);
+}
+
+.summaryText {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position {
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  white-space: nowrap;
+}
+
+/* Progress track: one tick per step, so position is legible without expanding. */
+.track {
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  padding: 0 var(--comu-space-3) var(--comu-space-1);
+  list-style: none;
+}
+
+.tick {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--comu-border);
+}
+
+.tick.completed { background: var(--comu-status-ok); }
+.tick.running { background: var(--comu-status-running); }
+.tick.failed { background: var(--comu-status-error); }
+.tick.blocked { background: var(--comu-status-warn); }
+.tick.skipped { background: var(--comu-border); opacity: 0.5; }
+
+.steps {
+  margin: 0;
+  padding: 0 0 var(--comu-space-2);
+  list-style: none;
+  border-top: 1px solid var(--comu-border);
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-1) var(--comu-space-3);
+  min-width: 0;
+}
+
+.stepIcon {
+  margin-top: 2px;
+}
+
+.stepBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stepTitle {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text);
+}
+
+.stepNumber {
+  color: var(--comu-text-muted);
+  font-family: var(--comu-font-mono);
+}
+
+.stepResult {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.stepType {
+  margin-top: 2px;
+  color: var(--comu-text-muted);
+  opacity: 0.6;
+}
+
+.step.completed .stepIcon { color: var(--comu-status-ok); }
+.step.running .stepIcon { color: var(--comu-status-running); }
+.step.failed .stepIcon { color: var(--comu-status-error); }
+.step.blocked .stepIcon { color: var(--comu-status-warn); }
+.step.pending .stepIcon,
+.step.skipped .stepIcon { color: var(--comu-text-muted); opacity: 0.6; }
+.step.pending .stepTitle,
+.step.skipped .stepTitle { color: var(--comu-text-muted); }

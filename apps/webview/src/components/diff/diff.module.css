@@ -1,0 +1,89 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-1);
+  min-width: 0;
+}
+
+.scroll {
+  overflow: auto;
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  background: var(--comu-surface-code);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  line-height: 1.5;
+}
+
+.gutter {
+  width: 1px;
+  padding: 0 var(--comu-space-1);
+  color: var(--comu-text-muted);
+  text-align: right;
+  vertical-align: top;
+  white-space: nowrap;
+  user-select: none;
+  opacity: 0.7;
+}
+
+.marker {
+  width: 1px;
+  padding: 0 2px;
+  text-align: center;
+  vertical-align: top;
+  user-select: none;
+}
+
+.code {
+  padding: 0 var(--comu-space-1);
+  /* Diff bodies are content we do not control, so they may break anywhere. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.add {
+  background: var(--comu-diff-add-bg);
+  color: var(--comu-diff-add);
+}
+
+.del {
+  background: var(--comu-diff-del-bg);
+  color: var(--comu-diff-del);
+}
+
+.context {
+  color: var(--comu-text);
+}
+
+.hunk {
+  color: var(--comu-diff-hunk);
+  background: var(--comu-surface-raised);
+}
+
+.meta {
+  color: var(--comu-text-muted);
+  font-style: italic;
+}
+
+/* High contrast draws with symbols and borders rather than fills. */
+body.vscode-high-contrast .add,
+body.vscode-high-contrast-light .add,
+body.vscode-high-contrast .del,
+body.vscode-high-contrast-light .del {
+  background: transparent;
+  font-weight: 600;
+}
+
+.newFileLabel,
+.truncated,
+.empty {
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}

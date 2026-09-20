@@ -2,7 +2,11 @@ import { useEffect } from "react";
 import { useStore } from "./store/store.js";
 import { Header } from "./components/Header.js";
 import { Composer } from "./components/Composer.js";
+import { SurfaceTabs } from "./components/SurfaceTabs.js";
 import { ActivityStream } from "./components/activity/ActivityStream.js";
+import { ApprovalCard } from "./components/approval/ApprovalCard.js";
+import { PlanRibbon } from "./components/plan/PlanRibbon.js";
+import { ChangesPanel } from "./components/changes/ChangesPanel.js";
 import { Button, ErrorBoundary } from "./components/primitives/index.js";
 import styles from "./app.module.css";
 
@@ -15,7 +19,7 @@ export function App() {
 
   const busy = session.status === "running" || session.status === "cancelling";
 
-  // Esc stops a running task from anywhere in the panel.
+  // Esc stops a running task from anywhere in the panel. Nothing here approves anything.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && busy) {
@@ -49,16 +53,38 @@ export function App() {
         </div>
       ) : null}
 
-      <ErrorBoundary region="activity stream">
-        <ActivityStream
-          entries={session.activity}
-          elidedCount={session.elidedCount}
-          streamingText={session.streaming?.text}
-          expandedIds={ui.expandedActivityIds}
-          onToggle={store.toggleExpanded}
-          status={session.status}
-        />
-      </ErrorBoundary>
+      <SurfaceTabs active={ui.surface} changeCount={session.changes.length} onSelect={store.setSurface} />
+
+      {session.plan && ui.surface === "activity" ? (
+        <ErrorBoundary region="plan">
+          <PlanRibbon plan={session.plan} />
+        </ErrorBoundary>
+      ) : null}
+
+      {ui.surface === "activity" ? (
+        <>
+          {session.pendingApproval ? (
+            <ErrorBoundary region="approval card">
+              <ApprovalCard approval={session.pendingApproval} onRespond={store.respondInteraction} />
+            </ErrorBoundary>
+          ) : null}
+
+          <ErrorBoundary region="activity stream">
+            <ActivityStream
+              entries={session.activity}
+              elidedCount={session.elidedCount}
+              streamingText={session.streaming?.text}
+              expandedIds={ui.expandedActivityIds}
+              onToggle={store.toggleExpanded}
+              status={session.status}
+            />
+          </ErrorBoundary>
+        </>
+      ) : (
+        <ErrorBoundary region="changes">
+          <ChangesPanel changes={session.changes} onOpenFile={store.openFile} onRequestDiff={store.requestDiff} />
+        </ErrorBoundary>
+      )}
 
       <ErrorBoundary region="composer">
         <Composer

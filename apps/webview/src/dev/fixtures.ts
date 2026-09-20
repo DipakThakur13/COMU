@@ -8,6 +8,9 @@ import type { AgentEvent } from "@comu/protocol";
  * capability the engine does not have.
  */
 
+/** Shared so fixture content can be written as line arrays without escaping. */
+const NEWLINE = String.fromCharCode(10);
+
 let seq = 0;
 function e(type: string, extra: Record<string, unknown> = {}): AgentEvent {
   seq += 1;
@@ -84,6 +87,96 @@ const approvalInteraction = {
       { key: "dir:src/auth/", label: "Approve writes under src/auth/ for this session" },
       { key: "writes:*", label: "Approve all writes for this session" }
     ]
+  }
+};
+
+const createInteraction = {
+  interactionId: "act-fixture-2",
+  taskId: "fixture-task",
+  type: "APPROVAL",
+  title: "Approval required: Create src/auth/rate_limit.ts (+18 -0)",
+  message: "Create src/auth/rate_limit.ts: +18 -0. Review the file below.",
+  status: "PENDING",
+  createdAt: new Date().toISOString(),
+  expiresAt: new Date(Date.now() + 9 * 60 * 1000).toISOString(),
+  approval: {
+    kind: "file_write",
+    tool: "create_file",
+    summary: "Create src/auth/rate_limit.ts (+18 -0)",
+    file: {
+      path: "src/auth/rate_limit.ts",
+      operation: "CREATE",
+      additions: 18,
+      deletions: 0,
+      diff: "",
+      content: [
+        "interface Bucket {",
+        "  count: number;",
+        "  resetAt: number;",
+        "}",
+        "",
+        "const buckets = new Map<string, Bucket>();",
+        "",
+        "export function rateLimit(options: { windowMs: number; max: number }) {",
+        "  return (req: { ip: string }, res: { status: (c: number) => void }, next: () => void) => {",
+        "    const now = Date.now();",
+        "    const bucket = buckets.get(req.ip);",
+        "    if (!bucket || bucket.resetAt < now) {",
+        "      buckets.set(req.ip, { count: 1, resetAt: now + options.windowMs });",
+        "      return next();",
+        "    }",
+        "    bucket.count += 1;",
+        "    if (bucket.count > options.max) return res.status(429);",
+        "    next();",
+        "  };",
+        "}"
+      ].join(NEWLINE)
+    },
+    scopes: [
+      { key: "file:src/auth/rate_limit.ts", label: "Approve writes to src/auth/rate_limit.ts for this session" },
+      { key: "dir:src/auth/", label: "Approve writes under src/auth/ for this session" },
+      { key: "writes:*", label: "Approve all writes for this session" }
+    ]
+  }
+};
+
+const commandInteraction = {
+  interactionId: "act-fixture-3",
+  taskId: "fixture-task",
+  type: "APPROVAL",
+  title: "Approval required: Run npm run test:integration -- --runInBand",
+  message: "Run the command below.",
+  status: "PENDING",
+  createdAt: new Date().toISOString(),
+  expiresAt: new Date(Date.now() + 45 * 1000).toISOString(),
+  approval: {
+    kind: "command",
+    tool: "execute_command",
+    summary: "Run npm run test:integration -- --runInBand",
+    command: {
+      executable: "npm",
+      args: ["run", "test:integration", "--", "--runInBand"],
+      cwd: "/home/dev/checkout/packages/api"
+    },
+    scopes: [{ key: "cmd:npm run test:integration -- --runInBand", label: "Approve this exact command for this session" }]
+  }
+};
+
+const pushInteraction = {
+  interactionId: "act-fixture-4",
+  taskId: "fixture-task",
+  type: "APPROVAL",
+  title: "Approval required: Push branch fix/rate-limit to origin",
+  message: "Push to a remote.",
+  status: "PENDING",
+  createdAt: new Date().toISOString(),
+  expiresAt: new Date(Date.now() + 8 * 60 * 1000).toISOString(),
+  approval: {
+    kind: "git_push",
+    tool: "git_push",
+    summary: "Push branch fix/rate-limit to origin",
+    details: { remote: "origin", branch: "fix/rate-limit" },
+    scopes: []
   }
 };
 
@@ -212,6 +305,42 @@ export const FIXTURES: Fixture[] = [
       e("repair.failed", { repairAttemptId: "rep-1", attemptNumber: 1, reason: "Same failure fingerprint after repair" }),
       e("task.failed", { error: "Repair limit reached", payload: { code: "DUPLICATE_REPAIR_STRATEGY", message: "The same repair was attempted twice with the same result." } })
     ]
+  },
+  {
+    id: "approval-create",
+    label: "Pending approval (new file)",
+    description: "A created file renders as the file itself, not a diff against nothing.",
+    events: [
+      ...startup,
+      e("agent.status", { status: "Waiting for approval: Create src/auth/rate_limit.ts (+18 -0)" }),
+      e("interaction.requested", { interactionId: "act-fixture-2", interaction: createInteraction })
+    ]
+  },
+  {
+    id: "approval-command",
+    label: "Pending approval (command)",
+    description: "The exact argument vector and cwd, never a joined shell string. Countdown is urgent.",
+    events: [
+      ...startup,
+      e("agent.status", { status: "Waiting for approval: Run npm run test:integration" }),
+      e("interaction.requested", { interactionId: "act-fixture-3", interaction: commandInteraction })
+    ]
+  },
+  {
+    id: "approval-push",
+    label: "Pending approval (push)",
+    description: "Marked distinctly and offers no session grant, in any autonomy level.",
+    events: [
+      ...startup,
+      e("agent.status", { status: "Waiting for approval: Push branch fix/rate-limit" }),
+      e("interaction.requested", { interactionId: "act-fixture-4", interaction: pushInteraction })
+    ]
+  },
+  {
+    id: "changes",
+    label: "Changes tab",
+    description: "The read-only aggregate review of every written file.",
+    events: [...startup, ...streamingTail, ...completedTail]
   },
   {
     id: "long",

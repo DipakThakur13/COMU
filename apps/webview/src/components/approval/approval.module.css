@@ -1,0 +1,253 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-2);
+  margin: var(--comu-space-2) var(--comu-space-2) var(--comu-space-3);
+  padding: var(--comu-space-3);
+  border: 1px solid var(--comu-status-waiting);
+  border-left-width: 3px;
+  border-radius: var(--comu-radius-md);
+  background: var(--comu-tint-waiting);
+  min-width: 0;
+}
+
+.card:focus {
+  outline: 1px solid var(--comu-focus);
+  outline-offset: 2px;
+}
+
+/* A push leaves the machine, so it never looks like an ordinary write. */
+.pushCard {
+  border-color: var(--comu-status-error);
+  background: var(--comu-tint-error);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  min-width: 0;
+}
+
+.headIcon {
+  color: var(--comu-status-waiting);
+}
+
+.pushCard .headIcon {
+  color: var(--comu-status-error);
+}
+
+.kind {
+  flex: 1;
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--comu-text-muted);
+}
+
+.countdown {
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  white-space: nowrap;
+}
+
+.countdownUrgent {
+  color: var(--comu-status-error);
+  font-weight: 600;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--comu-text-sm);
+  font-weight: 600;
+  color: var(--comu-text);
+}
+
+.pushNote,
+.hint,
+.warn,
+.denyNote {
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.warn {
+  color: var(--comu-status-warn);
+}
+
+.path {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  min-width: 0;
+}
+
+.pathText {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--comu-font-mono);
+  /* A path is content we do not control: break it rather than overflow the panel. */
+  overflow-wrap: anywhere;
+}
+
+.counts {
+  display: inline-flex;
+  gap: var(--comu-space-1);
+  font-family: var(--comu-font-mono);
+  white-space: nowrap;
+}
+
+.add { color: var(--comu-diff-add); }
+.del { color: var(--comu-diff-del); }
+
+/* ── Command ────────────────────────────────────────────────────── */
+.commandBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-1);
+  min-width: 0;
+}
+
+.argv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--comu-space-1);
+  margin: 0;
+  padding: var(--comu-space-2);
+  list-style: none;
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  background: var(--comu-surface-code);
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+}
+
+.executable,
+.arg {
+  padding: 1px var(--comu-space-1);
+  border-radius: var(--comu-radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.executable {
+  background: var(--comu-tint-accent);
+  color: var(--comu-text);
+  font-weight: 600;
+}
+
+.arg {
+  background: var(--comu-surface-raised);
+  color: var(--comu-text-muted);
+}
+
+.details {
+  max-height: 160px;
+  overflow: auto;
+  padding: var(--comu-space-2);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  background: var(--comu-surface-code);
+  font-size: var(--comu-text-xs);
+}
+
+/* ── Actions ────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--comu-space-2);
+}
+
+/* ── Session scopes ─────────────────────────────────────────────── */
+.scopes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--comu-space-1);
+  padding-top: var(--comu-space-2);
+  border-top: 1px solid var(--comu-border);
+  min-width: 0;
+}
+
+.scopesTitle {
+  margin: 0;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.scopeRow {
+  min-width: 0;
+}
+
+.scopeButton {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: var(--comu-space-1) var(--comu-space-2);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-sm);
+  text-align: left;
+  min-width: 0;
+}
+
+.scopeButton:hover:not(:disabled) {
+  background: var(--comu-hover);
+}
+
+.scopeLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-1);
+  font-size: var(--comu-text-sm);
+}
+
+.scopeKey {
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Breadth is visible weight. Narrowest is the obvious affordance; the broadest is deliberately
+ * unattractive and asks again before it applies.
+ */
+.primary {
+  border-color: color-mix(in srgb, var(--comu-accent) 60%, transparent);
+  background: var(--comu-tint-accent);
+  color: var(--comu-text);
+}
+
+.secondary {
+  background: transparent;
+  color: var(--comu-text-muted);
+}
+
+.confirm {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--comu-status-warn) 60%, transparent);
+  background: transparent;
+  color: var(--comu-status-warn);
+}
+
+.confirmRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--comu-space-1);
+  padding: var(--comu-space-2);
+  border: 1px dashed var(--comu-status-warn);
+  border-radius: var(--comu-radius-sm);
+}
+
+.confirmText {
+  flex: 1 1 100%;
+  font-size: var(--comu-text-xs);
+  color: var(--comu-status-warn);
+}

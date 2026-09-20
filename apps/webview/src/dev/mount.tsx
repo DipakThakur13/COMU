@@ -1,6 +1,7 @@
 import { StrictMode, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../App.js";
+import { useStore } from "../store/store.js";
 import { HarnessControls, HarnessHost, installHarness } from "./harness.js";
 import { applyHarnessTheme, ThemeId } from "./themes.js";
 import styles from "./harness.module.css";
@@ -32,6 +33,11 @@ export function mountHarness(rootElement: HTMLElement) {
     fixtureId: params.get("fixture") ?? "running",
     speed: Number(params.get("speed") ?? 120)
   });
+
+  const surface = params.get("surface");
+  if (surface === "changes" || surface === "activity") {
+    useStore.getState().setSurface(surface);
+  }
 
   createRoot(rootElement).render(
     <StrictMode>

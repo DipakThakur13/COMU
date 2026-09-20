@@ -480,6 +480,11 @@ export interface ApprovalPayload {
     deletions: number;
     truncated?: boolean;
     note?: string;
+    /**
+     * Full proposed content, present only for CREATE. A new file has nothing to diff against, so
+     * the interface shows the file itself rather than a diff where every line is an addition.
+     */
+    content?: string;
   };
   command?: {
     executable: string;

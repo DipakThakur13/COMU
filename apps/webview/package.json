@@ -15,6 +15,7 @@
     "@comu/protocol": "workspace:*",
     "@comu/ui-state": "workspace:*",
     "@tanstack/react-virtual": "^3.13.12",
+    "highlight.js": "^11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.8"

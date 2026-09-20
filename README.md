@@ -32,7 +32,7 @@
 | **Model Gateway** | **Provider-Neutral Model Gateway** (`@comu/model-core`) | ✅ NVIDIA NIM, Experiential Labs (GPT-6 Astra), OpenAI-compatible, Ollama (local, keyless) |
 | **Frontier Context Support** | Up to **1,050,000 tokens** (GPT-6 Astra) | ✅ Context Engine & WorkingSet |
 | **Monorepo Architecture** | 22 Modular Workspace Packages (`pnpm`) | ✅ 100% Passing Typecheck, Lint & Build |
-| **Automated Test Suite** | **52 Test Files · 487 Tests Passing** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
+| **Automated Test Suite** | **54 Test Files · 518 Tests Passing · 90 Visual Baselines** | ✅ 100% Pass Rate (including `PERF-01` to `PERF-35`) |
 | **VS Code Package** | `comu-ai-0.2.4.vsix` | Built & Ready to Install |
 
 ---

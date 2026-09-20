@@ -1,0 +1,93 @@
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--comu-space-1) var(--comu-space-3);
+  padding: var(--comu-space-2) var(--comu-space-3);
+  border-bottom: 1px solid var(--comu-border);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.readOnlyNote {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--comu-text-muted);
+}
+
+.list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  list-style: none;
+}
+
+.item {
+  border-bottom: 1px solid color-mix(in srgb, var(--comu-border) 55%, transparent);
+}
+
+.itemHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-2);
+  width: 100%;
+  padding: var(--comu-space-2) var(--comu-space-3);
+  text-align: left;
+  min-width: 0;
+}
+
+.itemHeader:hover {
+  background: var(--comu-hover);
+}
+
+.opIcon {
+  color: var(--comu-text-muted);
+}
+
+.opCreate { color: var(--comu-diff-add); }
+.opModify { color: var(--comu-status-running); }
+
+.pathCell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fileName {
+  font-size: var(--comu-text-sm);
+  color: var(--comu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirName {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.opLabel {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  white-space: nowrap;
+}
+
+.openButton {
+  padding: var(--comu-space-1) var(--comu-space-3) var(--comu-space-2);
+}

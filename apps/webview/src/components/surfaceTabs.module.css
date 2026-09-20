@@ -1,0 +1,29 @@
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--comu-border);
+  background: var(--comu-surface);
+}
+
+.tab {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--comu-space-1);
+  padding: var(--comu-space-2) var(--comu-space-2);
+  border-bottom: 2px solid transparent;
+  color: var(--comu-text-muted);
+  font-size: var(--comu-text-sm);
+  /* Labels never drop: an unlabelled icon row is the defect this replaces. */
+  white-space: nowrap;
+}
+
+.tab:hover {
+  background: var(--comu-hover);
+  color: var(--comu-text);
+}
+
+.active {
+  border-bottom-color: var(--comu-accent);
+  color: var(--comu-text);
+}
