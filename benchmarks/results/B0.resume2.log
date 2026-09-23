@@ -4410,3 +4410,29 @@ Re-measuring 11 the provider killed: t3-ts-extract rep 1, t4-ts-async rep 1, t7-
   delta: ' dependency',
   index: 60
 }
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165872952-req-1790165723175-gb45ek8-reasoning-61',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:52.952Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' that',
+  index: 61
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165873810-req-1790165723175-gb45ek8-reasoning-62',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:53.810Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' points',
+  index: 62
+}
