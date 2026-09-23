@@ -3,6 +3,11 @@ import type { ProviderConfig, ProviderTestResult } from "@comu/protocol";
 import { Button, Icon, StatusPill, StatusTone } from "../primitives/index.js";
 import styles from "./settings.module.css";
 
+/**
+ * The badge states what the last probe found, and nothing else. Green means a probe succeeded; red
+ * means one failed, labelled with why; grey means there is nothing to show, either no credential or
+ * a credential nothing has probed yet. A stored key alone never turns it green.
+ */
 function toneFor(status: ProviderConfig["status"]): { tone: StatusTone; label: string } {
   switch (status) {
     case "CONNECTED":
@@ -14,13 +19,37 @@ function toneFor(status: ProviderConfig["status"]): { tone: StatusTone; label: s
     case "CONNECTION_ERROR":
       return { tone: "error", label: "Unreachable" };
     case "TIMEOUT":
-      return { tone: "warn", label: "Timed out" };
+      return { tone: "error", label: "Timed out" };
+    case "UNCHECKED":
+      return { tone: "idle", label: "Not checked" };
     case "DISABLED":
       return { tone: "idle", label: "Disabled" };
     default:
       return { tone: "idle", label: "No key yet" };
   }
 }
+
+/** The time of day for a check made today, and the date as well for anything older. */
+export function formatCheckedAt(iso: string, now: Date = new Date()): string {
+  const at = new Date(iso);
+  const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return at.toDateString() === now.toDateString()
+    ? `Checked ${time}`
+    : `Checked ${at.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/**
+ * The result to show under the card. The host's record of the last probe and the reply to the test
+ * just run are usually the same probe arriving by two messages; whichever finished later wins, and
+ * a reply that probed nothing (no test exists) has no time and is shown as is.
+ */
+function latestResult(reply?: ProviderTestResult, recorded?: ProviderTestResult): ProviderTestResult | undefined {
+  if (!reply) return recorded;
+  if (!recorded || !reply.checkedAt || !recorded.checkedAt) return reply;
+  return reply.checkedAt >= recorded.checkedAt ? reply : recorded;
+}
+
+const MODELS_SHOWN = 4;
 
 export interface ProviderCardProps {
   provider: ProviderConfig;
@@ -46,6 +75,7 @@ export function ProviderCard({ provider, testResult, testing, highlighted, onSav
   const [key, setKey] = useState("");
   const [endpoint, setEndpoint] = useState(provider.endpoint ?? "");
   const [revealed, setRevealed] = useState(false);
+  const [allModels, setAllModels] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
 
   useEffect(() => setEndpoint(provider.endpoint ?? ""), [provider.endpoint]);
@@ -61,9 +91,14 @@ export function ProviderCard({ provider, testResult, testing, highlighted, onSav
   }, [highlighted]);
 
   const { tone, label } = toneFor(provider.status);
+  const checkedAt = provider.lastCheck?.checkedAt;
+  const result = latestResult(testResult, provider.lastCheck);
   const local = provider.isLocal === true;
   const keyId = `provider-key-${provider.providerId}`;
   const endpointId = `provider-endpoint-${provider.providerId}`;
+  const modelsId = `provider-models-${provider.providerId}`;
+  const hiddenModels = provider.models.length - MODELS_SHOWN;
+  const models = allModels ? provider.models : provider.models.slice(0, MODELS_SHOWN);
 
   return (
     <section
@@ -77,6 +112,12 @@ export function ProviderCard({ provider, testResult, testing, highlighted, onSav
           {provider.displayName}
         </h3>
         <StatusPill tone={tone}>{label}</StatusPill>
+        {/* A status without a time is a claim about now that was last verified at an unknown moment. */}
+        {checkedAt ? (
+          <time className={styles.checkedAt} dateTime={checkedAt} title={new Date(checkedAt).toLocaleString()}>
+            {formatCheckedAt(checkedAt)}
+          </time>
+        ) : null}
       </div>
 
       <p className={styles.tags}>
@@ -88,19 +129,29 @@ export function ProviderCard({ provider, testResult, testing, highlighted, onSav
       {provider.description ? <p className={styles.description}>{provider.description}</p> : null}
 
       {provider.models.length > 0 ? (
-        <ul className={styles.models}>
-          {provider.models.slice(0, 4).map(model => (
-            <li key={model.id} className={styles.model}>
-              <span className={styles.modelName}>{model.name}</span>
-              {model.contextTokens ? (
-                <span className={styles.modelMeta}>{Math.round(model.contextTokens / 1000)}k context</span>
-              ) : null}
-            </li>
-          ))}
-          {provider.models.length > 4 ? (
-            <li className={styles.modelMore}>and {provider.models.length - 4} more</li>
+        <>
+          <ul className={styles.models} id={modelsId}>
+            {models.map(model => (
+              <li key={model.id} className={styles.model}>
+                <span className={styles.modelName}>{model.name}</span>
+                {model.contextTokens ? (
+                  <span className={styles.modelMeta}>{Math.round(model.contextTokens / 1000)}k context</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {hiddenModels > 0 ? (
+            <button
+              type="button"
+              className={styles.modelMore}
+              aria-expanded={allModels}
+              aria-controls={modelsId}
+              onClick={() => setAllModels(v => !v)}
+            >
+              {allModels ? "Show fewer" : `Show ${hiddenModels} more`}
+            </button>
           ) : null}
-        </ul>
+        </>
       ) : null}
 
       {local ? (
@@ -140,6 +191,17 @@ export function ProviderCard({ provider, testResult, testing, highlighted, onSav
             <p className={styles.fieldHint}>
               Stored in the operating system keychain through VS Code, never in this panel and never in the repository.
             </p>
+            {/*
+              Destructive, so it sits with the key it deletes rather than at equal weight beside Save,
+              where it used to be one misplaced click away.
+            */}
+            {provider.hasCredential ? (
+              <div className={styles.removeRow}>
+                <Button variant="ghost" small icon="close" className={styles.removeKey} onClick={onRemove}>
+                  Remove key
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           <div className={styles.field}>
@@ -155,12 +217,12 @@ export function ProviderCard({ provider, testResult, testing, highlighted, onSav
         </>
       )}
 
-      {testResult ? (
-        <p className={testResult.status === "CONNECTED" ? styles.testOk : styles.testFail} role="status">
-          <Icon name={testResult.status === "CONNECTED" ? "check" : "error"} size={12} />
-          {testResult.status === "CONNECTED"
-            ? `Reachable${testResult.latencyMs ? ` in ${testResult.latencyMs}ms` : ""}${testResult.model ? ` · ${testResult.model}` : ""}`
-            : testResult.message || "Could not connect."}
+      {result ? (
+        <p className={result.status === "CONNECTED" ? styles.testOk : result.status === "UNCHECKED" ? styles.testNote : styles.testFail} role="status">
+          <Icon name={result.status === "CONNECTED" ? "check" : result.status === "UNCHECKED" ? "info" : "error"} size={12} />
+          {result.status === "CONNECTED"
+            ? `Reachable${result.latencyMs ? ` in ${result.latencyMs}ms` : ""}${result.model ? ` · ${result.model}` : ""}`
+            : result.message || "Could not connect."}
         </p>
       ) : null}
 
@@ -173,11 +235,6 @@ export function ProviderCard({ provider, testResult, testing, highlighted, onSav
         <Button variant="secondary" small icon="sync" disabled={testing} onClick={() => onTest(key.trim() || undefined, endpoint.trim() || undefined)}>
           {testing ? "Testing…" : "Test connection"}
         </Button>
-        {!local && provider.hasCredential ? (
-          <Button variant="danger" small icon="close" onClick={onRemove}>
-            Remove key
-          </Button>
-        ) : null}
       </div>
     </section>
   );

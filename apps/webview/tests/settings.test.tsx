@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SettingsView } from "../src/components/settings/SettingsView.js";
-import { ProviderCard } from "../src/components/settings/ProviderCard.js";
+import { ProviderCard, formatCheckedAt } from "../src/components/settings/ProviderCard.js";
 
 afterEach(() => cleanup());
 
@@ -130,6 +130,72 @@ describe("ProviderCard", () => {
 
     card(cloud, { testResult: { provider: "experiential", status: "CONNECTION_ERROR", message: "Could not reach the endpoint." } });
     expect(screen.getByRole("status").textContent).toContain("Could not reach the endpoint.");
+  });
+
+  it("never shows a saved key that nothing has probed as connected", () => {
+    card({ ...cloud, hasCredential: true, status: "UNCHECKED" });
+    expect(screen.getByText("Not checked")).toBeTruthy();
+    expect(screen.queryByText("Connected")).toBeNull();
+  });
+
+  it("derives the badge and the result from the same probe, and says when it ran", () => {
+    const checkedAt = new Date().toISOString();
+    const { container } = card({
+      ...cloud,
+      hasCredential: true,
+      status: "TIMEOUT",
+      lastCheck: { provider: "experiential", status: "TIMEOUT", message: "Connection timed out after 15 seconds.", checkedAt }
+    });
+    // The reported defect: a green badge above "timed out". Both now read from one record.
+    expect(screen.getByText("Timed out")).toBeTruthy();
+    expect(screen.queryByText("Connected")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("timed out after 15 seconds");
+    const time = container.querySelector("time");
+    expect(time?.getAttribute("dateTime")).toBe(checkedAt);
+    expect(time?.textContent).toMatch(/^Checked /);
+  });
+
+  it("prefers whichever of the reply and the recorded probe finished later", () => {
+    card(
+      {
+        ...cloud,
+        hasCredential: true,
+        status: "CONNECTED",
+        lastCheck: { provider: "experiential", status: "CONNECTED", latencyMs: 300, checkedAt: "2026-09-23T10:05:00.000Z" }
+      },
+      { testResult: { provider: "experiential", status: "TIMEOUT", message: "Older failure.", checkedAt: "2026-09-23T10:00:00.000Z" } }
+    );
+    expect(screen.getByRole("status").textContent).toContain("Reachable in 300ms");
+  });
+
+  it("dates a check from an earlier day, not only the time", () => {
+    const now = new Date(2026, 8, 23, 12, 0);
+    expect(formatCheckedAt(new Date(2026, 8, 23, 9, 30).toISOString(), now)).not.toMatch(/Sep|23/);
+    expect(formatCheckedAt(new Date(2026, 8, 21, 9, 30).toISOString(), now)).toMatch(/21/);
+  });
+
+  it("expands the rest of the model list instead of labelling it", () => {
+    const models = Array.from({ length: 7 }, (_, i) => ({ id: `m${i}`, name: `Model ${i}` }));
+    card({ ...cloud, models });
+    expect(screen.queryByText("Model 6")).toBeNull();
+    const more = screen.getByRole("button", { name: "Show 3 more" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(more);
+    expect(screen.getByText("Model 6")).toBeTruthy();
+    const fewer = screen.getByRole("button", { name: "Show fewer" });
+    expect(fewer.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(fewer);
+    expect(screen.queryByText("Model 6")).toBeNull();
+  });
+
+  it("keeps Remove key out of the row that holds Save", () => {
+    card({ ...cloud, hasCredential: true, status: "UNCHECKED" });
+    const save = screen.getByRole("button", { name: /Save/ });
+    const remove = screen.getByRole("button", { name: /Remove key/ });
+    expect(save.parentElement).not.toBe(remove.parentElement);
+    expect(save.parentElement?.contains(remove)).toBe(false);
   });
 
   it("shows testing in progress rather than leaving the button silent", () => {

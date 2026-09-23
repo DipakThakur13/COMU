@@ -122,10 +122,40 @@
 }
 
 .modelMeta,
-.modelMore {
+.checkedAt {
   color: var(--comu-text-muted);
   font-size: var(--comu-text-xs);
   white-space: nowrap;
+}
+
+/* A control, so it looks like one: "and 3 more" used to read as a label that could not be opened. */
+.modelMore {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--vscode-textLink-foreground, var(--comu-status-running));
+  font-size: var(--comu-text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.modelMore:hover {
+  text-decoration: underline;
+}
+
+.modelMore:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.removeRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.removeKey {
+  color: var(--comu-status-error);
 }
 
 /* ── Fields ─────────────────────────────────────────────────────── */
@@ -169,7 +199,8 @@
 }
 
 .testOk,
-.testFail {
+.testFail,
+.testNote {
   display: flex;
   align-items: flex-start;
   gap: var(--comu-space-1);
@@ -181,6 +212,7 @@
 
 .testOk { color: var(--comu-status-ok); }
 .testFail { color: var(--comu-status-error); }
+.testNote { color: var(--comu-text-muted); }
 
 .keyRow {
   display: flex;

@@ -1,0 +1,3490 @@
+
+> @comu/benchmark@0.2.4 bench D:\COMU\benchmarks
+> tsx --conditions=development src/cli.ts "--label" "B0" "--reps" "5" "--concurrency" "2" "--redo-provider-failures" "--limits" "{\"maxSteps\":60,\"maxToolCalls\":200,\"maxExecutionTimeMs\":1500000,\"maxRepairAttempts\":3,\"maxValidationRuns\":6,\"maxRepairFiles\":5,\"maxRepairTimeMs\":180000,\"modelRequestTimeoutMs\":600000}"
+
+Loaded NVIDIA_API_KEY (from benchmarks/.env.local)
+Model nvidia/nemotron-3-ultra-550b-a55b via nvidia (key from NVIDIA_API_KEY).
+Resuming 'B0': 39 runs already recorded.
+Re-measuring 11 the provider killed: t3-ts-extract rep 1, t4-ts-async rep 1, t7-py-architecture rep 1, t7-ts-architecture rep 2, t7-ts-dataflow rep 2, t1-ts-currency rep 3, t1-ts-pagination rep 3, t2-py-validator rep 3, t2-ts-endpoint rep 3, t2-ts-retry rep 3, t3-ts-extract rep 3
+[1/47] start t3-ts-extract rep 1/5
+[2/47] start t4-ts-async rep 1/5
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417353',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.353Z',
+  status: 'CLASSIFYING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417353',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.353Z',
+  status: 'CLASSIFYING'
+}
+[Event task.mode_resolved] {
+  type: 'task.mode_resolved',
+  eventId: 'evt-1790165417353-klb9-mode',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.353Z',
+  mode: 'AGENT',
+  source: 'explicit',
+  confidence: 1,
+  reasons: [ 'mode selected by user' ]
+}
+[Event task.started] {
+  type: 'task.started',
+  eventId: 'evt-1790165417356',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.356Z'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417357-6212zdw26mq',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.357Z',
+  status: 'Initializing task',
+  state: 'STARTING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417358-shuj4kkf9mr',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.358Z',
+  status: 'Analyzing task and workspace requirements',
+  state: 'ANALYZING'
+}
+[Event task.mode_resolved] {
+  type: 'task.mode_resolved',
+  eventId: 'evt-1790165417359-kgy0-mode',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.359Z',
+  mode: 'AGENT',
+  source: 'explicit',
+  confidence: 1,
+  reasons: [ 'mode selected by user' ]
+}
+[Event task.started] {
+  type: 'task.started',
+  eventId: 'evt-1790165417360',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.360Z'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417360-lvsi365ojt',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.360Z',
+  status: 'Initializing task',
+  state: 'STARTING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417360-7teqi3u8a8j',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.360Z',
+  status: 'Analyzing task and workspace requirements',
+  state: 'ANALYZING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417361-n83f4w1s5n9',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.361Z',
+  status: 'Generating structured engineering plan',
+  state: 'PLANNING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417361-it81mgs3ql',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.361Z',
+  status: 'Generating structured engineering plan',
+  state: 'PLANNING'
+}
+[Event plan.created] {
+  type: 'plan.created',
+  eventId: 'evt-1790165417362',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.362Z',
+  planId: 'plan-1790165417361-nv370',
+  planVersion: 1,
+  plan: {
+    planId: 'plan-1790165417361-nv370',
+    taskId: 'task-1790165417341-bknaec',
+    version: 1,
+    goal: 'The same `checkUserFields` helper has been copy-pasted into five handlers under src/. Extract it into a new module src/validation.ts that exports a single function named `assertUserFields`, then have every one of those five handlers import and call it and delete their local copy. The rules, the error messages and the order they are checked in must stay exactly as they are, and no test should change what it asserts.',
+    steps: [ [Object], [Object], [Object], [Object], [Object] ],
+    status: 'READY',
+    createdAt: '2026-09-23T12:10:17.361Z',
+    updatedAt: '2026-09-23T12:10:17.361Z'
+  }
+}
+[Event plan.step.started] {
+  type: 'plan.step.started',
+  eventId: 'evt-1790165417363',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.363Z',
+  planId: 'plan-1790165417361-nv370',
+  planVersion: 1,
+  stepId: 'step-1-inspect'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417363-4dus7d1smcb',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.363Z',
+  status: 'Thinking...',
+  state: 'THINKING'
+}
+[Event model_request.created] {
+  type: 'model_request.created',
+  eventId: 'evt-1790165417364-iitq',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.364Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  attempt: 1
+}
+[Event model_request.started] {
+  type: 'model_request.started',
+  eventId: 'evt-1790165417364-v3vx',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:10:17.364Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  attempt: 1
+}
+[Event plan.created] {
+  type: 'plan.created',
+  eventId: 'evt-1790165417367',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.367Z',
+  planId: 'plan-1790165417362-sf54j',
+  planVersion: 1,
+  plan: {
+    planId: 'plan-1790165417362-sf54j',
+    taskId: 'task-1790165417343-tajzkx',
+    version: 1,
+    goal: 'Three tests are failing, in src/concurrency.test.ts and src/catalogue.test.ts. Work out why and fix the repository so that the whole suite passes. Do not change the tests.',
+    steps: [ [Object], [Object], [Object], [Object], [Object] ],
+    status: 'READY',
+    createdAt: '2026-09-23T12:10:17.362Z',
+    updatedAt: '2026-09-23T12:10:17.362Z'
+  }
+}
+[Event plan.step.started] {
+  type: 'plan.step.started',
+  eventId: 'evt-1790165417368',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.368Z',
+  planId: 'plan-1790165417362-sf54j',
+  planVersion: 1,
+  stepId: 'step-1-inspect'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165417368-tba31lt2zbg',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.368Z',
+  status: 'Thinking...',
+  state: 'THINKING'
+}
+[Event model_request.created] {
+  type: 'model_request.created',
+  eventId: 'evt-1790165417368-p4hn',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.368Z',
+  requestId: 'req-1790165417368-kwgj7lv',
+  runId: 'task-1790165417343-tajzkx',
+  attempt: 1
+}
+[Event model_request.started] {
+  type: 'model_request.started',
+  eventId: 'evt-1790165417368-i1fn',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:10:17.368Z',
+  requestId: 'req-1790165417368-kwgj7lv',
+  runId: 'task-1790165417343-tajzkx',
+  attempt: 1
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165535889-req-1790165417364-tqc7y7w-reasoning-0',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:15.889Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'We',
+  index: 0
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165535976-req-1790165417364-tqc7y7w-reasoning-1',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:15.976Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: " as'' overt iv",
+  index: 1
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536128-req-1790165417364-tqc7y7w-reasoning-2',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.128Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 2
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536158-req-1790165417364-tqc7y7w-reasoning-3',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.158Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 3
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536169-req-1790165417364-tqc7y7w-reasoning-4',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.169Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 4
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536264-req-1790165417364-tqc7y7w-reasoning-5',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.264Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 5
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536276-req-1790165417364-tqc7y7w-reasoning-6',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.276Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '  ',
+  index: 6
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536290-req-1790165417364-tqc7y7w-reasoning-7',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.290Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' and',
+  index: 7
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536319-req-1790165417364-tqc7y7w-reasoning-8',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.319Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 8
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536334-req-1790165417364-tqc7y7w-reasoning-9',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.334Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 9
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536394-req-1790165417364-tqc7y7w-reasoning-10',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.394Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 10
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536505-req-1790165417364-tqc7y7w-reasoning-11',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.505Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' from',
+  index: 11
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536589-req-1790165417364-tqc7y7w-reasoning-12',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.589Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'TP networkells inells',
+  index: 12
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536595-req-1790165417364-tqc7y7w-reasoning-13',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.595Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ellsou',
+  index: 13
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536622-req-1790165417364-tqc7y7w-reasoning-14',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.622Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ec',
+  index: 14
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536645-req-1790165417364-tqc7y7w-reasoning-15',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.645Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' overt',
+  index: 15
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536935-req-1790165417364-tqc7y7w-reasoning-16',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.935Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells ruins along mass',
+  index: 16
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165536956-req-1790165417364-tqc7y7w-reasoning-17',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:16.956Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells medicinal-s ever ofires free where anth profitells from this',
+  index: 17
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537120-req-1790165417364-tqc7y7w-reasoning-18',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.120Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' from',
+  index: 18
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537134-req-1790165417364-tqc7y7w-reasoning-19',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.134Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' the',
+  index: 19
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537147-req-1790165417364-tqc7y7w-reasoning-20',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.147Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' disguised',
+  index: 20
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537192-req-1790165417364-tqc7y7w-reasoning-21',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.192Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' well',
+  index: 21
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537202-req-1790165417364-tqc7y7w-reasoning-22',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.202Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'omes',
+  index: 22
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537223-req-1790165417364-tqc7y7w-reasoning-23',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.223Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' overt',
+  index: 23
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537226-req-1790165417364-tqc7y7w-reasoning-24',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.226Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ELL',
+  index: 24
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537242-req-1790165417364-tqc7y7w-reasoning-25',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.242Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ge',
+  index: 25
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537295-req-1790165417364-tqc7y7w-reasoning-26',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.295Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' calling',
+  index: 26
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537305-req-1790165417364-tqc7y7w-reasoning-27',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.305Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 27
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537320-req-1790165417364-tqc7y7w-reasoning-28',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.320Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' overt',
+  index: 28
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537333-req-1790165417364-tqc7y7w-reasoning-29',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.333Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 29
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537390-req-1790165417364-tqc7y7w-reasoning-30',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.390Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' from',
+  index: 30
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537399-req-1790165417364-tqc7y7w-reasoning-31',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.399Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' the',
+  index: 31
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537413-req-1790165417364-tqc7y7w-reasoning-32',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.413Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' know',
+  index: 32
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537423-req-1790165417364-tqc7y7w-reasoning-33',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.423Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' and',
+  index: 33
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537442-req-1790165417364-tqc7y7w-reasoning-34',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.442Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 34
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537496-req-1790165417364-tqc7y7w-reasoning-35',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.496Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' deep',
+  index: 35
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537506-req-1790165417364-tqc7y7w-reasoning-36',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.506Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' well',
+  index: 36
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537522-req-1790165417364-tqc7y7w-reasoning-37',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.522Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' free',
+  index: 37
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537534-req-1790165417364-tqc7y7w-reasoning-38',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.534Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' tax',
+  index: 38
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537594-req-1790165417364-tqc7y7w-reasoning-39',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.594Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' left',
+  index: 39
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537710-req-1790165417364-tqc7y7w-reasoning-40',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.710Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ideally',
+  index: 40
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537723-req-1790165417364-tqc7y7w-reasoning-41',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.723Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '-n',
+  index: 41
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537735-req-1790165417364-tqc7y7w-reasoning-42',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.735Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' A',
+  index: 42
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537793-req-1790165417364-tqc7y7w-reasoning-43',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.793Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' apolog',
+  index: 43
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537798-req-1790165417364-tqc7y7w-reasoning-44',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.798Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 44
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537808-req-1790165417364-tqc7y7w-reasoning-45',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.808Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' award',
+  index: 45
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537822-req-1790165417364-tqc7y7w-reasoning-46',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.822Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' from',
+  index: 46
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537832-req-1790165417364-tqc7y7w-reasoning-47',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.832Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' in',
+  index: 47
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537892-req-1790165417364-tqc7y7w-reasoning-48',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.892Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' typically',
+  index: 48
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537899-req-1790165417364-tqc7y7w-reasoning-49',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.899Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' for',
+  index: 49
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537914-req-1790165417364-tqc7y7w-reasoning-50',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.914Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 50
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537924-req-1790165417364-tqc7y7w-reasoning-51',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.924Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 51
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537937-req-1790165417364-tqc7y7w-reasoning-52',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.937Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' production',
+  index: 52
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165537997-req-1790165417364-tqc7y7w-reasoning-53',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:17.997Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' shel',
+  index: 53
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538006-req-1790165417364-tqc7y7w-reasoning-54',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.006Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 54
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538022-req-1790165417364-tqc7y7w-reasoning-55',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.022Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '/models',
+  index: 55
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538036-req-1790165417364-tqc7y7w-reasoning-56',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.036Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '-s',
+  index: 56
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538098-req-1790165417364-tqc7y7w-reasoning-57',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.098Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' vacation',
+  index: 57
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538109-req-1790165417364-tqc7y7w-reasoning-58',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.109Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' the',
+  index: 58
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538135-req-1790165417364-tqc7y7w-reasoning-59',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.135Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' bert',
+  index: 59
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538137-req-1790165417364-tqc7y7w-reasoning-60',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.137Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' recess',
+  index: 60
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538144-req-1790165417364-tqc7y7w-reasoning-61',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.144Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' band',
+  index: 61
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538196-req-1790165417364-tqc7y7w-reasoning-62',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.196Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.\n\n',
+  index: 62
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538207-req-1790165417364-tqc7y7w-reasoning-63',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.207Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' showc',
+  index: 63
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538217-req-1790165417364-tqc7y7w-reasoning-64',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.217Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'C',
+  index: 64
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538233-req-1790165417364-tqc7y7w-reasoning-65',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.233Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' every',
+  index: 65
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538242-req-1790165417364-tqc7y7w-reasoning-66',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.242Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 66
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538290-req-1790165417364-tqc7y7w-reasoning-67',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.290Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' from',
+  index: 67
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538305-req-1790165417364-tqc7y7w-reasoning-68',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.305Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 68
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538314-req-1790165417364-tqc7y7w-reasoning-69',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.314Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' editor',
+  index: 69
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538326-req-1790165417364-tqc7y7w-reasoning-70',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.326Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 70
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538337-req-1790165417364-tqc7y7w-reasoning-71',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.337Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' monks',
+  index: 71
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538396-req-1790165417364-tqc7y7w-reasoning-72',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.396Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 72
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538405-req-1790165417364-tqc7y7w-reasoning-73',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.405Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' deep',
+  index: 73
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538416-req-1790165417364-tqc7y7w-reasoning-74',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.416Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' genre',
+  index: 74
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538429-req-1790165417364-tqc7y7w-reasoning-75',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.429Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' overt',
+  index: 75
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538441-req-1790165417364-tqc7y7w-reasoning-76',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.441Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' starting',
+  index: 76
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538452-req-1790165417364-tqc7y7w-reasoning-77',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.452Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' stu',
+  index: 77
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538494-req-1790165417364-tqc7y7w-reasoning-78',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.494Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' other',
+  index: 78
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538504-req-1790165417364-tqc7y7w-reasoning-79',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.504Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ELL',
+  index: 79
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538519-req-1790165417364-tqc7y7w-reasoning-80',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.519Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' more',
+  index: 80
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538528-req-1790165417364-tqc7y7w-reasoning-81',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.528Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 81
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538541-req-1790165417364-tqc7y7w-reasoning-82',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.541Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ival',
+  index: 82
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538595-req-1790165417364-tqc7y7w-reasoning-83',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.595Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 83
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538604-req-1790165417364-tqc7y7w-reasoning-84',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.604Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' equipped',
+  index: 84
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538621-req-1790165417364-tqc7y7w-reasoning-85',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.621Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' healthcare',
+  index: 85
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538630-req-1790165417364-tqc7y7w-reasoning-86',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.630Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'olic',
+  index: 86
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538642-req-1790165417364-tqc7y7w-reasoning-87',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.642Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' where',
+  index: 87
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538690-req-1790165417364-tqc7y7w-reasoning-88',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.690Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' both',
+  index: 88
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538699-req-1790165417364-tqc7y7w-reasoning-89',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.699Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 89
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538711-req-1790165417364-tqc7y7w-reasoning-90',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.711Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 90
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538723-req-1790165417364-tqc7y7w-reasoning-91',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.723Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' where',
+  index: 91
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538734-req-1790165417364-tqc7y7w-reasoning-92',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.734Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' of',
+  index: 92
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538746-req-1790165417364-tqc7y7w-reasoning-93',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.746Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '/models',
+  index: 93
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538798-req-1790165417364-tqc7y7w-reasoning-94',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.798Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' overt',
+  index: 94
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538809-req-1790165417364-tqc7y7w-reasoning-95',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.809Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 95
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538819-req-1790165417364-tqc7y7w-reasoning-96',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.819Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' subject',
+  index: 96
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538830-req-1790165417364-tqc7y7w-reasoning-97',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.830Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '-m',
+  index: 97
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538841-req-1790165417364-tqc7y7w-reasoning-98',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.841Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' starting',
+  index: 98
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538895-req-1790165417364-tqc7y7w-reasoning-99',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.895Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'uti',
+  index: 99
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538905-req-1790165417364-tqc7y7w-reasoning-100',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.905Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' c',
+  index: 100
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165538917-req-1790165417364-tqc7y7w-reasoning-101',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:18.917Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 101
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539121-req-1790165417364-tqc7y7w-reasoning-102',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.121Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' virtual ethnells الحقells ethical botherells WT royaltyells',
+  index: 102
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539131-req-1790165417364-tqc7y7w-reasoning-103',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.131Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ols',
+  index: 103
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539133-req-1790165417364-tqc7y7w-reasoning-104',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.133Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' in',
+  index: 104
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539191-req-1790165417364-tqc7y7w-reasoning-105',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.191Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ells',
+  index: 105
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539202-req-1790165417364-tqc7y7w-reasoning-106',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.202Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' catch',
+  index: 106
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539214-req-1790165417364-tqc7y7w-reasoning-107',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.214Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' along',
+  index: 107
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539230-req-1790165417364-tqc7y7w-reasoning-108',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.230Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' along',
+  index: 108
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539246-req-1790165417364-tqc7y7w-reasoning-109',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.246Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' overt',
+  index: 109
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539298-req-1790165417364-tqc7y7w-reasoning-110',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.298Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' from',
+  index: 110
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539314-req-1790165417364-tqc7y7w-reasoning-111',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.314Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'omes',
+  index: 111
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539332-req-1790165417364-tqc7y7w-reasoning-112',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.332Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ':',
+  index: 112
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539345-req-1790165417364-tqc7y7w-reasoning-113',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.345Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' native',
+  index: 113
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539391-req-1790165417364-tqc7y7w-reasoning-114',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.391Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' Indian',
+  index: 114
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539400-req-1790165417364-tqc7y7w-reasoning-115',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.400Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ',',
+  index: 115
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539422-req-1790165417364-tqc7y7w-reasoning-116',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.422Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' not',
+  index: 116
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539440-req-1790165417364-tqc7y7w-reasoning-117',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.440Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' вообще',
+  index: 117
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539451-req-1790165417364-tqc7y7w-reasoning-118',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.451Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' so',
+  index: 118
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539497-req-1790165417364-tqc7y7w-reasoning-119',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.497Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 119
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539507-req-1790165417364-tqc7y7w-reasoning-120',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.507Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 120
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539520-req-1790165417364-tqc7y7w-reasoning-121',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.520Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 121
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539531-req-1790165417364-tqc7y7w-reasoning-122',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.531Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 122
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539541-req-1790165417364-tqc7y7w-reasoning-123',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.541Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 123
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539590-req-1790165417364-tqc7y7w-reasoning-124',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.590Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 124
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539601-req-1790165417364-tqc7y7w-reasoning-125',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.601Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 125
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539615-req-1790165417364-tqc7y7w-reasoning-126',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.615Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 126
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539624-req-1790165417364-tqc7y7w-reasoning-127',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.624Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 127
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539635-req-1790165417364-tqc7y7w-reasoning-128',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.635Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 128
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539695-req-1790165417364-tqc7y7w-reasoning-129',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.695Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' Also',
+  index: 129
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539705-req-1790165417364-tqc7y7w-reasoning-130',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.705Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 130
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539717-req-1790165417364-tqc7y7w-reasoning-131',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.717Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 131
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539732-req-1790165417364-tqc7y7w-reasoning-132',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.732Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 132
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539792-req-1790165417364-tqc7y7w-reasoning-133',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.792Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 133
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539799-req-1790165417364-tqc7y7w-reasoning-134',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.799Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 134
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539814-req-1790165417364-tqc7y7w-reasoning-135',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.814Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 135
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539826-req-1790165417364-tqc7y7w-reasoning-136',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.826Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '5',
+  index: 136
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539943-req-1790165417364-tqc7y7w-reasoning-137',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.943Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '7 . . .\n',
+  index: 137
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539951-req-1790165417364-tqc7y7w-reasoning-138',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.951Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'Not',
+  index: 138
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539953-req-1790165417364-tqc7y7w-reasoning-139',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.953Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' part',
+  index: 139
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165539994-req-1790165417364-tqc7y7w-reasoning-140',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:19.994Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' of',
+  index: 140
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540003-req-1790165417364-tqc7y7w-reasoning-141',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.003Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' our',
+  index: 141
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540016-req-1790165417364-tqc7y7w-reasoning-142',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.016Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' squad',
+  index: 142
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540033-req-1790165417364-tqc7y7w-reasoning-143',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.033Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 143
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540097-req-1790165417364-tqc7y7w-reasoning-144',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.097Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 144
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540098-req-1790165417364-tqc7y7w-reasoning-145',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.098Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 145
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540109-req-1790165417364-tqc7y7w-reasoning-146',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.109Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 146
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540120-req-1790165417364-tqc7y7w-reasoning-147',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.120Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 147
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540130-req-1790165417364-tqc7y7w-reasoning-148',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.130Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 148
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540191-req-1790165417364-tqc7y7w-reasoning-149',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.191Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 149
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540200-req-1790165417364-tqc7y7w-reasoning-150',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.200Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 150
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540212-req-1790165417364-tqc7y7w-reasoning-151',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.212Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 151
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540224-req-1790165417364-tqc7y7w-reasoning-152',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.224Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 152
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540235-req-1790165417364-tqc7y7w-reasoning-153',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.235Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 153
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540245-req-1790165417364-tqc7y7w-reasoning-154',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.245Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 154
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540295-req-1790165417364-tqc7y7w-reasoning-155',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.295Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 155
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540303-req-1790165417364-tqc7y7w-reasoning-156',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.303Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 156
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540318-req-1790165417364-tqc7y7w-reasoning-157',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.318Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 157
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540330-req-1790165417364-tqc7y7w-reasoning-158',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.330Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 158
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540396-req-1790165417364-tqc7y7w-reasoning-159',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.396Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 159
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540404-req-1790165417364-tqc7y7w-reasoning-160',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.404Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 160
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540429-req-1790165417364-tqc7y7w-reasoning-161',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.429Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 161
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540436-req-1790165417364-tqc7y7w-reasoning-162',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.436Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 162
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540496-req-1790165417364-tqc7y7w-reasoning-163',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.496Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 163
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540506-req-1790165417364-tqc7y7w-reasoning-164',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.506Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 164
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540521-req-1790165417364-tqc7y7w-reasoning-165',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.521Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 165
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540539-req-1790165417364-tqc7y7w-reasoning-166',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.539Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 166
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540593-req-1790165417364-tqc7y7w-reasoning-167',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.593Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 167
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540600-req-1790165417364-tqc7y7w-reasoning-168',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.600Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .\n',
+  index: 168
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540614-req-1790165417364-tqc7y7w-reasoning-169',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.614Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'I',
+  index: 169
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540631-req-1790165417364-tqc7y7w-reasoning-170',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.631Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 170
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540633-req-1790165417364-tqc7y7w-reasoning-171',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.633Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 171
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540644-req-1790165417364-tqc7y7w-reasoning-172',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.644Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 172
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540694-req-1790165417364-tqc7y7w-reasoning-173',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.694Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 173
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540709-req-1790165417364-tqc7y7w-reasoning-174',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.709Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .\n\n',
+  index: 174
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540730-req-1790165417364-tqc7y7w-reasoning-175',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.730Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '[',
+  index: 175
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540734-req-1790165417364-tqc7y7w-reasoning-176',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.734Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '1',
+  index: 176
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540792-req-1790165417364-tqc7y7w-reasoning-177',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.792Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ']',
+  index: 177
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540798-req-1790165417364-tqc7y7w-reasoning-178',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.798Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '\tpop',
+  index: 178
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540809-req-1790165417364-tqc7y7w-reasoning-179',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.809Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'ulate',
+  index: 179
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540821-req-1790165417364-tqc7y7w-reasoning-180',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.821Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 180
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540839-req-1790165417364-tqc7y7w-reasoning-181',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.839Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 181
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540893-req-1790165417364-tqc7y7w-reasoning-182',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.893Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 182
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540904-req-1790165417364-tqc7y7w-reasoning-183',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.904Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 183
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540918-req-1790165417364-tqc7y7w-reasoning-184',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.918Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 184
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540931-req-1790165417364-tqc7y7w-reasoning-185',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.931Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 185
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540939-req-1790165417364-tqc7y7w-reasoning-186',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.939Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 186
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165540997-req-1790165417364-tqc7y7w-reasoning-187',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:20.997Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 187
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541007-req-1790165417364-tqc7y7w-reasoning-188',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.007Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 188
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541020-req-1790165417364-tqc7y7w-reasoning-189',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.020Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 189
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541034-req-1790165417364-tqc7y7w-reasoning-190',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.034Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 190
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541094-req-1790165417364-tqc7y7w-reasoning-191',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.094Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .',
+  index: 191
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541101-req-1790165417364-tqc7y7w-reasoning-192',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.101Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 192
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541306-req-1790165417364-tqc7y7w-reasoning-193',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.306Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' .  .  .  .',
+  index: 193
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541453-req-1790165417364-tqc7y7w-reasoning-194',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.453Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' ',
+  index: 194
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541462-req-1790165417364-tqc7y7w-reasoning-195',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.462Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '5',
+  index: 195
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541470-req-1790165417364-tqc7y7w-reasoning-196',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.470Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' handlers',
+  index: 196
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541479-req-1790165417364-tqc7y7w-reasoning-197',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.479Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' pulling',
+  index: 197
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541489-req-1790165417364-tqc7y7w-reasoning-198',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.489Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 198
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541499-req-1790165417364-tqc7y7w-reasoning-199',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.499Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' Also',
+  index: 199
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541513-req-1790165417364-tqc7y7w-reasoning-200',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.513Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' need',
+  index: 200
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541527-req-1790165417364-tqc7y7w-reasoning-201',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.527Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' extract',
+  index: 201
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541539-req-1790165417364-tqc7y7w-reasoning-202',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.539Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' the',
+  index: 202
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541595-req-1790165417364-tqc7y7w-reasoning-203',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.595Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' helper',
+  index: 203
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541601-req-1790165417364-tqc7y7w-reasoning-204',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.601Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' preserving',
+  index: 204
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541615-req-1790165417364-tqc7y7w-reasoning-205',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.615Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' rules',
+  index: 205
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541625-req-1790165417364-tqc7y7w-reasoning-206',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.625Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ',',
+  index: 206
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541697-req-1790165417364-tqc7y7w-reasoning-207',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.697Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' error',
+  index: 207
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541705-req-1790165417364-tqc7y7w-reasoning-208',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.705Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' messages',
+  index: 208
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541721-req-1790165417364-tqc7y7w-reasoning-209',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.721Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ',',
+  index: 209
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541731-req-1790165417364-tqc7y7w-reasoning-210',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.731Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' order',
+  index: 210
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541795-req-1790165417364-tqc7y7w-reasoning-211',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.795Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 211
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541802-req-1790165417364-tqc7y7w-reasoning-212',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.802Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' Need',
+  index: 212
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541812-req-1790165417364-tqc7y7w-reasoning-213',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.812Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' to',
+  index: 213
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541825-req-1790165417364-tqc7y7w-reasoning-214',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.825Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' locate',
+  index: 214
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541835-req-1790165417364-tqc7y7w-reasoning-215',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.835Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' the',
+  index: 215
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541891-req-1790165417364-tqc7y7w-reasoning-216',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.891Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' five',
+  index: 216
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541900-req-1790165417364-tqc7y7w-reasoning-217',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.900Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' handlers',
+  index: 217
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541915-req-1790165417364-tqc7y7w-reasoning-218',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.915Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' that',
+  index: 218
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541930-req-1790165417364-tqc7y7w-reasoning-219',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.930Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' have',
+  index: 219
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541940-req-1790165417364-tqc7y7w-reasoning-220',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.941Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' the',
+  index: 220
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165541993-req-1790165417364-tqc7y7w-reasoning-221',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:21.993Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' same',
+  index: 221
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542002-req-1790165417364-tqc7y7w-reasoning-222',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.002Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' `',
+  index: 222
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542014-req-1790165417364-tqc7y7w-reasoning-223',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.014Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'check',
+  index: 223
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542025-req-1790165417364-tqc7y7w-reasoning-224',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.025Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'User',
+  index: 224
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542039-req-1790165417364-tqc7y7w-reasoning-225',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.039Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'Fields',
+  index: 225
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542098-req-1790165417364-tqc7y7w-reasoning-226',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.098Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '`',
+  index: 226
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542137-req-1790165417364-tqc7y7w-reasoning-227',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.137Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' copy',
+  index: 227
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542275-req-1790165417364-tqc7y7w-reasoning-228',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.275Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '-p',
+  index: 228
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542285-req-1790165417364-tqc7y7w-reasoning-229',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.285Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'asted',
+  index: 229
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542293-req-1790165417364-tqc7y7w-reasoning-230',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.293Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 230
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542302-req-1790165417364-tqc7y7w-reasoning-231',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.302Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' Let',
+  index: 231
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542322-req-1790165417364-tqc7y7w-reasoning-232',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.322Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: "'s",
+  index: 232
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542333-req-1790165417364-tqc7y7w-reasoning-233',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.333Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' search',
+  index: 233
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165542390-req-1790165417364-tqc7y7w-reasoning-234',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:22.390Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 234
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165543207-req-1790165417364-tqc7y7w-text-0',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.207Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'text',
+  delta: '\n',
+  index: 0
+}
+[Event model_request.succeeded] {
+  type: 'model_request.succeeded',
+  eventId: 'evt-1790165543236-dskl',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.236Z',
+  requestId: 'req-1790165417364-tqc7y7w',
+  runId: 'task-1790165417341-bknaec',
+  attempt: 1,
+  latencyMs: 125872,
+  usage: { promptTokens: 2386, completionTokens: 317, totalTokens: 2703 },
+  costUsd: undefined,
+  model: 'nvidia/nemotron-3.5-lightning-30b-a3b'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165543237-5tegnalf2z',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.237Z',
+  status: 'Executing tools...',
+  state: 'TOOL_CALLING'
+}
+[Event tool.started] {
+  type: 'tool.started',
+  tool: 'search_text',
+  target: 'checkUserFields',
+  toolCallId: 'call-ad782234-4d1e-4821-9420-e839110f8eab',
+  eventId: 'evt-1790165543238',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.238Z'
+}
+[Event tool.completed] {
+  type: 'tool.completed',
+  tool: 'search_text',
+  target: 'checkUserFields',
+  toolCallId: 'call-ad782234-4d1e-4821-9420-e839110f8eab',
+  result: {
+    matches: [
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object]
+    ],
+    truncated: false
+  },
+  eventId: 'evt-1790165543315',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.315Z'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165543316-4f2te7thko5',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.316Z',
+  status: 'Observing results',
+  state: 'OBSERVING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165543316-pjvhb4ydstc',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.316Z',
+  status: 'Thinking...',
+  state: 'THINKING'
+}
+[Event model_request.created] {
+  type: 'model_request.created',
+  eventId: 'evt-1790165543316-x0ff',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.316Z',
+  requestId: 'req-1790165543316-dxin1gd',
+  runId: 'task-1790165417341-bknaec',
+  attempt: 1
+}
+[Event model_request.started] {
+  type: 'model_request.started',
+  eventId: 'evt-1790165543316-wrjx',
+  taskId: 'task-1790165417341-bknaec',
+  timestamp: '2026-09-23T12:12:23.316Z',
+  requestId: 'req-1790165543316-dxin1gd',
+  runId: 'task-1790165417341-bknaec',
+  attempt: 1
+}
+[Event model_request.failed] {
+  type: 'model_request.failed',
+  eventId: 'evt-1790165721354-s198',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:15:21.354Z',
+  requestId: 'req-1790165417368-kwgj7lv',
+  runId: 'task-1790165417343-tajzkx',
+  attempt: 1,
+  error: 'Failed to call NVIDIA API: fetch failed'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165721354-u18carwiv69',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:15:21.354Z',
+  status: 'Provider Error: Failed to call NVIDIA API: fetch failed',
+  state: 'FAILED'
+}
+[Event task.failed] {
+  type: 'task.failed',
+  error: 'Failed to call NVIDIA API: fetch failed',
+  eventId: 'evt-1790165721354',
+  taskId: 'task-1790165417343-tajzkx',
+  timestamp: '2026-09-23T12:15:21.354Z'
+}
+[Task task-1790165417343-tajzkx] finished with status: failed
+[1/47] t4-ts-async rep 1/5: incorrect (grader_failed_other) 305s [harness: terminated]
+    Required tests still failing: a batch wider than the read limit stays in order, a limit wider than the input is allowed, a repeated item keeps its own slot, a result comes back for every item, in the order the items were given, an id asked for twice appears twice, in place, an unsorted input keeps its own order, one result per item, however fast the worker is, rows come back in the order they were asked for, rows keep the request order even when the ids are unsorted, the summary follows the request order, the summary lists the labels in the order they were asked for.
+[3/47] start t7-py-architecture rep 1/5
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165723172',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.172Z',
+  status: 'CLASSIFYING'
+}
+[Event task.mode_resolved] {
+  type: 'task.mode_resolved',
+  eventId: 'evt-1790165723173-29tr-mode',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.173Z',
+  mode: 'ASK',
+  source: 'explicit',
+  confidence: 1,
+  reasons: [ 'mode selected by user' ]
+}
+[Event task.started] {
+  type: 'task.started',
+  eventId: 'evt-1790165723173',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.173Z'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165723173-qzute22a2kq',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.173Z',
+  status: 'Initializing task',
+  state: 'STARTING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165723173-k45z9fj83z',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.173Z',
+  status: 'Analyzing task and workspace requirements',
+  state: 'ANALYZING'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165723174-gupxjlfw457',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.174Z',
+  status: 'Generating structured engineering plan',
+  state: 'PLANNING'
+}
+[Event plan.created] {
+  type: 'plan.created',
+  eventId: 'evt-1790165723175',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.175Z',
+  planId: 'plan-1790165723175-y3woh',
+  planVersion: 1,
+  plan: {
+    planId: 'plan-1790165723175-y3woh',
+    taskId: 'task-1790165723160-olhkh0',
+    version: 1,
+    goal: "You have just been handed this codebase and know nothing about it. Explain, in prose, how a request to record a decision on a permit travels from the process entry point through to persistence, and what happens afterwards to the applicant's letter. Name every module involved and say what each one contributes. Then call out what is surprising about the design: how a handler is located, where the caller is checked for permission, where the payload is checked for correctness, what is between the service layer and the mail transport, and any dependency that points in the wrong direction. Answer in your final message. Do not modify any file.",
+    steps: [ [Object], [Object], [Object] ],
+    status: 'READY',
+    createdAt: '2026-09-23T12:15:23.175Z',
+    updatedAt: '2026-09-23T12:15:23.175Z'
+  }
+}
+[Event plan.step.started] {
+  type: 'plan.step.started',
+  eventId: 'evt-1790165723175',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.175Z',
+  planId: 'plan-1790165723175-y3woh',
+  planVersion: 1,
+  stepId: 'step-1-investigate'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165723175-i3aeeu3xoub',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.175Z',
+  status: 'Thinking...',
+  state: 'THINKING'
+}
+[Event model_request.created] {
+  type: 'model_request.created',
+  eventId: 'evt-1790165723175-y859',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.175Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  attempt: 1
+}
+[Event model_request.started] {
+  type: 'model_request.started',
+  eventId: 'evt-1790165723175-7tgt',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:15:23.175Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  attempt: 1
+}

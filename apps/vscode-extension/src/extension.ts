@@ -98,6 +98,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
       vscode.commands.registerCommand('comu.testProviderConnection', async () => {
           const result = await providerManager.testConnection('nvidia');
+          await chatProvider.sendProvidersToWebview();
           if (result.status === 'CONNECTED') {
               void vscode.window.showInformationMessage(`NVIDIA Connection Successful! (${result.latencyMs ?? 0}ms)`);
           } else {

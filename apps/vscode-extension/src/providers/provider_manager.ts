@@ -119,9 +119,21 @@ export class ProviderManager {
         }
     ];
 
-    private providerStatuses = new Map<string, ProviderStatus>();
+    /** The last probe of each provider, stamped with when it finished. The only source of a status. */
+    private lastChecks = new Map<string, ProviderTestResult>();
+    private checking = new Set<string>();
     private providerEndpoints = new Map<string, string>();
     private cachedProvidersState: ProviderConfig[] | null = null;
+
+    /**
+     * A credential is an input, not a status. Without one there is nothing to probe; with one, the
+     * status is whatever the last probe found, and UNCHECKED until something has probed it.
+     */
+    private statusFor(providerId: string, hasCredential: boolean): ProviderStatus {
+        if (!hasCredential) return 'NOT_CONFIGURED';
+        if (this.checking.has(providerId)) return 'CONNECTING';
+        return this.lastChecks.get(providerId)?.status ?? 'UNCHECKED';
+    }
 
     public getCachedProvidersState(): ProviderConfig[] {
         if (this.cachedProvidersState) {
@@ -135,7 +147,8 @@ export class ProviderManager {
             selectedModel: p.models[0]?.name,
             hasCredential: p.isLocal || false,
             isLocal: p.isLocal || false,
-            status: p.isLocal ? 'CONNECTED' : (this.providerStatuses.get(p.id) || 'NOT_CONFIGURED'),
+            status: this.statusFor(p.id, p.isLocal || false),
+            lastCheck: p.isLocal ? this.lastChecks.get(p.id) : undefined,
             models: p.models,
             environmentDetected: false,
             description: p.description
@@ -170,11 +183,7 @@ export class ProviderManager {
                     hasCredential = !!key || environmentDetected;
                 }
 
-                let status: ProviderStatus = this.providerStatuses.get(p.id) || (hasCredential ? 'CONNECTED' : 'NOT_CONFIGURED');
-                if (!hasCredential) {
-                    status = 'NOT_CONFIGURED';
-                }
-
+                const status = this.statusFor(p.id, hasCredential);
                 const endpoint = this.providerEndpoints.get(p.id) || p.defaultEndpoint;
 
                 return {
@@ -186,6 +195,7 @@ export class ProviderManager {
                     hasCredential,
                     isLocal: p.isLocal || false,
                     status,
+                    lastCheck: hasCredential ? this.lastChecks.get(p.id) : undefined,
                     models: p.models,
                     environmentDetected,
                     description: p.description
@@ -200,31 +210,54 @@ export class ProviderManager {
     public async setProviderKey(providerId: string, key: string): Promise<void> {
         this.cachedProvidersState = null;
         const secrets = SecretManager.getInstance();
+        // A probe of the old key says nothing about the new one, or about no key at all.
+        this.lastChecks.delete(providerId);
         if (!key || !key.trim()) {
             await secrets.clearProviderKey(providerId);
-            this.providerStatuses.set(providerId, 'NOT_CONFIGURED');
         } else {
             await secrets.setProviderKey(providerId, key.trim());
-            this.providerStatuses.set(providerId, 'CONNECTED');
         }
     }
 
     public async setProviderEndpoint(providerId: string, endpoint: string): Promise<void> {
         this.cachedProvidersState = null;
+        const before = this.providerEndpoints.get(providerId);
         if (endpoint && endpoint.trim()) {
-            const normalized = providerId === 'nvidia' 
-                ? NvidiaProvider.normalizeEndpoint(endpoint) 
+            const normalized = providerId === 'nvidia'
+                ? NvidiaProvider.normalizeEndpoint(endpoint)
                 : endpoint.trim();
             this.providerEndpoints.set(providerId, normalized);
         } else {
             this.providerEndpoints.delete(providerId);
         }
+        // A probe of one address says nothing about another. Saving the same address keeps it.
+        if (this.providerEndpoints.get(providerId) !== before) {
+            this.lastChecks.delete(providerId);
+        }
     }
 
+    /**
+     * Probes a provider and records the result, stamped, as the one thing its status derives from.
+     * A result that probed nothing (no credential, or no test exists) is returned but not recorded.
+     */
     public async testConnection(providerId: string, customKey?: string, customEndpoint?: string): Promise<ProviderTestResult> {
         this.cachedProvidersState = null;
-        this.providerStatuses.set(providerId, 'CONNECTING');
+        this.checking.add(providerId);
+        try {
+            const res = await this.probe(providerId, customKey, customEndpoint);
+            if (res.status === 'NOT_CONFIGURED' || res.status === 'UNCHECKED') {
+                return res;
+            }
+            const checked: ProviderTestResult = { ...res, checkedAt: new Date().toISOString() };
+            this.lastChecks.set(providerId, checked);
+            return checked;
+        } finally {
+            this.checking.delete(providerId);
+            this.cachedProvidersState = null;
+        }
+    }
 
+    private async probe(providerId: string, customKey?: string, customEndpoint?: string): Promise<ProviderTestResult> {
         const secrets = SecretManager.getInstance();
         let key = customKey?.trim() || await secrets.getProviderKey(providerId);
 
@@ -239,14 +272,12 @@ export class ProviderManager {
                     status: 'NOT_CONFIGURED',
                     message: 'No NVIDIA API key configured.'
                 };
-                this.providerStatuses.set(providerId, 'NOT_CONFIGURED');
                 return res;
             }
 
             const rawEndpoint = customEndpoint?.trim() || this.providerEndpoints.get('nvidia') || NvidiaProvider.DEFAULT_ENDPOINT;
             const endpoint = NvidiaProvider.normalizeEndpoint(rawEndpoint);
             const res = await NvidiaProvider.testConnection(key, endpoint);
-            this.providerStatuses.set(providerId, res.status);
 
             // If test succeeded, persist the verified key and endpoint
             if (res.status === 'CONNECTED') {
@@ -272,13 +303,11 @@ export class ProviderManager {
                     status: 'NOT_CONFIGURED',
                     message: 'No Experiential Labs API key configured.'
                 };
-                this.providerStatuses.set(providerId, 'NOT_CONFIGURED');
                 return res;
             }
 
             const rawEndpoint = customEndpoint?.trim() || this.providerEndpoints.get('experiential') || ASTRA_CAPABILITY_PROFILE.defaultEndpoint;
             const res = await OpenAICompatibleProvider.testConnection(key, rawEndpoint, undefined, 'gpt-6-astra', ASTRA_CAPABILITY_PROFILE);
-            this.providerStatuses.set(providerId, res.status);
 
             if (res.status === 'CONNECTED') {
                 if (customKey && customKey.trim()) {
@@ -303,13 +332,11 @@ export class ProviderManager {
                     status: 'NOT_CONFIGURED',
                     message: 'No OpenAI API key configured.'
                 };
-                this.providerStatuses.set(providerId, 'NOT_CONFIGURED');
                 return res;
             }
 
             const rawEndpoint = customEndpoint?.trim() || this.providerEndpoints.get('openai') || 'https://api.openai.com/v1';
             const res = await OpenAICompatibleProvider.testConnection(key, rawEndpoint, undefined, 'gpt-4o');
-            this.providerStatuses.set(providerId, res.status);
 
             if (res.status === 'CONNECTED') {
                 if (customKey && customKey.trim()) {
@@ -326,20 +353,20 @@ export class ProviderManager {
         if (providerId === 'ollama') {
             const endpoint = customEndpoint?.trim() || this.getOllamaEndpoint();
             const res = await OllamaProvider.probe(endpoint);
-            this.providerStatuses.set(providerId, res.status);
             if (res.status === 'CONNECTED' && customEndpoint !== undefined && customEndpoint.trim()) {
                 await this.setProviderEndpoint('ollama', customEndpoint);
             }
             return res;
         }
 
+        // No probe exists for this provider. Having a key proves nothing about reaching it.
         const res: ProviderTestResult = {
             provider: providerId,
-            status: key ? 'CONNECTED' : 'NOT_CONFIGURED',
-            model: providerId,
-            message: key ? 'Credential verified.' : 'No credential configured.'
+            status: key ? 'UNCHECKED' : 'NOT_CONFIGURED',
+            message: key
+                ? 'COMU has no connection test for this provider yet, so the key has not been checked.'
+                : 'No credential configured.'
         };
-        this.providerStatuses.set(providerId, res.status);
         return res;
     }
 
@@ -429,7 +456,8 @@ export class ProviderManager {
                 // keep suggested models
             }
         }
-        this.providerStatuses.set('ollama', probe.status);
+        const lastCheck: ProviderTestResult = { ...probe, checkedAt: new Date().toISOString() };
+        this.lastChecks.set('ollama', lastCheck);
         return {
             providerId: p.id,
             displayName: p.displayName,
@@ -439,6 +467,7 @@ export class ProviderManager {
             hasCredential: true,
             isLocal: true,
             status: probe.status,
+            lastCheck,
             models,
             environmentDetected: !!(process.env.OLLAMA_HOST && process.env.OLLAMA_HOST.trim()),
             description: probe.status === 'CONNECTED' ? p.description : (probe.message || p.description)

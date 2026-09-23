@@ -136,10 +136,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         };
                         void this._view.webview.postMessage(msg);
                     }
+                    // Every outcome changes the badge, not only success: a failed probe left the
+                    // card showing the status from before the test beside the failure it just reported.
+                    await this.sendProvidersToWebview();
                     if (result.status === 'CONNECTED') {
                         void vscode.window.showInformationMessage(`Connection to ${data.providerId} successful!${result.latencyMs ? ` (${result.latencyMs}ms)` : ''}`);
-                        await this.sendProvidersToWebview();
                         await this.pushConfigToRuntime();
+                    } else if (result.status === 'UNCHECKED') {
+                        void vscode.window.showInformationMessage(result.message || `No connection test exists for ${data.providerId}.`);
                     } else {
                         void vscode.window.showErrorMessage(`Connection test failed for ${data.providerId}: ${result.message || 'Unknown error'}`);
                     }

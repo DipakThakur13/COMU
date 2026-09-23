@@ -60,6 +60,13 @@ Reproducible, each with a benchmark fixture, none of them hidden:
 - **Multi-file refactors are unreliable**: one run renamed a definition, named the five call sites
   it needed to update, and stopped without updating them.
 
+### Fixed in 0.3.1
+
+- **0.3.0 shipped the development harness in the `.vsix`.** The harness and its recorded fixture
+  events were bundled into `dist/webview/assets/mount-*.js` inside the package, despite the webview
+  README saying none of it reached the production bundle. The 0.3.1 package contains no harness
+  chunk.
+
 ---
 
 ## 🏢 Organization & Author
@@ -139,7 +146,9 @@ The panel is a React 18 + TypeScript application (`apps/webview`) built by Vite,
 
 The startup suite (`PERF-01` to `PERF-35`) asserts budgets on the operations below; the figures it
 enforces are 100ms for the bounded initial render path and 50ms for event normalisation. Wall-clock
-first-paint and cancellation latency are **not** measured, so no number is quoted for them here.
+first paint, as reported by the panel's `firstPaintMs` telemetry (`performance.now()` when `App`
+first mounts), measured **90ms**. That is an observation, not an enforced budget. Cancellation
+latency is **not** measured, so no number is quoted for it here.
 
 - **First paint from local defaults**: Renders the workspace shell, navigation tabs, and composer from local static defaults rather than waiting on I/O.
 - **Zero-Blocking Architecture**: First paint **never** waits for runtime health checks, provider connection tests, secret decryption, model catalogs, or SSE handshakes.

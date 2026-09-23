@@ -1099,8 +1099,13 @@ export interface WebDocsBlockedEvent extends AgentEventBase {
 // PROVIDER & API KEY CONFIGURATION (BYOK)
 // ============================================================================
 
+/**
+ * What the last probe of a provider found. A credential being present is an input to this, never a
+ * status: a provider with a key that has not been probed is UNCHECKED, not CONNECTED.
+ */
 export type ProviderStatus =
   | "NOT_CONFIGURED"
+  | "UNCHECKED"
   | "CONNECTING"
   | "CONNECTED"
   | "INVALID_CREDENTIAL"
@@ -1124,6 +1129,8 @@ export interface ProviderConfig {
   hasCredential: boolean;
   isLocal?: boolean;
   status: ProviderStatus;
+  /** The probe `status` was derived from, when there has been one. */
+  lastCheck?: ProviderTestResult;
   models: ProviderModel[];
   environmentDetected?: boolean;
   description?: string;
@@ -1135,5 +1142,7 @@ export interface ProviderTestResult {
   model?: string;
   latencyMs?: number;
   message?: string;
+  /** ISO time the probe finished. Absent when nothing was probed. */
+  checkedAt?: string;
 }
 

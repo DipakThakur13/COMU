@@ -15,8 +15,12 @@ import styles from "./harness.module.css";
  * delivers them exactly as the host does, so replication and gap handling are exercised here too.
  */
 
+/** Probe times relative to the clock, which the visual suite freezes, so renders stay identical. */
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
 const PROVIDERS: ProviderConfig[] = [
   {
+    // The case that prompted probe-derived badges: a key is saved and the last probe timed out.
     providerId: "nvidia",
     displayName: "NVIDIA",
     description: "NVIDIA NIM high-performance engineering models.",
@@ -24,10 +28,21 @@ const PROVIDERS: ProviderConfig[] = [
     enabled: true,
     hasCredential: true,
     isLocal: false,
-    status: "CONNECTED",
+    status: "TIMEOUT",
+    lastCheck: {
+      provider: "nvidia",
+      status: "TIMEOUT",
+      message: "Connection timed out after 15 seconds.",
+      checkedAt: minutesAgo(3)
+    },
     models: [
-      { id: "nvidia/nemotron-3.5-lightning-30b-a3b", name: "Nemotron 3.5 Lightning", description: "Fast agent" },
-      { id: "moonshotai/kimi-k3", name: "Kimi K3", description: "Frontier coding" }
+      { id: "nvidia/nemotron-3.5-lightning-30b-a3b", name: "Nemotron 3.5 Lightning", description: "Fast agent", contextTokens: 128000 },
+      { id: "deepseek-ai/deepseek-v4-pro-0813", name: "DeepSeek V4 Pro 0813", description: "Deep engineering", contextTokens: 128000 },
+      { id: "deepseek-ai/deepseek-v4-flash-0731", name: "DeepSeek V4 Flash 0731", description: "Fast agent + chat", contextTokens: 128000 },
+      { id: "moonshotai/kimi-k3", name: "Kimi K3", description: "Frontier coding", contextTokens: 128000 },
+      { id: "poolside/laguna-xs-2.1", name: "Laguna XS 2.1", description: "Long-horizon coding", contextTokens: 32768 },
+      { id: "meta/muse-glimmer-30b", name: "Muse Glimmer 30B", description: "Multimodal specialist", contextTokens: 128000 },
+      { id: "nvidia/nemotron-3-ultra-550b-a55b", name: "Nemotron 3 Ultra", description: "High compute", contextTokens: 128000 }
     ]
   },
   {
@@ -47,9 +62,10 @@ const PROVIDERS: ProviderConfig[] = [
     description: "Connect any OpenAI-compatible endpoint with your own key.",
     endpoint: "https://api.openai.com/v1",
     enabled: true,
-    hasCredential: false,
+    // A key saved and never probed: grey, not green.
+    hasCredential: true,
     isLocal: false,
-    status: "INVALID_CREDENTIAL",
+    status: "UNCHECKED",
     models: [{ id: "gpt-4o", name: "GPT-4o", contextTokens: 128000 }]
   },
   {
@@ -61,6 +77,7 @@ const PROVIDERS: ProviderConfig[] = [
     hasCredential: true,
     isLocal: true,
     status: "CONNECTED",
+    lastCheck: { provider: "ollama", status: "CONNECTED", latencyMs: 12, checkedAt: minutesAgo(1) },
     models: [{ id: "ollama:qwen2.5-coder", name: "Qwen 2.5 Coder (Local)", description: "Local" }]
   }
 ];

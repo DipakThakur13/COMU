@@ -32,7 +32,9 @@ contrast light at the narrowest width the panel supports.
 
 The harness renders the real `App` inside a resizable panel-sized frame, so what is reviewed is
 what ships, at the width it actually runs at. Harness code lives in `src/dev` and is dynamically
-imported, so none of it reaches the production bundle.
+imported, so none of it reaches the production bundle. That was not true of 0.3.0: its `.vsix`
+shipped the harness and its fixture events as `dist/webview/assets/mount-*.js`. Fixed in 0.3.1,
+whose package contains no harness chunk.
 
 ## Design rules
 
