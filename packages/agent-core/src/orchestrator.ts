@@ -234,6 +234,16 @@ export class AgentOrchestrator {
     const autonomy: TaskAutonomy = ctx.autonomy || "ask";
     let waitingMs = 0;
     const elapsedMs = () => Date.now() - startTime - waitingMs;
+    /*
+     * Where the repair budget starts, on the same clock as elapsedMs.
+     *
+     * The budget is maxRepairTimeMs of repairing. It used to be handed the task's start, so it
+     * measured the task's age instead: any task older than three minutes was refused every repair
+     * with REPAIR_TIMEOUT and no attempt made, which was the largest failure class in B0. It starts
+     * at the first failed verification considered for repair, and excludes time spent waiting on a
+     * human, as the execution budget does.
+     */
+    let repairStartedAtMs: number | undefined;
     const approvalGate = new ApprovalGate({
       taskId: ctx.taskId,
       autonomy,
@@ -562,12 +572,14 @@ export class AgentOrchestrator {
             });
 
             // Evaluate Repair Eligibility
+            repairStartedAtMs ??= elapsedMs();
             const repairDecision = this.repairEngine.evaluateRepair({
               taskId: ctx.taskId,
               diagnosis: lastDiagnosis,
               proposedTargetFiles: lastDiagnosis.affectedFiles,
               existingChangedFiles: Array.from(changeSet.changes.keys()),
-              startTimeMs: startTime + waitingMs,
+              // The engine measures Date.now() - startTimeMs, so this is "now, minus time spent repairing".
+              startTimeMs: Date.now() - (elapsedMs() - repairStartedAtMs),
               totalValidationRuns,
               limits: {
                 maxRepairAttempts: ctx.limits.maxRepairAttempts,
