@@ -150,6 +150,19 @@ export function classifyProviderFailure(text: string): keyof ProviderFailureCoun
   return "other";
 }
 
+/**
+ * Whether the harness lost its connection to the run, rather than the run ending.
+ *
+ * A stream severed under a refusing gateway surfaces as fetch's own error ("terminated", "fetch
+ * failed", a socket reset), recorded as a harness error with no provider failure counted, because
+ * no provider event ever arrived. It is still the provider's doing, not the agent's. The harness's
+ * own wall-clock timeout is deliberately not included: that one is a budget, not a dropped line.
+ */
+export function droppedConnection(record: { harnessError?: string }): boolean {
+  const error = record.harnessError ?? "";
+  return /^(terminated|fetch failed|other side closed|socket hang up)\b|ECONNRESET|ECONNREFUSED|EPIPE|UND_ERR_SOCKET/i.test(error);
+}
+
 
 export interface GraderVerdict {
   correct: boolean;

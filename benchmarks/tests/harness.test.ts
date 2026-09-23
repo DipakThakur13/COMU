@@ -530,6 +530,26 @@ describe("Re-measuring a cell the provider killed", () => {
     expect(killedByProvider(record({}))).toBe(false);
   });
 
+  it("treats a dropped connection as a provider kill, though no provider failure was counted", () => {
+    // B0's t4-ts-async rep 1: the stream was severed under a refusing gateway, fetch reported
+    // "terminated", and with nothing counted the cell would have stood as an agent failure.
+    const dropped = record({
+      comuStatus: "unknown" as RunRecord["comuStatus"],
+      harnessError: "terminated",
+      grader: { correct: false, reason: "", regressions: [], stillFailing: ["t"] },
+      failureClass: "grader_failed_other"
+    });
+    expect(killedByProvider(dropped)).toBe(true);
+    expect(refineFailureClass(dropped)).toBe("provider_error");
+    expect(killedByProvider(record({ comuStatus: "failed", harnessError: "fetch failed" }))).toBe(true);
+    expect(killedByProvider(record({ comuStatus: "failed", harnessError: "read ECONNRESET" }))).toBe(true);
+  });
+
+  it("does not count the harness's own wall-clock timeout as a dropped connection", () => {
+    // That one is a budget the harness imposed, not something the provider did.
+    expect(killedByProvider(record({ comuStatus: "failed", harnessError: "Harness timeout after 1800000ms" }))).toBe(false);
+  });
+
   it("does not re-measure a run that succeeded despite a retried provider failure", () => {
     // One 504 that was retried and recovered is not a reason to pay for the run again.
     expect(killedByProvider(killed({ comuStatus: "completed" }))).toBe(false);

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   TIER_NAMES,
+  droppedConnection,
   type BenchmarkRun,
   type MixedLimitsMarker,
   type RunAnnotations,
@@ -153,11 +154,13 @@ export function latestPerCell(records: RunRecord[]): RunRecord[] {
   return [...byCell.values()];
 }
 
-/** Whether the provider, rather than the agent, ended this run. */
+/** Whether the provider, rather than the agent, ended this run, including by dropping the connection. */
 export function killedByProvider(record: RunRecord): boolean {
+  if (record.comuStatus === "completed") return false;
+  if (droppedConnection(record)) return true;
   const f = record.providerFailures;
   if (!f) return false;
-  return record.comuStatus !== "completed" && f.timeouts + f.rateLimits + f.gateway + f.other > 0;
+  return f.timeouts + f.rateLimits + f.gateway + f.other > 0;
 }
 
 export function writeRun(run: BenchmarkRun, outDir: string): { jsonPath: string; markdownPath: string } {

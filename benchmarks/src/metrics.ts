@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@comu/protocol";
-import type { FailureClass, GraderVerdict, ProviderFailureCounts, RunRecord } from "./types.js";
+import { droppedConnection, type FailureClass, type GraderVerdict, type ProviderFailureCounts, type RunRecord } from "./types.js";
 
 /**
  * Records written before the breakdown existed carry no counts, so every read defaults to zero.
@@ -128,6 +128,9 @@ export function refineFailureClass(record: RunRecord): FailureClass | null {
 
   const failures = record.providerFailures;
   const error = record.comuError ?? "";
+
+  // The connection to the run was severed. No provider event arrived to count, but the agent did not fail.
+  if (droppedConnection(record)) return "provider_error";
 
   // The provider ended the task. Whatever the agent had done by then is not what is being measured.
   if (record.comuStatus === "failed" && failures) {

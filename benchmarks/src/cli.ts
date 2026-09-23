@@ -151,7 +151,8 @@ async function main(): Promise<void> {
    * current reading to all of it at once.
    */
   if (args.reportOnly) {
-    const records = latestPerCell(readJournal(args.outDir, args.label));
+    // Only the repetitions asked for: a run abandoned after rep 1 is a rep 1 result, and its header says so.
+    const records = latestPerCell(readJournal(args.outDir, args.label)).filter(r => r.rep <= args.reps);
     if (records.length === 0) {
       console.error(`No journal for '${args.label}' in ${args.outDir}.`);
       process.exit(1);
@@ -225,7 +226,9 @@ async function main(): Promise<void> {
    * record stays in the journal as the audit trail for why the cell was re-run; the later record
    * supersedes it.
    */
-  const redo = args.redoProviderFailures ? previous.filter(killedByProvider) : [];
+  // Only cells this invocation will run: a rep 1 resume neither re-measures nor is judged by rep 3.
+  const inScope = previous.filter(r => r.rep <= args.reps);
+  const redo = args.redoProviderFailures ? inScope.filter(killedByProvider) : [];
   const redoKeys = new Set(redo.map(r => `${r.fixtureId}#${r.rep}`));
   const done = new Set(previous.filter(r => !redoKeys.has(`${r.fixtureId}#${r.rep}`)).map(r => `${r.fixtureId}#${r.rep}`));
 
@@ -253,7 +256,7 @@ async function main(): Promise<void> {
       incoming.set(fixture.spec.id, resolved.limits as unknown as Record<string, number>);
     }
 
-    const standing = previous.filter(r => !redoKeys.has(`${r.fixtureId}#${r.rep}`));
+    const standing = inScope.filter(r => !redoKeys.has(`${r.fixtureId}#${r.rep}`));
     const differences = limitDifferences(standing, id => incoming.get(id));
     if (differences.length > 0) {
       console.error(`The journal for '${args.label}' was measured under a different budget:`);
@@ -377,7 +380,8 @@ async function main(): Promise<void> {
   });
   await Promise.all(workers);
 
-  const summary = summarise(latestPerCell(records));
+  const measured = latestPerCell(records).filter(r => r.rep <= args.reps);
+  const summary = summarise(measured);
   console.log("");
   console.log(`${summary.correct} of ${summary.runs} correct.`);
   console.log(`False completions: ${summary.falseCompletions}. False failures: ${summary.falseFailures}.`);
@@ -398,7 +402,7 @@ async function main(): Promise<void> {
     gitCommit: gitCommit(),
     reps: args.reps,
     concurrency: args.concurrency,
-    records: latestPerCell(records),
+    records: measured,
     ...mixedLimitsOf(args.outDir, args.label)
   };
   const written = writeRun(annotate(run, readAnnotations(args.outDir, args.label)), args.outDir);

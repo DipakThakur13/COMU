@@ -140,6 +140,30 @@ describe("the mixed-budget marker", () => {
   });
 });
 
+describe("--reps bounds what a run reports", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "comu-reps-cli-"));
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it("renders only repetitions 1..N, so a run stopped after rep 1 is reported as rep 1", () => {
+    // B0 was abandoned after rep 1 with reps 2 and 3 partly measured. Its report must not mix them in.
+    appendRecord(record({ rep: 1 }), dir, "R");
+    appendRecord(record({ rep: 2, grader: { correct: false, reason: "", regressions: [], stillFailing: ["t"] } }), dir, "R");
+    const cli = path.resolve(__dirname, "../src/cli.ts");
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "--conditions=development", cli, "--label", "R", "--reps", "1", "--report-only", "--out", dir],
+      { cwd: path.resolve(__dirname, ".."), encoding: "utf8", timeout: 120_000 }
+    );
+    expect(result.status).toBe(0);
+    const written = fs.readdirSync(dir).find(f => f.endsWith("-R.json"))!;
+    const run = JSON.parse(fs.readFileSync(path.join(dir, written), "utf8"));
+    expect(run.records.map((r: RunRecord) => r.rep)).toEqual([1]);
+  }, 150_000);
+});
+
 describe("the CLI refuses a resume under a different budget", () => {
   let dir: string;
   beforeEach(() => {
