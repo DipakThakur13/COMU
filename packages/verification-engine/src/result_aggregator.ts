@@ -10,6 +10,27 @@ export class ResultAggregator {
     const requiredChecks = checks.filter(c => c.required);
     const optionalChecks = checks.filter(c => !c.required);
 
+    /*
+     * Nothing required means nothing verified, never PASSED. Array.every over an empty list is true,
+     * which is how an empty required set used to report success having checked nothing.
+     */
+    if (requiredChecks.length === 0) {
+      const notVerifiedReason =
+        checks.length === 0
+          ? "No checks were planned."
+          : `No check was required: ${checks.find(c => c.skipReason)?.skipReason ?? "every check was optional."}`;
+      return {
+        verificationId,
+        taskId,
+        status: "NOT_VERIFIED",
+        checks,
+        summary: `Verification NOT_VERIFIED: ${notVerifiedReason}`,
+        durationMs,
+        timestamp: new Date().toISOString(),
+        notVerifiedReason
+      };
+    }
+
     let status: VerificationStatus = "PASSED";
     const failedRequired = requiredChecks.filter(c => c.status === "FAILED");
     const unavailableRequired = requiredChecks.filter(c => c.status === "UNAVAILABLE");

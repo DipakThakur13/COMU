@@ -105,6 +105,13 @@ describe("Primitives", () => {
 describe("Header", () => {
   const base = stateFrom([ev("task.started"), ev("agent.status", { status: "THINKING" })]);
 
+  it("never shows a completion nothing verified as a plain, green Completed", () => {
+    const unverified = reduceEvent(base, ev("task.completed", { finalText: "Done.", verification: "NOT_VERIFIED" }));
+    render(<Header session={unverified} onCancel={() => {}} onOpenSettings={() => {}} />);
+    expect(screen.getByText("Completed · unverified")).toBeTruthy();
+    expect(screen.queryByText("Completed")).toBeNull();
+  });
+
   it("shows the human-readable state and the step position", () => {
     const withPlan = reduceEvent(
       base,

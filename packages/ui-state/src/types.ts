@@ -8,6 +8,7 @@ import {
   TaskAutonomy,
   TaskMode,
   VerificationResult,
+  VerificationStatus,
   WorkspaceMemoryEntry
 } from "@comu/protocol";
 
@@ -288,6 +289,11 @@ export interface SessionState {
   usage: UsageView;
   timing: TimingView;
   finalText?: string;
+  /**
+   * What verification established for the completion, from task.completed. NOT_VERIFIED completes
+   * but must never be shown as a verified completion.
+   */
+  completedVerification?: VerificationStatus;
   error?: ErrorView;
 
   /**

@@ -96,7 +96,9 @@ describe("Scripted plumbing campaign: orchestrator wiring under a canned model",
       execute: async () => {
         testsRun++;
         const content = fs.readFileSync(path.join(fixtureDir, "src/user_profile.ts"), "utf8");
-        if (content.includes("active: true")) {
+        // Matched on the fixed statement, not the phrase: the fixture's own "// BUG: should be
+        // active: true" comment contains it, so the suite used to pass before any fix.
+        if (content.includes("return { id, active: true }")) {
           return { status: "PASS", exitCode: 0, stdout: "All 3 tests passed" };
         }
         return { status: "FAIL", exitCode: 1, stdout: "AssertionError: expected active: false to be true" };
@@ -142,6 +144,9 @@ describe("Scripted plumbing campaign: orchestrator wiring under a canned model",
       autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "You are an AI software engineer.",
       userPrompt: "Find the bug causing the failing test in the user-profile service. Fix the bug, run relevant tests and typecheck.",
+      // Explicit, as a user choosing Agent would be. Under AUTO the router reads the leading "Find" as
+      // a read-only question (docs/B0_FINDINGS.md), and this scenario is about the fix, not the routing.
+      mode: "AGENT",
       limits: { maxSteps: 10, maxToolCalls: 20, maxExecutionTimeMs: 15000 },
       onEvent: e => events.push(e)
     });
@@ -149,7 +154,9 @@ describe("Scripted plumbing campaign: orchestrator wiring under a canned model",
     expect(result.status).toBe("completed");
     expect(result.verificationResult?.status).toBe("PASSED");
     const finalContent = fs.readFileSync(path.join(fixtureDir, "src/user_profile.ts"), "utf8");
-    expect(finalContent).toContain("active: true");
+    // The fixed statement, not the phrase: the fixture's own "// BUG: should be active: true" comment
+    // contains the phrase, so this used to pass whether or not anything was written.
+    expect(finalContent).toContain("return { id, active: true }");
 
     scriptedScenarioResults.push({
       scenarioId: "SCENARIO_1",
@@ -551,7 +558,9 @@ describe("Scripted plumbing campaign: orchestrator wiring under a canned model",
       inputSchema: {},
       execute: async () => {
         const c = fs.readFileSync(path.join(fixtureDir, "src/routes/items.ts"), "utf8");
-        if (c.includes("status: 400") && c.includes("status: 201")) {
+        // Matched on the fixed statement: the fixture's "// BUG: should return status: 400" comment
+        // contains "status: 400", so the suite used to pass before any fix.
+        if (c.includes("return { status: 400") && c.includes("status: 201")) {
           return { status: "PASS", exitCode: 0, stdout: "All API route tests passed" };
         }
         return { status: "FAIL", exitCode: 1, stdout: "Expected 400 Bad Request on empty name" };
@@ -603,7 +612,7 @@ describe("Scripted plumbing campaign: orchestrator wiring under a canned model",
     expect(result.status).toBe("completed");
     expect(result.verificationResult?.status).toBe("PASSED");
     const updated = fs.readFileSync(path.join(fixtureDir, "src/routes/items.ts"), "utf8");
-    expect(updated).toContain("status: 400");
+    expect(updated).toContain("return { status: 400");
     expect(updated).toContain("status: 201");
 
     scriptedScenarioResults.push({

@@ -214,6 +214,11 @@ export interface ChangeCreatedEvent extends AgentEventBase {
 export interface TaskCompletedEvent extends AgentEventBase {
   type: "task.completed";
   finalText?: string;
+  /**
+   * What verification established for this completion. A completion is not a claim that the work
+   * was verified: NOT_VERIFIED completes too, and a consumer must not read it as PASSED.
+   */
+  verification?: VerificationStatus;
 }
 
 export interface TaskFailedEvent extends AgentEventBase {
@@ -315,11 +320,20 @@ export interface TaskPlan {
 // Milestone 6: Verification & Integrity Types
 // ==========================================
 
+/**
+ * What verification established.
+ *
+ * NOT_VERIFIED is not a kind of PASSED: nothing that was checked is evidence the task's change is
+ * right, either because nothing was required (a read-only task) or because every required check
+ * passed before the change as well. UNAVAILABLE means a required check could not run at all, which
+ * is not the same as running and failing. Decision 0017: the distinction travels in this field.
+ */
 export type VerificationStatus =
   | "PASSED"
   | "FAILED"
   | "PARTIAL"
-  | "UNAVAILABLE";
+  | "UNAVAILABLE"
+  | "NOT_VERIFIED";
 
 export type VerificationCheckStatus =
   | "PASSED"
@@ -368,6 +382,8 @@ export interface VerificationResult {
   summary: string;
   durationMs: number;
   timestamp: string;
+  /** Why the result is NOT_VERIFIED, in words, when it is. */
+  notVerifiedReason?: string;
 }
 
 export type WorkspaceIntegrityStatus =

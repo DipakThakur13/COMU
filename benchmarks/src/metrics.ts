@@ -153,6 +153,17 @@ export function refineFailureClass(record: RunRecord): FailureClass | null {
   return record.failureClass;
 }
 
+/**
+ * A run COMU completed while stating that nothing verified the change.
+ *
+ * Counted beside false completions, not instead of them: an unverified completion of wrong work is
+ * still a false completion. This says how often COMU finishes without evidence, which is what the
+ * NOT_VERIFIED outcome exists to make visible.
+ */
+export function unverifiedCompletion(record: Pick<RunRecord, "comuStatus" | "verificationStatus">): boolean {
+  return record.comuStatus === "completed" && record.verificationStatus === "NOT_VERIFIED";
+}
+
 export interface AssembleInput {
   fixtureId: string;
   tier: RunRecord["tier"];
@@ -233,6 +244,8 @@ export interface Summary {
   correct: number;
   falseCompletions: number;
   falseFailures: number;
+  /** Completions COMU itself marked NOT_VERIFIED. */
+  unverifiedCompletions: number;
   /** Totals, because a cost is a rate applied to these and the rate is not COMU's to invent. */
   totalPromptTokens: number;
   totalCompletionTokens: number;
@@ -266,6 +279,8 @@ export interface Summary {
     falseFailures: number;
     /** Runs COMU reported as completed that the grader found incorrect. */
     falseCompletions: number;
+    /** Runs COMU completed while saying nothing verified the change (NOT_VERIFIED). */
+    unverifiedCompletions: number;
   }>;
   /** Fixtures that always, sometimes and never produced correct work. */
   reliability: { always: number; sometimes: number; never: number };
@@ -289,11 +304,12 @@ export function summarise(records: RunRecord[]): Summary {
 
   const byFixture = new Map<
     string,
-    { tier: string; correct: number; of: number; peakContextRatio: number; providerFailures: ProviderFailureCounts; falseFailures: number; falseCompletions: number }
+    { tier: string; correct: number; of: number; peakContextRatio: number; providerFailures: ProviderFailureCounts; falseFailures: number; falseCompletions: number; unverifiedCompletions: number }
   >();
   for (const record of records) {
-    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0 };
+    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0 };
     entry.of += 1;
+    if (unverifiedCompletion(record)) entry.unverifiedCompletions += 1;
     if (record.falseFailure) entry.falseFailures += 1;
     if (record.falseCompletion) entry.falseCompletions += 1;
     if (record.grader.correct) entry.correct += 1;
@@ -311,7 +327,8 @@ export function summarise(records: RunRecord[]): Summary {
       peakContextRatio: v.peakContextRatio,
       providerFailures: v.providerFailures,
       falseFailures: v.falseFailures,
-      falseCompletions: v.falseCompletions
+      falseCompletions: v.falseCompletions,
+      unverifiedCompletions: v.unverifiedCompletions
     }))
     .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId));
 
@@ -319,6 +336,7 @@ export function summarise(records: RunRecord[]): Summary {
     runs: records.length,
     correct: correct.length,
     falseCompletions: records.filter(r => r.falseCompletion).length,
+    unverifiedCompletions: records.filter(unverifiedCompletion).length,
     falseFailures: records.filter(r => r.falseFailure).length,
     totalPromptTokens: records.reduce((sum, r) => sum + r.promptTokens, 0),
     totalCompletionTokens: records.reduce((sum, r) => sum + r.completionTokens, 0),

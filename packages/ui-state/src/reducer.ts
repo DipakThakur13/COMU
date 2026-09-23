@@ -292,6 +292,7 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
       next.status = "completed";
       next.agentState = "COMPLETED";
       next.finalText = e.finalText ?? next.finalText;
+      next.completedVerification = e.verification;
       next.timing = { ...next.timing, endedAt: Date.parse(e.timestamp) || Date.now() };
       next.pendingApproval = undefined;
       next.pendingInteraction = undefined;

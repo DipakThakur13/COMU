@@ -6,14 +6,17 @@ const RESULT_TONE: Record<VerificationResult["status"], StatusTone> = {
   PASSED: "ok",
   FAILED: "error",
   PARTIAL: "warn",
-  UNAVAILABLE: "idle"
+  UNAVAILABLE: "idle",
+  // Nothing checked is evidence of the change: never green.
+  NOT_VERIFIED: "warn"
 };
 
 const RESULT_WORDS: Record<VerificationResult["status"], string> = {
   PASSED: "Passed",
   FAILED: "Failed",
   PARTIAL: "Partly passed",
-  UNAVAILABLE: "Could not run"
+  UNAVAILABLE: "Could not run",
+  NOT_VERIFIED: "Not verified"
 };
 
 function checkIcon(status: VerificationCheck["status"]): { name: "check" | "error" | "dot"; className: string } {

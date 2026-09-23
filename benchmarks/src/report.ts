@@ -255,13 +255,13 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push("## Per fixture");
   lines.push("");
   lines.push(
-    "| Fixture | Tier | Correct | False failures | False completions | Peak prompt, share of window | Provider failures (t/r/g/o) |"
+    "| Fixture | Tier | Correct | False failures | False completions | Unverified completions | Peak prompt, share of window | Provider failures (t/r/g/o) |"
   );
-  lines.push("|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|");
   for (const entry of summary.perFixture) {
     const tier = TIER_NAMES[entry.tier as Tier] ?? entry.tier;
     lines.push(
-      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${entry.falseFailures} | ${entry.falseCompletions} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
+      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${entry.falseFailures} | ${entry.falseCompletions} | ${entry.unverifiedCompletions} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
     );
   }
   lines.push("");
@@ -276,6 +276,7 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push("|---|---|");
   lines.push(`| False completions | ${summary.falseCompletions} |`);
   lines.push(`| False failures | ${summary.falseFailures} |`);
+  lines.push(`| Unverified completions (COMU said NOT_VERIFIED) | ${summary.unverifiedCompletions} |`);
   lines.push(
     `| Wall clock, median (range) | ${fmtSeconds(summary.durationMs.median)} (${fmtSeconds(summary.durationMs.min)} to ${fmtSeconds(summary.durationMs.max)}) |`
   );

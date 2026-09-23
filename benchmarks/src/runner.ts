@@ -201,6 +201,8 @@ export function fold(counters: Counters, event: AgentEvent): void {
     case "task.completed":
       counters.status = "completed";
       counters.finalText = String(e.finalText ?? "");
+      // The completion's own statement of what was verified outranks the last check event.
+      counters.verificationStatus = e.verification ?? counters.verificationStatus;
       break;
     case "task.failed":
       counters.status = "failed";

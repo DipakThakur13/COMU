@@ -36,7 +36,9 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
   // Scenario 1: Canonical Fix Loop
   it("Scenario 1: Canonical Test-Fix-Verify Flow", async () => {
     const model = new TestScriptableModel();
-    let testRuns = 0;
+    // The suite fails until the fix is written. Keyed on the write rather than on the call count:
+    // the orchestrator now runs the checks once before any change, which is a call too.
+    let fixed = false;
 
     const registry = new ToolRegistry();
     // File tools
@@ -45,7 +47,10 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
       description: "write",
       capabilities: ["write"],
       inputSchema: {},
-      execute: async () => ({ status: "ok" })
+      execute: async () => {
+        fixed = true;
+        return { status: "ok" };
+      }
     });
     registry.register({
       name: "read_file",
@@ -62,8 +67,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
       capabilities: ["execute"],
       inputSchema: {},
       execute: async () => {
-        testRuns++;
-        if (testRuns === 1) {
+        if (!fixed) {
           return {
             status: "FAIL",
             exitCode: 1,
@@ -298,10 +302,17 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
 
   // Scenario 6: Optional Verification Skipped for Documentation
   it("Scenario 6: Optional Verification Skipped for Documentation", async () => {
+    // The skip comes from the change (a README edit), not from the word "documentation" in the
+    // prompt, and a completion with nothing checked is reported as NOT_VERIFIED, not PASSED.
     const model = new TestScriptableModel();
-    model.responses = [{ text: "README updated" }];
+    model.responses = [
+      { text: "", toolCalls: [{ id: "d1", name: "write_file", arguments: { path: "README.md", content: "# Updated" } }] },
+      { text: "README updated" }
+    ];
 
     const registry = new ToolRegistry();
+    registry.register({ name: "write_file", description: "write", capabilities: ["write"], inputSchema: {}, execute: async () => ({ status: "ok" }) });
+    registry.register({ name: "read_file", description: "read", capabilities: ["read"], inputSchema: {}, execute: async () => ({ content: "# Updated", hash: "h" }) });
     const orchestrator = new AgentOrchestrator(
       model,
       registry,
@@ -322,6 +333,7 @@ describe("Milestone 6: Autonomous Engineering Orchestration E2E Scenarios", () =
     const res = await orchestrator.run(ctx);
     expect(res.status).toBe("completed");
     expect(res.verificationResult?.checks.every(c => c.status === "SKIPPED")).toBe(true);
+    expect(res.verificationResult?.status).toBe("NOT_VERIFIED");
   });
 
   // Scenario 7: Workspace Integrity Failure

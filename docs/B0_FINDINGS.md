@@ -92,6 +92,24 @@ The common cause: whether to verify, and what counts as evidence, is recovered f
 typed fields that already hold the answer are not read. The correction belongs to the producer (the
 contract), per 0017, not to better prompt patterns.
 
+## Product defect: under AUTO, "Find the bug… fix it" is routed as a read-only question
+
+Found while implementing verification from the contract (Stage 0.3). `IntentRouter`'s ASK pattern
+matches a prompt that *starts* with `find`, `show`, `give`, `describe` and similar, so "Find the bug
+causing the failing test in the user-profile service. Fix the bug, run relevant tests and
+typecheck." is classified ASK, read-only. COMU cannot write the fix it was asked for.
+
+It went unnoticed because the scripted campaign scenario built on that prompt was passing for the
+wrong reasons: its test stub and its final assertion both matched the phrase `active: true`, which
+the fixture's own `// BUG: should be active: true` comment contains, so the "failing" suite passed
+before any change and the file "contained the fix" without being written. Scenario 5 had the same
+comment coincidence with `status: 400`. Once verification followed the contract, the read-only
+classification showed up as NOT_VERIFIED. Both stubs now match the fixed statement, and Scenario 1
+states mode AGENT explicitly.
+
+Benchmark fixtures all set their mode explicitly, so B0 and B1 are unaffected. The routing itself
+is the brittle-regex classification the Phase 0 brief listed (0.6); it is not fixed in Stage 0.
+
 ## Benchmark limitation: the T1–T4 typecheck signal carries no information
 
 The TypeScript fixtures in T1–T4 declare their typecheck as

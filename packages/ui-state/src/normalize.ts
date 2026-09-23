@@ -133,6 +133,37 @@ function buildItem(event: any, context: NormalizeContext): ActivityItem | null {
       const checks: any[] = Array.isArray(result.checks) ? result.checks : [];
       const failed = checks.filter(c => c.status === "FAILED");
       const passed = result.status === "PASSED";
+      // Neither of these is a failure, and NOT_VERIFIED is not a pass. Each is said as itself.
+      if (result.status === "NOT_VERIFIED") {
+        return {
+          id,
+          category: "VALIDATION",
+          toolCategory: "Verification",
+          level: "substance",
+          status: "warning",
+          title: "Not verified",
+          shortDescription: result.notVerifiedReason || result.summary || undefined,
+          timestamp,
+          durationMs: result.durationMs,
+          details: { checks }
+        };
+      }
+      if (result.status === "UNAVAILABLE") {
+        const unavailable = checks.filter(c => c.status === "UNAVAILABLE");
+        return {
+          id,
+          category: "VALIDATION",
+          toolCategory: "Verification",
+          level: "substance",
+          status: "failed",
+          title: "Verification could not run",
+          shortDescription: unavailable.map(c => c.details || c.name).join(" ") || result.summary || undefined,
+          metric: unavailable.length > 0 ? `${unavailable.length} could not run` : undefined,
+          timestamp,
+          durationMs: result.durationMs,
+          details: { checks }
+        };
+      }
       return {
         id,
         category: "VALIDATION",
@@ -234,6 +265,17 @@ function buildItem(event: any, context: NormalizeContext): ActivityItem | null {
 
     // ── Outcomes ───────────────────────────────────────────────────────────────────────────────
     case "task.completed":
+      // A completion nothing verified is still an outcome, but it never reads as a verified one.
+      if (event.verification === "NOT_VERIFIED") {
+        return {
+          id,
+          category: "SYSTEM_EVENT",
+          level: "outcome",
+          status: "warning",
+          title: "Task complete, not verified",
+          timestamp
+        };
+      }
       return {
         id,
         category: "SYSTEM_EVENT",

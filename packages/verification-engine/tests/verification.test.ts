@@ -3,11 +3,14 @@ import { VerificationPolicy } from "../src/verification_policy.js";
 import { ResultAggregator } from "../src/result_aggregator.js";
 import { VerificationCheck } from "@comu/protocol";
 
+/** A task the contract expects to change code and to verify. */
+const MUTATING = { expectedMutation: true, verificationRequired: true };
+
 describe("Verification Engine", () => {
   const policy = new VerificationPolicy();
 
   it("should skip build and tests for documentation-only changes", () => {
-    const plan = policy.determinePlan(["README.md", "docs/API.md"]);
+    const plan = policy.determinePlan(["README.md", "docs/API.md"], MUTATING);
     const typecheckRule = plan.rules.find(r => r.validatorId === "run_typecheck");
     const testRule = plan.rules.find(r => r.validatorId === "run_tests");
 
@@ -18,7 +21,7 @@ describe("Verification Engine", () => {
   });
 
   it("should require typecheck and tests for TypeScript source modifications", () => {
-    const plan = policy.determinePlan(["src/auth/middleware.ts"]);
+    const plan = policy.determinePlan(["src/auth/middleware.ts"], MUTATING);
     const typecheckRule = plan.rules.find(r => r.validatorId === "run_typecheck");
     const testRule = plan.rules.find(r => r.validatorId === "run_tests");
 
@@ -27,7 +30,7 @@ describe("Verification Engine", () => {
   });
 
   it("should require build when package.json is modified", () => {
-    const plan = policy.determinePlan(["package.json"]);
+    const plan = policy.determinePlan(["package.json"], MUTATING);
     const buildRule = plan.rules.find(r => r.validatorId === "run_build");
     expect(buildRule?.required).toBe(true);
   });
@@ -76,14 +79,10 @@ describe("Verification Engine", () => {
     expect(result.status).toBe("PARTIAL");
   });
 
-  it("should skip typecheck and tests when no workspace files were modified for informational queries", () => {
-    const plan = policy.determinePlan([], "give a sample code of C++");
-    const typecheckRule = plan.rules.find(r => r.validatorId === "run_typecheck");
-    const testRule = plan.rules.find(r => r.validatorId === "run_tests");
-
-    expect(typecheckRule?.required).toBe(false);
-    expect(typecheckRule?.skipReason).toContain("Informational query");
-    expect(testRule?.required).toBe(false);
-    expect(testRule?.skipReason).toContain("Informational query");
+  it("skips every check for a task the contract says does not change the workspace", () => {
+    // Formerly decided by the prompt starting with "give", "what" or "explain". Now by the contract.
+    const plan = policy.determinePlan([], { expectedMutation: false, verificationRequired: false });
+    expect(plan.rules.every(r => !r.required)).toBe(true);
+    expect(plan.rules.find(r => r.validatorId === "run_tests")?.skipReason).toMatch(/contract/);
   });
 });

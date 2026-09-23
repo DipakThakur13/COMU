@@ -258,3 +258,44 @@ describe("a chat turn is a conversation", () => {
     expect(messages[0].shortDescription).toBe("Nothing needed changing.");
   });
 });
+
+describe("what verification established is said as itself", () => {
+  const rowsFor = (events: any[]) => reduceAll(events).activity.filter((e: ActivityEntry) => !isActivityGroup(e)) as any[];
+
+  it("shows NOT_VERIFIED as not verified, never as passed and never as failed", () => {
+    const rows = rowsFor([
+      ev("task.started"),
+      ev("verification.completed", {
+        result: { status: "NOT_VERIFIED", checks: [], summary: "x", notVerifiedReason: "Every required check passed before the change as well." }
+      })
+    ]);
+    const row = rows.find(r => r.category === "VALIDATION");
+    expect(row?.title).toBe("Not verified");
+    expect(row?.status).toBe("warning");
+    expect(row?.shortDescription).toContain("passed before the change");
+  });
+
+  it("shows a required check that could not run as could-not-run, not as failed", () => {
+    const rows = rowsFor([
+      ev("task.started"),
+      ev("verification.completed", {
+        result: {
+          status: "UNAVAILABLE",
+          summary: "x",
+          checks: [{ id: "c", name: "Test Suite", required: true, status: "UNAVAILABLE", validatorId: "run_tests", details: "Could not run: no test suite command is configured for this project." }]
+        }
+      })
+    ]);
+    const row = rows.find(r => r.category === "VALIDATION");
+    expect(row?.title).toBe("Verification could not run");
+    expect(row?.title).not.toMatch(/failed/i);
+    expect(row?.shortDescription).toContain("no test suite command");
+  });
+
+  it("marks a completion nothing verified, and records it on the session", () => {
+    const state = reduceAll([ev("task.started"), ev("task.completed", { finalText: "Done.", verification: "NOT_VERIFIED" })]);
+    expect(state.completedVerification).toBe("NOT_VERIFIED");
+    const outcome = (state.activity as any[]).find(r => r.level === "outcome");
+    expect(outcome?.title).toBe("Task complete, not verified");
+  });
+});

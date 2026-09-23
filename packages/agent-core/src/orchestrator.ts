@@ -7,7 +7,7 @@ import { ProviderCancelledError } from "@comu/shared";
 import { ToolExecutor, ToolRegistry, ToolContext, ToolCapability, neverAborted } from "@comu/tool-core";
 import { DiffEngine, ChangeSet } from "@comu/diff-engine";
 import { TaskPlanner, PlanStateManager } from "@comu/planning-engine";
-import { VerificationEngine, WorkspaceIntegrityVerifier } from "@comu/verification-engine";
+import { VerificationEngine, WorkspaceIntegrityVerifier, VerificationRequirement } from "@comu/verification-engine";
 import { Diagnostician } from "@comu/diagnostics-engine";
 import { RepairEngine } from "@comu/repair-engine";
 import { InteractionManager } from "./interaction_manager.js";
@@ -22,6 +22,33 @@ import {
 } from "@comu/protocol";
 
 const MAX_TOOL_TARGET_CHARS = 160;
+
+/** What verification means for one task: the contract's requirement, and the checks before any change. */
+interface TaskVerificationContext {
+  requirement: VerificationRequirement;
+  baseline?: VerificationResult;
+}
+
+/**
+ * Why a verification result stops a task, as a typed code and a sentence.
+ *
+ * A required check that could not run is reported as exactly that. It used to reach the task
+ * outcome as a failed check, so "could not run" read as "failed". Both places a task can be stopped
+ * by verification (a VALIDATE step and the completion gate) say it the same way.
+ */
+function describeVerificationStop(result: VerificationResult): { code: string; message: string } {
+  if (result.status === "UNAVAILABLE") {
+    const names = result.checks.filter(c => c.required && c.status === "UNAVAILABLE").map(c => c.name);
+    return {
+      code: "VERIFICATION_UNAVAILABLE",
+      message: `Verification could not run: ${names.join(", ") || "a required check"} could not be run for this project, so the change is unchecked.`
+    };
+  }
+  return {
+    code: "VERIFICATION_FAILED",
+    message: `Required verification checks did not pass (status: ${result.status}): ${result.summary}`
+  };
+}
 
 /**
  * The one bounded string that says what a tool call is about.
@@ -385,6 +412,26 @@ export class AgentOrchestrator {
     let lastDiagnosis: FailureDiagnosis | undefined;
     let lastAssistantText: string | undefined;
 
+    /*
+     * What verification means for this task comes from the contract, not the prompt (decision
+     * 0017). A task expected to change code also records its required checks once, before anything
+     * is changed: a check that passed then and passes after is not evidence of the change.
+     */
+    const verification: TaskVerificationContext = {
+      requirement: { expectedMutation: contract.expectedMutation, verificationRequired: contract.verificationRequired }
+    };
+    if (contract.expectedMutation && contract.verificationRequired && !ctx.abortSignal?.aborted) {
+      verification.baseline = await this.verificationEngine.runVerification({
+        taskId: ctx.taskId,
+        workspaceRoot: ctx.workspaceRoot,
+        changedFiles: [],
+        requirement: verification.requirement,
+        toolExecutor: this.executor,
+        toolContext: runtimeToolCtx,
+        abortSignal: ctx.abortSignal
+      });
+    }
+
     // ==========================================
     // Phase 2: Active Orchestration Loop
     // ==========================================
@@ -459,7 +506,8 @@ export class AgentOrchestrator {
             startTime + waitingMs,
             steps,
             runtimeToolCtx,
-            lastAssistantText
+            lastAssistantText,
+            verification
           );
         }
       }
@@ -483,7 +531,8 @@ export class AgentOrchestrator {
           workspaceRoot: ctx.workspaceRoot,
           changedFiles,
           changeSet,
-          userPrompt: ctx.userPrompt,
+          requirement: verification.requirement,
+          baseline: verification.baseline,
           toolExecutor: this.executor,
           toolContext: runtimeToolCtx,
           abortSignal: ctx.abortSignal
@@ -509,7 +558,9 @@ export class AgentOrchestrator {
           );
         }
 
-        if (lastVerification.status === "PASSED") {
+        // NOT_VERIFIED is not a failure: there is nothing to diagnose or repair. The completion gate
+        // carries it through to the result, where it is reported as unverified, never as passed.
+        if (lastVerification.status === "PASSED" || lastVerification.status === "NOT_VERIFIED") {
           planManager.completeStep(currentStep.id, lastVerification.summary);
           ctx.onEvent({
             type: "plan.step.completed",
@@ -534,7 +585,8 @@ export class AgentOrchestrator {
               startTime + waitingMs,
               steps,
               runtimeToolCtx,
-              lastAssistantText
+              lastAssistantText,
+              verification
             );
           }
           // Proceed to next step
@@ -679,11 +731,13 @@ export class AgentOrchestrator {
             }
           } else {
             // Unavailable required check or other non-recoverable error
-            const errSummary = lastVerification.summary;
+            const stop = describeVerificationStop(lastVerification);
+            const errSummary = stop.message;
             this.transition(ctx, "FAILED", errSummary);
             ctx.onEvent({
               type: "task.failed",
               error: errSummary,
+              payload: stop,
               eventId: `evt-${Date.now()}`,
               taskId: ctx.taskId,
               timestamp: new Date().toISOString()
@@ -793,7 +847,8 @@ export class AgentOrchestrator {
           startTime + waitingMs,
           steps,
           runtimeToolCtx,
-          lastAssistantText
+          lastAssistantText,
+          verification
         );
       }
 
@@ -1158,7 +1213,8 @@ export class AgentOrchestrator {
     startTime: number,
     steps: number,
     toolCtx: any,
-    finalText?: string
+    finalText: string | undefined,
+    verification: TaskVerificationContext
   ): Promise<AgentResult> {
     this.transition(ctx, "VERIFYING", "Evaluating completion gate and workspace integrity");
 
@@ -1170,7 +1226,8 @@ export class AgentOrchestrator {
         workspaceRoot: ctx.workspaceRoot,
         changedFiles,
         changeSet,
-        userPrompt: ctx.userPrompt,
+        requirement: verification.requirement,
+        baseline: verification.baseline,
         toolExecutor: this.executor,
         toolContext: toolCtx,
         abortSignal: ctx.abortSignal
@@ -1191,7 +1248,9 @@ export class AgentOrchestrator {
       await WorkspaceIntegrityVerifier.verifyIntegrity(changeSet, this.executor, toolCtx);
 
     const implementationComplete = true;
-    const requiredVerificationPassed = lastVerification.status === "PASSED";
+    // "Nothing was checked" may complete, but only as itself: the result and the task.completed
+    // event carry NOT_VERIFIED, so no consumer can read it as verified.
+    const requiredVerificationPassed = lastVerification.status === "PASSED" || lastVerification.status === "NOT_VERIFIED";
     const noCriticalFailures = !lastVerification.checks.some(
       c => c.required && (c.status === "FAILED" || c.status === "UNAVAILABLE")
     );
@@ -1212,11 +1271,15 @@ export class AgentOrchestrator {
       executionStateKnown;
 
     if (passesCompletionGate) {
+      // Completing is not the same as verifying. Only verified work is committed as "verified task
+      // changes" or remembered as a verified lesson.
+      const verified = lastVerification.status === "PASSED";
+
       // Git Governance Flow
       let gitCommitResult: any;
       let gitPushResult: any;
 
-      if (changeSet && changeSet.changes.size > 0) {
+      if (verified && changeSet && changeSet.changes.size > 0) {
         const changedFiles = Array.from(changeSet.changes.keys());
         const commitMessageProposal = `feat(${changedFiles[0]?.split("/").pop()?.split(".")[0] || "core"}): complete verified task changes`;
 
@@ -1290,7 +1353,7 @@ export class AgentOrchestrator {
             evidenceReferences: [lastVerification.verificationId]
           });
 
-          if (changeSet.changes.size > 0) {
+          if (verified && changeSet.changes.size > 0) {
             const changedFiles = Array.from(changeSet.changes.keys());
             const lessonContent = `Task '${ctx.userPrompt.slice(0, 80)}' verified across: ${changedFiles.join(", ")}`;
             const recorded = await this.memoryEngine.record({
@@ -1327,13 +1390,14 @@ export class AgentOrchestrator {
 
       const cleanFinalText = finalText ? finalText.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim() : undefined;
 
-      this.transition(ctx, "COMPLETED", "Task verified and completed successfully");
+      this.transition(ctx, "COMPLETED", verified ? "Task verified and completed" : "Task completed, not verified");
       ctx.onEvent({
         type: "task.completed",
         eventId: `evt-${Date.now()}`,
         taskId: ctx.taskId,
         timestamp: new Date().toISOString(),
-        finalText: cleanFinalText
+        finalText: cleanFinalText,
+        verification: lastVerification.status
       });
       return {
         status: "completed",
@@ -1348,8 +1412,9 @@ export class AgentOrchestrator {
       };
     } else {
       let gateFailureReason = "Completion gate invariant check failed.";
+      let gateFailureCode = "COMPLETION_GATE_FAILED";
       if (!requiredVerificationPassed) {
-        gateFailureReason = `Required verification checks did not pass (status: ${lastVerification.status}): ${lastVerification.summary}`;
+        ({ code: gateFailureCode, message: gateFailureReason } = describeVerificationStop(lastVerification));
       } else if (!workspaceIntegrityVerified) {
         gateFailureReason = `Workspace integrity verification failed: ${workspaceIntegrity.details || "conflict detected"}`;
       }
@@ -1379,6 +1444,7 @@ export class AgentOrchestrator {
       ctx.onEvent({
         type: "task.failed",
         error: gateFailureReason,
+        payload: { code: gateFailureCode, message: gateFailureReason },
         eventId: `evt-${Date.now()}`,
         taskId: ctx.taskId,
         timestamp: new Date().toISOString()

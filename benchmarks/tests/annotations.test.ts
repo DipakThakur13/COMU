@@ -126,4 +126,23 @@ describe("the per-fixture table", () => {
     expect(markdown).toMatch(/\| a \| T1 [^|]*\| 2 of 2 \| 2 \| 0 \|/);
     expect(markdown).toMatch(/\| b \| T1 [^|]*\| 0 of 1 \| 0 \| 1 \|/);
   });
+
+  it("counts completions COMU itself marked NOT_VERIFIED, beside and not instead of false completions", () => {
+    const wrong = { correct: false, reason: "", regressions: [], stillFailing: ["t"] };
+    const markdown = renderMarkdown(
+      run([
+        // Unverified and wrong: still a false completion, and also an unverified one.
+        record({ fixtureId: "c", rep: 1, verificationStatus: "NOT_VERIFIED", falseCompletion: true, grader: wrong }),
+        // Unverified and right.
+        record({ fixtureId: "c", rep: 2, verificationStatus: "NOT_VERIFIED" }),
+        // Verified: not counted.
+        record({ fixtureId: "c", rep: 3, verificationStatus: "PASSED" }),
+        // Failed with nothing verified: not a completion, so not counted.
+        record({ fixtureId: "c", rep: 4, verificationStatus: "NOT_VERIFIED", comuStatus: "failed" })
+      ])
+    );
+    expect(markdown).toContain("| Unverified completions |");
+    expect(markdown).toMatch(/\| c \| T1 [^|]*\| 3 of 4 \| 0 \| 1 \| 2 \|/);
+    expect(markdown).toContain("| Unverified completions (COMU said NOT_VERIFIED) | 2 |");
+  });
 });

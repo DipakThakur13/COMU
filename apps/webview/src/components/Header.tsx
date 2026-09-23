@@ -13,7 +13,10 @@ function toneFor(session: SessionState): { tone: StatusTone; label: string } {
     case "cancelling":
       return { tone: "warn", label: "Cancelling" };
     case "completed":
-      return { tone: "ok", label: "Completed" };
+      // Green is for verified work. A completion nothing verified says so in the header.
+      return session.completedVerification === "NOT_VERIFIED"
+        ? { tone: "warn", label: "Completed · unverified" }
+        : { tone: "ok", label: "Completed" };
     case "failed":
       return { tone: "error", label: "Failed" };
     case "cancelled":
