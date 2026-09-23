@@ -66,17 +66,29 @@ pnpm --filter @comu/webview test:visual:update   # accept intended changes
 ```
 
 Playwright screenshots the panel across the full harness matrix: every fixture, in dark, light and
-high contrast dark, at 280, 400 and 900 pixels. 54 baselines, committed under
+high contrast dark, at 280, 400 and 900 pixels. 144 baselines, committed under
 `tests/visual/__screenshots__`.
 
 This is the only check that can see the defect class the rebuild exists to fix. A hardcoded colour
 that looks fine in dark and unreadable in light, a control that overflows a narrow panel, a word
 broken in half: none of it is visible to typecheck, lint or a DOM assertion.
 
-Determinism: the clock is frozen, motion is disabled through `prefers-reduced-motion` (which the
-token layer honours), fixtures are delivered instantly rather than paced, and the suite waits for a
-settled signal from the harness before capturing. The tolerance is a 1% pixel ratio, enough to
-absorb sub-pixel antialiasing and not enough to hide a layout change.
+Determinism: the clock is fixed with `setFixedTime`, motion is disabled through
+`prefers-reduced-motion` (which the token layer honours), fixtures are delivered instantly rather
+than paced, and the suite waits for a settled signal from the harness before capturing.
+
+**The tolerance is zero changed pixels, and nothing is masked.** It used to be a 1% pixel ratio,
+which sounds strict and is not: at 400x840 that permits 3,360 changed pixels, and at 900px wide,
+7,560. Measured here, renaming the status pill from "Completed" to "Finished" changes 144 pixels
+and rewriting the separators on the header's second line changes 31 to 290 — every one of them
+inside the old ceiling. A changed header line was in fact absorbed, and the suite reported 163
+passing while the baselines no longer matched the panel.
+
+Zero is reachable because the one thing that genuinely varied has been held still rather than
+tolerated: `clock.install` seeds a clock that still advances, so the elapsed seconds in the header
+and in the live status line rendered a second apart between runs. `setFixedTime` freezes them, and
+three consecutive runs are then byte-identical. If something new starts varying, freeze it or
+`mask` that element — raising the ceiling only buys room for changes nobody will see.
 
 Baselines are per-platform, because system font rendering differs. Playwright names them with the
 OS suffix, so a new platform runs `test:visual:update` once and commits its own set. The committed

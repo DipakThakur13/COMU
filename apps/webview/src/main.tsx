@@ -25,7 +25,14 @@ if (typeof window.acquireVsCodeApi === "function") {
       <App />
     </StrictMode>
   );
-} else {
-  // Standalone harness. Loaded lazily so none of it reaches the production bundle.
+} else if (import.meta.env.DEV) {
+  /*
+   * Standalone harness.
+   *
+   * Behind `import.meta.env.DEV`, not merely behind a dynamic import. A lazy import is still a
+   * chunk in the build output, so the fixtures shipped inside the 0.3.0 .vsix as a 25 KB
+   * `mount-*.js` while this comment claimed they could not. Vite folds the constant at build time
+   * and the branch, with everything it reaches, is dropped from a production build.
+   */
   void import("./dev/mount.js").then(({ mountHarness }) => mountHarness(rootElement));
 }

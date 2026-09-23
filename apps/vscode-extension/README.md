@@ -1,12 +1,12 @@
 # COMU — AI software engineering in VS Code
 
-**Version 0.3.0 · Preview.** Model-agnostic, bring your own key, MIT licensed.
+**Version 0.3.1 · Preview.** Model-agnostic, bring your own key, MIT licensed.
 
 COMU is an AI coding agent that runs inside VS Code. It reads a codebase, plans a change, edits
 files, runs the test suite, and asks before doing anything it cannot undo. You supply the model and
 the API key; COMU never proxies or resells inference.
 
-> **Read this before installing.** 0.3.0 is a preview. It has completed real tasks against a real
+> **Read this before installing.** 0.3.1 is a preview. It has completed real tasks against a real
 > model, and it has known defects that will affect you. They are listed under
 > [Known limitations](#known-limitations), not buried. If you are looking for something dependable
 > for daily work, this is not that yet.
@@ -20,9 +20,10 @@ network interface, allows every web origin, and requires no authentication. That
 tasks which read and write files and run shell commands. Any web page you visited while VS Code was
 open could drive it, and on a shared or public network so could another machine.
 
-0.3.0 fixes this with four independent controls, each verified against the packaged build:
+0.3.0 fixed this with four independent controls, each verified against the packaged build, and
+0.3.1 does not change them:
 
-| Control | Verified behaviour in 0.3.0 |
+| Control | Verified behaviour, unchanged in 0.3.1 |
 | :--- | :--- |
 | Bound to loopback | Listens on `127.0.0.1` only, never `0.0.0.0` |
 | Loopback guard | Any non-loopback peer is refused with `403`, even if the bind changed |
@@ -69,8 +70,6 @@ Honest list. Each is reproducible and each has a benchmark fixture.
   next to your source. Check the Changes tab.
 - **Slow models can exhaust the default request timeout.** The default is two minutes per model
   request, which a large model on a large prompt can exceed.
-- **`pnpm test` does not pass at the repository root.** Individual suites pass; the aggregate task
-  does not. This is a known debt, recorded rather than hidden.
 - **No published benchmark numbers yet.** A full baseline is being measured now. Nothing in this
   README quotes a success rate, because an honest one does not exist yet.
 
@@ -92,7 +91,7 @@ Stated plainly so you know what has and has not been checked:
 **1. Install**
 
 ```bash
-code --install-extension comu-ai-0.3.0.vsix
+code --install-extension comu-ai-0.3.1.vsix
 ```
 
 **2. Open it.** `Ctrl+Shift+P` → `COMU: Open Chat`. The sidebar appears and the agent runtime

@@ -10,11 +10,11 @@
 
 <p align="center">
 
-[![Version](https://img.shields.io/badge/Version-v0.3.0%20preview-orange.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-v0.3.1%20preview-orange.svg)](package.json)
 [![Open Source](https://img.shields.io/badge/Open%20Source-Community%20Driven-brightgreen)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue)](https://www.typescriptlang.org/)
-[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.3.0-007ACC)](https://code.visualstudio.com/)
-[![Tests](https://img.shields.io/badge/vitest-797%20passing%20in%2065%20files-brightgreen)](vitest.config.ts)
+[![VS Code](https://img.shields.io/badge/VS%20Code-Extension%20v0.3.1-007ACC)](https://code.visualstudio.com/)
+[![Tests](https://img.shields.io/badge/tests-832%20passing-brightgreen)](vitest.config.ts)
 [![Model Agnostic](https://img.shields.io/badge/AI-Model%20Agnostic%20%7C%20BYOK-purple)](#-bring-your-own-ai-provider-byok)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -26,27 +26,27 @@
 >
 > Those versions start a local HTTP server with `app.use(cors())` and `app.listen(3456)` — every
 > network interface, every web origin, no authentication — and that server creates tasks that read
-> files, write files and run shell commands. Any web page open in a browser could drive it. 0.3.0
+> files, write files and run shell commands. Any web page open in a browser could drive it. 0.3.1
 > closes this with four independent controls, verified against the packaged build. Upgrading does
 > not undo prior exposure.
 
 ---
 
-## 📌 Release summary (v0.3.0, preview)
+## 📌 Release summary (v0.3.1, preview)
 
 | Component | Specification | Status |
 | :--- | :--- | :--- |
-| **Release version** | `v0.3.0` | **Preview.** Completes real tasks; has known defects, listed below |
+| **Release version** | `v0.3.1` | **Preview.** Completes real tasks; has known defects, listed below |
 | **Interface** | React 18 + Vite panel (`apps/webview`) | The only interface; the legacy webview is removed |
 | **Model gateway** | Provider-neutral (`@comu/model-core`) | NVIDIA NIM, Experiential Labs, OpenAI-compatible, Ollama (local, keyless) |
-| **Runtime boundary** | Loopback bind, loopback guard, per-session token, closed CORS | Verified against the packaged 0.3.0 build |
+| **Runtime boundary** | Loopback bind, loopback guard, per-session token, closed CORS | Verified against the packaged 0.3.0 build; unchanged in 0.3.1 |
 | **Monorepo** | 24 workspace packages (`pnpm`) | Typecheck, lint and build pass |
-| **Unit and integration tests** | 797 tests across 65 files (`vitest`) | Passing |
-| **VS Code integration tests** | `pnpm test` | **Failing** — the `@vscode/test-electron` launcher passes options VS Code 1.138 rejects |
+| **Unit and integration tests** | 820 tests across 66 files (`vitest`) | Passing |
+| **VS Code integration tests** | 12 tests, real VS Code 1.138 | Passing. `pnpm test` runs the whole aggregate and exits 0 |
 | **Benchmark baseline** | 15 fixtures × 5 repetitions, graded by running the code | **In progress.** No success rate is published yet |
-| **VS Code package** | `comu-ai-0.3.0.vsix` (708 KB) | Built, installed and verified |
+| **Visual regression** | 144 baselines, 3 themes x 3 widths | Passing at zero changed pixels |
 
-### Known defects in 0.3.0
+### Known defects in 0.3.1
 
 Reproducible, each with a benchmark fixture, none of them hidden:
 
@@ -230,7 +230,7 @@ d:\COMU/
 ### 1. Install the VS Code Extension
 Install the packaged extension directly into VS Code:
 ```bash
-code --install-extension apps/vscode-extension/comu-ai-0.3.0.vsix
+code --install-extension apps/vscode-extension/comu-ai-0.3.1.vsix
 ```
 
 ### 2. Launch COMU
@@ -263,18 +263,25 @@ Select **Agent** mode and press **Enter**. Watch COMU plan, execute, verify, and
 
 ## 🧪 Testing & Quality Assurance
 
-The unit and integration suites pass; the VS Code integration launcher does not. Both are stated
-because a green badge covering only the first would be the more flattering half of the truth.
+Everything passes, including the VS Code integration suite, which 0.3.0 reported as failing. That
+report was wrong: the launcher was being run from inside a VS Code extension host, whose
+environment sets `ELECTRON_RUN_AS_NODE=1`. That variable makes `Code.exe` behave as plain Node,
+which then rejects every VS Code flag it is given ("bad option: --skip-welcome"). From an ordinary
+terminal the same command launches VS Code and the suite passes. The aggregate task was failing for
+a second, unrelated reason: `@comu/benchmark` ran `vitest` from its own directory, where the root
+config's exclusion of `fixtures/**` did not apply, so it collected twenty-six pinned sample
+repositories whose tests are meant to fail.
 
 ```bash
-# Unit and integration suites: 797 tests across 65 files, all passing
+# Unit and integration suites: 820 tests across 66 files, all passing
 pnpm vitest run
 
-# VS Code integration tests: currently FAILING.
-# @vscode/test-electron launches Code.exe with options VS Code 1.138 rejects
-# ("bad option: --skip-welcome"), so the harness exits before any test runs.
-# This is a harness incompatibility, not a product failure, and it is not yet fixed.
+# Everything, including 12 VS Code integration tests in real VS Code 1.138. Exits 0.
+# Run it from a normal terminal, not from an extension host's shell.
 pnpm test
+
+# The panel's visual baselines: 144 screenshots, zero changed pixels allowed
+pnpm --filter @comu/webview test:visual
 
 # Run TypeScript typechecks across all 21 packages
 pnpm typecheck
