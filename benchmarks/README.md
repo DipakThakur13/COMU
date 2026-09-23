@@ -58,6 +58,11 @@ with the differences printed. `--accept-mixed-limits` goes ahead anyway and writ
 journal, and the rendered result then states that its records were measured under more than one
 budget.
 
+What becomes known about a run after its records are written goes in `results/<label>.annotations.json`
+beside the journal, never into the journal itself: a correction to the model that actually served
+the run (`servedModel`), and `limitations` the numbers cannot show about themselves. Every render,
+including `--report-only`, applies them.
+
 Without a key, everything except the model call can still be exercised:
 
 ```bash
