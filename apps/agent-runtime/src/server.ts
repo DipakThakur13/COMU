@@ -793,7 +793,9 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
         autonomy,
         // A human can only approve what they can see: an attached event stream is the signal.
         hasHumanObserver: () => (eventStreams.get(taskId)?.length ?? 0) > 0,
-        systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
+        // The orchestrator builds the task's instructions from its contract and the tools it is
+        // offered (agent-core system_prompt.ts). This is only for anything a host wants to add.
+        systemPrompt: "",
         userPrompt: taskReq.description || taskReq.prompt || "",
         limits: {
           ...taskLimits,

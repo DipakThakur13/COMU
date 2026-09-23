@@ -5,3 +5,4 @@ export * from "./subagent_manager.js";
 export * from "./interaction/index.js";
 export * from "./agent_kernel.js";
 export * from "./approval/approval_gate.js";
+export * from "./system_prompt.js";

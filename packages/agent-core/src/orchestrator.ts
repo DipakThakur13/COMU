@@ -14,6 +14,7 @@ import { InteractionManager } from "./interaction_manager.js";
 import { MemoryEngine } from "@comu/memory-engine";
 import { SubagentManager } from "./subagent_manager.js";
 import { WorkingSetManager, WorkingSet } from "@comu/context-engine";
+import { buildTaskSystemPrompt } from "./system_prompt.js";
 import {
   TaskPlan,
   VerificationResult,
@@ -412,6 +413,20 @@ export class AgentOrchestrator {
     let lastDiagnosis: FailureDiagnosis | undefined;
     let lastAssistantText: string | undefined;
 
+    // What the model is told about where it is and what it may do, built from what this task can
+    // actually do. Anything the host adds follows it.
+    const systemPrompt = [
+      buildTaskSystemPrompt({
+        workspaceRoot: ctx.workspaceRoot,
+        autonomy,
+        tools: tools.map(t => t.name),
+        expectedMutation: contract.expectedMutation
+      }),
+      ctx.systemPrompt?.trim()
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
     /*
      * What verification means for this task comes from the contract, not the prompt (decision
      * 0017). A task expected to change code also records its required checks once, before anything
@@ -772,7 +787,7 @@ export class AgentOrchestrator {
           ctx.taskId, // runId
           {
             prompt: ctx.userPrompt,
-            systemPrompt: ctx.systemPrompt,
+            systemPrompt,
             messages,
             tools
           },
