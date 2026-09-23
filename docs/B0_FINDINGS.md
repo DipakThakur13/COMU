@@ -120,6 +120,38 @@ injected type error fails the check.
 **Applied after B0 lands, to both TypeScript fixtures, not mid-run.** Records carry no fixture
 hash, and a fixture that changes partway through one baseline is worse than eleven documented zeros.
 
+## B0 paused: the NVIDIA gateway refusing, 2026-09-23
+
+The second resume (launched with B0's original limits) ran 12:10–13:07Z at concurrency 2. Of the 11
+cells it finished, 9 ended on `NVIDIA API Error: 504`, 1 lost its connection mid-run (fetch
+"terminated"), and 1 ended on the known `REPAIR_TIMEOUT` defect. None was correct. That's 10 of 11
+(91%) ended by the provider or the connection, each spending tokens on a record the redo pass
+discards. B0 was stopped at 13:07:34Z.
+
+To confirm it was the gateway and not this machine, one direct request was sent with nothing else
+running: 1-token prompt to `nvidia/nemotron-3.5-lightning-30b-a3b` (the model B0's requests
+actually reach), sent 13:07:52Z. It returned **HTTP 504 after 302 s** with an empty body: the
+gateway giving up at about five minutes, not a local fault.
+
+B0 resumes when a direct request succeeds normally. The endpoint is re-checked periodically with a
+single request at a time, not left under load.
+
+State at the pause: 40 of 75 cells recorded, 10 of them provider-killed and due to be measured again.
+
+**Closed at rep 1.** The endpoint was re-checked every 15 minutes, one request at a time: 200 in 111 s
+(13:14Z), 200 in 150 s (13:30Z), 200 in 133 s (13:40Z). B0 was then resumed for rep 1 only, to
+re-measure the three rep-1 cells the provider or the connection had ended: t3-ts-extract,
+t4-ts-async and t7-py-architecture. Reps 2–5 were abandoned. Rep 1 across all fifteen fixtures is
+the frozen baseline (tag `b0-baseline`): **5 of 15 correct**, 0 false completions, 1 false failure
+(t1-py-interval, the polyglot defect), loop truncation the largest failure class (7). The report is
+results/2026-09-20-B0.md.
+
+**Harness gap found here:** a cell whose connection drops mid-run (t4-ts-async rep 1, `comuStatus:
+"unknown"`, harness error "terminated") records no provider failure, so `killedByProvider` is false
+and `--redo-provider-failures` does not measure it again. It stands as an ordinary failure unless
+re-run by hand. Fix in the bench, not the engine: treat a harness-level network termination as a
+provider-side kill.
+
 ## After B0: do not act on these yet
 
 1. **A repetition-ratio guard on completion.** A final message whose token n-gram repetition passes

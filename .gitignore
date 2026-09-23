@@ -17,3 +17,5 @@ Claude outputs/
 
 # Benchmark run logs: large, regenerated, and not a result.
 benchmarks/results/*.console.log
+# A run lock names a live process; it is never state worth keeping.
+benchmarks/results/*.lock
