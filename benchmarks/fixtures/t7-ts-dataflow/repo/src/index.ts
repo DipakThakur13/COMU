@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", stop);
 
   const summary = await runPipeline(source, pipeline, settings, logger);
-  logger.info("finished", summary);
+  logger.info("finished", { ...summary });
 }
 
 void main();

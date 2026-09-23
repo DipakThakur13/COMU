@@ -5,8 +5,12 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "outDir": "dist",
-    "rootDir": "."
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test",
+    "types"
+  ]
 }
