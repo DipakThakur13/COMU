@@ -112,6 +112,23 @@ describe("provider status is derived from the last probe", () => {
     expect(result.checkedAt).toBeUndefined();
   });
 
+  it("checks every NVIDIA catalogue model against the NVIDIA key, not only ids that contain 'nvidia'", async () => {
+    // moonshotai/kimi-k3 used to fall to the generic branch and be looked up under its own id,
+    // so a user with an NVIDIA key was told the model had no key.
+    const manager = new ProviderManager();
+    await manager.setProviderKey("nvidia", "nvapi-test");
+    for (const id of ["moonshotai/kimi-k3", "poolside/laguna-xs-2.1", "nvidia/nemotron-3-ultra-550b-a55b"]) {
+      const check = await manager.isProviderConfigured(id);
+      expect(check).toMatchObject({ configured: true, providerId: "nvidia" });
+    }
+  });
+
+  it("does not treat an empty model id as NVIDIA", async () => {
+    const manager = new ProviderManager();
+    await manager.setProviderKey("nvidia", "nvapi-test");
+    expect((await manager.isProviderConfigured("")).providerId).not.toBe("nvidia");
+  });
+
   it("stamps the local daemon's probe too, so its badge carries a time", async () => {
     const ollama = (await new ProviderManager().getProvidersState(true)).find(p => p.providerId === "ollama")!;
     expect(ollama.status).toBe("CONNECTION_ERROR");

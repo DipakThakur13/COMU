@@ -108,8 +108,8 @@
         },
         "comu.defaultModel": {
           "type": "string",
-          "default": "nvidia-nemotron-3-ultra",
-          "description": "Default model ID to use"
+          "default": "",
+          "description": "Model the composer starts with, as a full model id such as nvidia/nemotron-3.5-lightning-30b-a3b. Empty means choose one in the composer before the first task."
         }
       }
     }

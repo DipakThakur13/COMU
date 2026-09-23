@@ -17,7 +17,7 @@ import { VerificationEngine } from '@comu/verification-engine';
 import { RepairEngine } from '@comu/repair-engine';
 import { ComuDiffEngine } from '@comu/diff-engine';
 import { MemoryEngine } from '@comu/memory-engine';
-import { NvidiaProvider } from '@comu/provider-nvidia';
+import { NvidiaProvider, NvidiaModelCatalog } from '@comu/provider-nvidia';
 import {
   ModelProvider,
   OpenAICompatibleProvider,
@@ -144,7 +144,10 @@ export function selectProvider(modelId: string): ProviderSelection {
   if (OllamaProvider.isOllamaModelId(lower)) {
     return { modelId, providerId: 'ollama' };
   }
-  if (lower.includes('nvidia') || lower.includes('nemotron') || lower.includes('deepseek')) {
+  // By the catalogue, not by substring. "nvidia-nemotron-3-ultra" contains "nemotron" and used to
+  // route here, where the provider silently replaced it with its default; moonshotai/kimi-k3 is an
+  // NVIDIA model that contains none of the old keywords and was refused.
+  if (NvidiaModelCatalog.has(modelId)) {
     return { modelId, providerId: 'nvidia' };
   }
   if (lower.includes('experiential') || lower.includes('astra')) {
@@ -272,9 +275,24 @@ export function defaultProviderFactory(selection: ProviderSelection, providers: 
     const endpoint = providers?.['openai']?.endpoint;
     return new OpenAICompatibleProvider(key, endpoint, modelId);
   }
-  const nvidiaKey = providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY;
-  const nvidiaEndpoint = providers?.['nvidia']?.endpoint;
-  return new NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+  if (providerId === 'nvidia') {
+    const nvidiaKey = providers?.['nvidia']?.apiKey || process.env.NVIDIA_API_KEY;
+    const nvidiaEndpoint = providers?.['nvidia']?.endpoint;
+    // The requested model, every time. Without it the provider fell back to its built-in default
+    // and every NVIDIA request went to Lightning 30B-A3B whatever the user chose.
+    return new NvidiaProvider(nvidiaKey, nvidiaEndpoint, modelId);
+  }
+  // No silent fallback to NVIDIA: an id no provider recognises is refused at task creation.
+  throw new Error(`No provider serves model '${modelId}'.`);
+}
+
+/** What the runtime accepts as a model id, for a refusal that tells the caller what to send instead. */
+function describeAcceptedModels(): string {
+  const nvidia = NvidiaModelCatalog.list().map(m => m.id).join(', ');
+  return (
+    `NVIDIA: ${nvidia}. Experiential Labs: gpt-6-astra. ` +
+    `OpenAI-compatible: an id containing "gpt-4" or "openai", such as gpt-4o. Local: ollama:<model>, such as ollama:llama3.1.`
+  );
 }
 
 /**
@@ -423,14 +441,12 @@ app.get('/v1/config/providers', asyncRoute(async (req, res) => {
       displayName: 'NVIDIA',
       enabled: true,
       endpoint: runtimeConfig.providers?.['nvidia']?.endpoint || NvidiaProvider.DEFAULT_ENDPOINT,
-      selectedModel: 'Nemotron 3 Ultra',
       hasCredential: hasNvidiaKey,
       isLocal: false,
       status: hasNvidiaKey ? 'CONNECTED' : 'NOT_CONFIGURED',
       environmentDetected: envNvidia,
-      models: [
-        { id: 'nvidia-nemotron-3-ultra', name: 'Nemotron 3 Ultra', description: 'NVIDIA Nemotron high-performance engineering model' }
-      ],
+      // The catalogue the provider validates against, so every id listed here is one a task accepts.
+      models: NvidiaModelCatalog.list().map(m => ({ id: m.id, name: m.displayName })),
       description: 'High performance cloud inference powered by NVIDIA Nemotron'
     },
     {
@@ -478,8 +494,7 @@ app.get('/v1/config/providers/:providerId/status', asyncRoute(async (req, res) =
       providerId: 'nvidia',
       hasCredential: hasKey,
       environmentDetected: envNvidia,
-      status: hasKey ? 'CONNECTED' : 'NOT_CONFIGURED',
-      selectedModel: 'Nemotron 3 Ultra'
+      status: hasKey ? 'CONNECTED' : 'NOT_CONFIGURED'
     });
   } else if (providerId === 'experiential' || providerId === 'gpt-6-astra') {
     const envExp = OpenAICompatibleProvider.detectEnvironmentCredential('experiential');
@@ -569,8 +584,28 @@ app.get("/v1/health", (req, res) => {
 
 app.post('/v1/tasks', asyncRoute(async (req, res) => {
   const taskReq = req.body || {};
-  const modelId: string = taskReq.modelId || 'nvidia-nemotron-3-ultra';
+
+  // Model Guard: a task names its model. The runtime never picks one on the caller's behalf: the
+  // old fallback id was not in any catalogue, and the provider then quietly substituted its own.
+  if (typeof taskReq.modelId !== 'string' || !taskReq.modelId.trim()) {
+    return res.status(400).json({
+      error: 'MODEL_REQUIRED',
+      code: 'MODEL_REQUIRED',
+      message: `Choose a model before starting a task. Accepted: ${describeAcceptedModels()}`
+    });
+  }
+  const modelId: string = taskReq.modelId.trim();
   const selection = selectProvider(modelId);
+
+  // With the built-in providers, an id none of them serves is refused rather than routed somewhere.
+  // An injected providerFactory (tests, the benchmark self test) owns its own model ids.
+  if (!options.providerFactory && selection.providerId === 'unknown') {
+    return res.status(400).json({
+      error: 'UNKNOWN_MODEL',
+      code: 'UNKNOWN_MODEL',
+      message: `Unknown model '${modelId}'. Accepted: ${describeAcceptedModels()}`
+    });
+  }
 
   // Task-Start Guard: verify provider credential exists before task launch
   if (selection.providerId === 'nvidia') {

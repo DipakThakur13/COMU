@@ -62,6 +62,8 @@ export function Composer({
   }, [text]);
 
   const usable = providers.filter(p => p.hasCredential || p.isLocal);
+  // Only a model one of the usable providers offers can be sent; anything else would be refused.
+  const modelKnown = !!modelId && usable.some(p => p.models.some(m => m.id === modelId));
   const autonomyHint = AUTONOMY.find(a => a.value === autonomy)?.hint ?? "";
 
   return (
@@ -78,7 +80,8 @@ export function Composer({
           onKeyDown={event => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
-              onSubmit();
+              // The same condition as the Send button: Enter must not submit what the button refuses.
+              if (!busy && text.trim() && modelKnown) onSubmit();
             }
           }}
         />
@@ -86,7 +89,7 @@ export function Composer({
           variant="primary"
           icon="send"
           label="Send (Enter)"
-          disabled={busy || !text.trim() || !modelId}
+          disabled={busy || !text.trim() || !modelKnown}
           onClick={onSubmit}
         />
       </div>
@@ -122,8 +125,18 @@ export function Composer({
 
         <label className={`${styles.control} ${styles.model}`}>
           <span className="comu-visually-hidden">Model</span>
-          <select value={modelId ?? ""} disabled={busy} onChange={event => onModel(event.target.value)} title="Model">
+          {/*
+            The select only ever shows the model that will be sent. An unset or unrecognised model
+            (an old settings value, say) shows as a choice to make, not as the first option in the
+            list, which a browser displays while the value underneath is something else.
+          */}
+          <select value={modelKnown ? modelId : ""} disabled={busy} onChange={event => onModel(event.target.value)} title="Model">
             {usable.length === 0 ? <option value="">No model configured</option> : null}
+            {usable.length > 0 && !modelKnown ? (
+              <option value="" disabled>
+                Choose a model
+              </option>
+            ) : null}
             {usable.map(provider => (
               <optgroup key={provider.providerId} label={provider.displayName}>
                 {provider.models.map(model => (

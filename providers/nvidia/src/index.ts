@@ -11,6 +11,9 @@ import {
 } from "@comu/shared";
 import { NvidiaModelCatalog } from "./catalog.js";
 
+// The catalogue is the authority on which ids are NVIDIA's; the runtime routes and validates by it.
+export { NvidiaModelCatalog, NVIDIA_MODELS } from "./catalog.js";
+
 export class NvidiaProvider implements ModelProvider {
   public id = "nvidia";
   public name = "NVIDIA";

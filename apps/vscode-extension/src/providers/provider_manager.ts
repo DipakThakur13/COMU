@@ -1,6 +1,6 @@
 import { SecretManager } from '../security/secrets';
 import { ProviderConfig, ProviderTestResult, ProviderStatus, ProviderModel } from '@comu/protocol';
-import { NvidiaProvider } from '@comu/provider-nvidia';
+import { NvidiaProvider, NvidiaModelCatalog } from '@comu/provider-nvidia';
 import { OpenAICompatibleProvider, OllamaProvider, ASTRA_CAPABILITY_PROFILE } from '@comu/model-core';
 
 export interface ProviderDefinition {
@@ -65,8 +65,6 @@ export class ProviderManager {
                 },
                 {
                     id: 'nvidia/nemotron-3-ultra-550b-a55b',
-                    // No "(Legacy)": this is the configured default model, and a warning label on
-                    // the default reads as a warning about choosing it.
                     name: 'Nemotron 3 Ultra',
                     description: 'High compute, long-horizon engineering',
                     contextTokens: 128000
@@ -383,7 +381,8 @@ export class ProviderManager {
             };
         }
 
-        if (idLower.includes('nvidia') || idLower.includes('nemotron') || !modelId) {
+        // By the catalogue, as the runtime routes: moonshotai/kimi-k3 is NVIDIA's and names no "nvidia".
+        if (NvidiaModelCatalog.has(modelId)) {
             const secrets = SecretManager.getInstance();
             const key = await secrets.getProviderKey('nvidia');
             const hasEnv = NvidiaProvider.detectEnvironmentCredential();

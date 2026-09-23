@@ -253,6 +253,29 @@ describe("Composer", () => {
     );
     expect(screen.getByRole("button", { name: /Send/ }).hasAttribute("disabled")).toBe(true);
   });
+
+  it("shows an unrecognised model as a choice to make, and will not send it by button or Enter", () => {
+    // An old settings value the runtime would refuse. The select must not display the first model
+    // in the list while this sits underneath as the value that would be sent.
+    const onSubmit = vi.fn();
+    renderComposer({ text: "do something", modelId: "nvidia-nemotron-3-ultra", onSubmit });
+
+    const select = screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(select.selectedOptions[0]?.textContent).toBe("Choose a model");
+    expect(screen.getByRole("button", { name: /Send/ }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Prompt" }), { key: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("sends a model a usable provider offers", () => {
+    const onSubmit = vi.fn();
+    renderComposer({ text: "do something", modelId: "m1", onSubmit });
+    expect((screen.getByRole("combobox", { name: "Model" }) as HTMLSelectElement).value).toBe("m1");
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Prompt" }), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("ActivityStream", () => {

@@ -66,7 +66,7 @@ describe("Runtime BYOK Provider Configuration & Task-Start Guard", () => {
       body: JSON.stringify({
         taskId: "test-guard-task",
         prompt: "Refactor code",
-        modelId: "nvidia-nemotron-3-ultra",
+        modelId: "nvidia/nemotron-3.5-lightning-30b-a3b",
         workspace: { rootPath: os.tmpdir() }
       })
     });

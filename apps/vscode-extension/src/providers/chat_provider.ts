@@ -230,6 +230,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private async handleSubmitPrompt(prompt: string, modelId: string, mode?: "AUTO" | "CHAT" | "ASK" | "PLAN" | "AGENT", autonomy?: TaskAutonomy) {
         if (!prompt) return;
+        // The runtime refuses a task without a model rather than choosing one; say so before asking it.
+        if (!modelId) {
+            this.sendErrorToWebview('Choose a model in the composer before starting a task.');
+            return;
+        }
         const effectiveAutonomy: TaskAutonomy = autonomy && (TASK_AUTONOMY_LEVELS as readonly string[]).includes(autonomy)
             ? autonomy
             : this.getDefaultAutonomy();
