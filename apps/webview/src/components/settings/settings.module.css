@@ -134,7 +134,7 @@
   padding: 0;
   border: none;
   background: none;
-  color: var(--vscode-textLink-foreground, var(--comu-status-running));
+  color: var(--comu-text-link);
   font-size: var(--comu-text-xs);
   white-space: nowrap;
   cursor: pointer;
@@ -145,7 +145,7 @@
 }
 
 .modelMore:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
+  outline: 1px solid var(--comu-focus);
   outline-offset: 2px;
 }
 

@@ -251,4 +251,46 @@ export interface BenchmarkRun {
    */
   concurrency: number;
   records: RunRecord[];
+  /** Present when a resume was allowed to change the budget, so the result says it is mixed. */
+  mixedLimits?: MixedLimitsMarker[];
+  /** Corrections and caveats established after the records were written. See RunAnnotations. */
+  annotations?: RunAnnotations;
+}
+
+/**
+ * What became known about a run after its records were written, kept beside its journal as
+ * `<label>.annotations.json` and applied every time the run is rendered.
+ *
+ * The journal is not edited: it is the audit trail of what the harness believed at the time. A
+ * hand-edited result file would be lost the next time the run is re-rendered, which a run needs
+ * whenever the reading of its records improves.
+ */
+export interface RunAnnotations {
+  /**
+   * The model that actually served the run, when it is not the one the run was launched naming.
+   * B0 was launched naming Ultra 550B, and every request went to Lightning 30B-A3B.
+   */
+  servedModel?: { id: string; provider: string; launchedAs: string; reason: string };
+  /** Anything the numbers cannot show about themselves, stated once at the top of the report. */
+  limitations?: string[];
+}
+
+/** One limit a resumed run would measure under differently from the records already in the journal. */
+export interface LimitDifference {
+  fixtureId: string;
+  key: string;
+  recorded?: number;
+  incoming?: number;
+}
+
+/**
+ * A journal line that is not a record: a resume went ahead under a different budget.
+ *
+ * Written into the journal itself rather than beside it, because the journal is the result and a
+ * separate file can be lost or not copied with it.
+ */
+export interface MixedLimitsMarker {
+  journalEvent: "mixed_limits";
+  acceptedAt: string;
+  differences: LimitDifference[];
 }

@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { TIER_NAMES, type BenchmarkRun, type RunRecord, type Tier } from "./types.js";
+import {
+  TIER_NAMES,
+  type BenchmarkRun,
+  type MixedLimitsMarker,
+  type RunAnnotations,
+  type RunRecord,
+  type Tier
+} from "./types.js";
+import { describeLimitDifferences } from "./resume.js";
 import { summarise } from "./metrics.js";
 import { assertNoSecret } from "./secrets.js";
 
@@ -29,13 +37,53 @@ export function appendRecord(record: RunRecord, outDir: string, label: string): 
 
 /** Records already measured for this label, so a resumed run does not pay for them twice. */
 export function readJournal(outDir: string, label: string): RunRecord[] {
+  return readJournalLines(outDir, label).filter((entry): entry is RunRecord => !isMarker(entry));
+}
+
+/** Every time a resume was allowed to change the budget under this label. */
+export function readJournalMarkers(outDir: string, label: string): MixedLimitsMarker[] {
+  return readJournalLines(outDir, label).filter(isMarker);
+}
+
+/** Marks the journal as mixed before any record is measured under the new budget. */
+export function appendMixedLimitsMarker(marker: MixedLimitsMarker, outDir: string, label: string): void {
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.appendFileSync(path.join(outDir, `${journalStem(label)}.jsonl`), `${JSON.stringify(marker)}\n`, "utf8");
+}
+
+/** The run's annotations, when a correction or caveat has been recorded beside its journal. */
+export function readAnnotations(outDir: string, label: string): RunAnnotations | undefined {
+  const file = path.join(outDir, `${label}.annotations.json`);
+  return fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as RunAnnotations) : undefined;
+}
+
+/**
+ * Applies a run's annotations to what is rendered, never to the journal.
+ *
+ * A served-model correction replaces the model everywhere the result names it, on the run and on
+ * every record, so no part of the result contradicts the rest. The name it was launched under is
+ * kept on the annotation and stated in the report.
+ */
+export function annotate(run: BenchmarkRun, annotations: RunAnnotations | undefined): BenchmarkRun {
+  if (!annotations) return run;
+  const served = annotations.servedModel;
+  if (!served) return { ...run, annotations };
+  const model = { id: served.id, provider: served.provider };
+  return { ...run, annotations, model, records: run.records.map(r => ({ ...r, model })) };
+}
+
+function readJournalLines(outDir: string, label: string): Array<RunRecord | MixedLimitsMarker> {
   const file = path.join(outDir, `${journalStem(label)}.jsonl`);
   if (!fs.existsSync(file)) return [];
   return fs
     .readFileSync(file, "utf8")
     .split("\n")
     .filter(line => line.trim())
-    .map(line => JSON.parse(line) as RunRecord);
+    .map(line => JSON.parse(line) as RunRecord | MixedLimitsMarker);
+}
+
+function isMarker(entry: RunRecord | MixedLimitsMarker): entry is MixedLimitsMarker {
+  return (entry as MixedLimitsMarker).journalEvent === "mixed_limits";
 }
 
 /**
@@ -165,6 +213,30 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push("");
   lines.push(`Model \`${run.model.id}\` via ${run.model.provider}. Commit \`${run.gitCommit}\`.`);
   lines.push(`${run.reps} repetitions per fixture, ${summary.runs} runs, started ${run.startedAt}.`);
+  const served = run.annotations?.servedModel;
+  if (served) {
+    lines.push("");
+    lines.push(`**Model correction.** This run was launched naming \`${served.launchedAs}\`. ${served.reason}`);
+  }
+  const limitations = run.annotations?.limitations ?? [];
+  if (limitations.length > 0) {
+    lines.push("");
+    lines.push("**Limitations.**");
+    lines.push("");
+    for (const limitation of limitations) lines.push(`- ${limitation}`);
+  }
+  if (run.mixedLimits && run.mixedLimits.length > 0) {
+    lines.push("");
+    lines.push(
+      "**Mixed budget.** This run was resumed under different limits from records already in its " +
+        "journal, so its records were not all measured under one budget:"
+    );
+    lines.push("");
+    for (const marker of run.mixedLimits) {
+      lines.push(`- Accepted ${marker.acceptedAt}:`);
+      for (const line of describeLimitDifferences(marker.differences)) lines.push(`  - ${line.trim()}`);
+    }
+  }
   if (run.concurrency > 1) {
     lines.push("");
     lines.push(
@@ -179,12 +251,14 @@ export function renderMarkdown(run: BenchmarkRun): string {
   // that never does reports something true of neither.
   lines.push("## Per fixture");
   lines.push("");
-  lines.push("| Fixture | Tier | Correct | Peak prompt, share of window | Provider failures (t/r/g/o) |");
-  lines.push("|---|---|---|---|---|");
+  lines.push(
+    "| Fixture | Tier | Correct | False failures | False completions | Peak prompt, share of window | Provider failures (t/r/g/o) |"
+  );
+  lines.push("|---|---|---|---|---|---|---|");
   for (const entry of summary.perFixture) {
     const tier = TIER_NAMES[entry.tier as Tier] ?? entry.tier;
     lines.push(
-      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
+      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${entry.falseFailures} | ${entry.falseCompletions} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
     );
   }
   lines.push("");

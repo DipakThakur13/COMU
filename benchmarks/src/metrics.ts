@@ -259,6 +259,10 @@ export interface Summary {
      */
     peakContextRatio: number;
     providerFailures: ProviderFailureCounts;
+    /** Runs COMU reported as failed that the grader found correct. */
+    falseFailures: number;
+    /** Runs COMU reported as completed that the grader found incorrect. */
+    falseCompletions: number;
   }>;
   /** Fixtures that always, sometimes and never produced correct work. */
   reliability: { always: number; sometimes: number; never: number };
@@ -280,10 +284,15 @@ export function summarise(records: RunRecord[]): Summary {
     if (cls) failureCounts[cls] = (failureCounts[cls] ?? 0) + 1;
   }
 
-  const byFixture = new Map<string, { tier: string; correct: number; of: number; peakContextRatio: number; providerFailures: ProviderFailureCounts }>();
+  const byFixture = new Map<
+    string,
+    { tier: string; correct: number; of: number; peakContextRatio: number; providerFailures: ProviderFailureCounts; falseFailures: number; falseCompletions: number }
+  >();
   for (const record of records) {
-    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 } };
+    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0 };
     entry.of += 1;
+    if (record.falseFailure) entry.falseFailures += 1;
+    if (record.falseCompletion) entry.falseCompletions += 1;
     if (record.grader.correct) entry.correct += 1;
     entry.peakContextRatio = Math.max(entry.peakContextRatio, record.peakContextRatio);
     for (const k of FAILURE_KEYS) entry.providerFailures[k] += record.providerFailures?.[k] ?? 0;
@@ -297,7 +306,9 @@ export function summarise(records: RunRecord[]): Summary {
       correct: v.correct,
       of: v.of,
       peakContextRatio: v.peakContextRatio,
-      providerFailures: v.providerFailures
+      providerFailures: v.providerFailures,
+      falseFailures: v.falseFailures,
+      falseCompletions: v.falseCompletions
     }))
     .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId));
 

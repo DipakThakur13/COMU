@@ -3,11 +3,23 @@ import fs from "node:fs";
 import path from "node:path";
 // Imported from source rather than the package entry: the runtime ships a bundle, and the
 // benchmark must exercise the code in this working tree.
-import { createRuntimeApp } from "../../apps/agent-runtime/src/server.js";
+import { createRuntimeApp, resolveTaskLimits } from "../../apps/agent-runtime/src/server.js";
 import { fixturesRoot, loadFixtures } from "./fixture.js";
 import { executeFixture } from "./execute.js";
 import { summarise } from "./metrics.js";
-import { acquireRunLock, appendRecord, killedByProvider, latestPerCell, readJournal, writeRun } from "./report.js";
+import {
+  acquireRunLock,
+  appendMixedLimitsMarker,
+  appendRecord,
+  killedByProvider,
+  latestPerCell,
+  readJournal,
+  readJournalMarkers,
+  readAnnotations,
+  annotate,
+  writeRun
+} from "./report.js";
+import { describeLimitDifferences, limitDifferences } from "./resume.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
 import { assertNoSecretInArgv, loadLocalEnv } from "./secrets.js";
@@ -38,6 +50,14 @@ interface Args {
   reportOnly: boolean;
   /** Measure again any cell the provider killed, rather than letting it stand as a result. */
   redoProviderFailures: boolean;
+  /** Resume under a budget that differs from the journal's, and mark the journal as mixed. */
+  acceptMixedLimits: boolean;
+}
+
+/** The journal's mixed-budget markers, as the optional field of a run: absent when there are none. */
+function mixedLimitsOf(outDir: string, label: string): Pick<BenchmarkRun, "mixedLimits"> {
+  const markers = readJournalMarkers(outDir, label);
+  return markers.length > 0 ? { mixedLimits: markers } : {};
 }
 
 function parseArgs(argv: string[]): Args {
@@ -59,7 +79,8 @@ function parseArgs(argv: string[]): Args {
     limits: parseLimits(get("limits")),
     concurrency: Math.max(1, Number(get("concurrency") ?? 1)),
     reportOnly: argv.includes("--report-only"),
-    redoProviderFailures: argv.includes("--redo-provider-failures")
+    redoProviderFailures: argv.includes("--redo-provider-failures"),
+    acceptMixedLimits: argv.includes("--accept-mixed-limits")
   };
 }
 
@@ -143,9 +164,10 @@ async function main(): Promise<void> {
       gitCommit: gitCommit(),
       reps: args.reps,
       concurrency: args.concurrency,
-      records
+      records,
+      ...mixedLimitsOf(args.outDir, args.label)
     };
-    const written = writeRun(run, args.outDir);
+    const written = writeRun(annotate(run, readAnnotations(args.outDir, args.label)), args.outDir);
     console.log(`Re-rendered ${records.length} records from the journal.`);
     console.log(`Wrote ${written.jsonPath}`);
     console.log(`Wrote ${written.markdownPath}`);
@@ -212,6 +234,44 @@ async function main(): Promise<void> {
   }
   if (redo.length > 0) {
     console.log(`Re-measuring ${redo.length} the provider killed: ${redo.map(r => `${r.fixtureId} rep ${r.rep}`).join(", ")}`);
+  }
+
+  /*
+   * The budget is part of the instrument.
+   *
+   * Resolved exactly as the runtime resolves it, so an absent --limits compares as the runtime's
+   * defaults rather than as "nothing requested". That absence is how B0 lost ten cells.
+   */
+  if (!args.selftest && previous.length > 0) {
+    const incoming = new Map<string, Record<string, number>>();
+    for (const fixture of fixtures) {
+      const resolved = resolveTaskLimits(fixture.spec.limits ?? args.limits);
+      if (!resolved.ok) {
+        console.error(`Limits for ${fixture.spec.id} would be rejected by the runtime: ${resolved.message}`);
+        process.exit(1);
+      }
+      incoming.set(fixture.spec.id, resolved.limits as unknown as Record<string, number>);
+    }
+
+    const standing = previous.filter(r => !redoKeys.has(`${r.fixtureId}#${r.rep}`));
+    const differences = limitDifferences(standing, id => incoming.get(id));
+    if (differences.length > 0) {
+      console.error(`The journal for '${args.label}' was measured under a different budget:`);
+      for (const line of describeLimitDifferences(differences)) console.error(line);
+      if (!args.acceptMixedLimits) {
+        console.error(
+          "\nRefusing to resume: the records would not form one measurement. Repeat the journal's " +
+            "--limits, or pass --accept-mixed-limits to go ahead and mark the journal as mixed."
+        );
+        process.exit(1);
+      }
+      appendMixedLimitsMarker(
+        { journalEvent: "mixed_limits", acceptedAt: new Date().toISOString(), differences },
+        args.outDir,
+        args.label
+      );
+      console.error("Going ahead under --accept-mixed-limits. The journal is now marked as mixed.");
+    }
   }
 
   const records: RunRecord[] = [...previous];
@@ -338,9 +398,10 @@ async function main(): Promise<void> {
     gitCommit: gitCommit(),
     reps: args.reps,
     concurrency: args.concurrency,
-    records: latestPerCell(records)
+    records: latestPerCell(records),
+    ...mixedLimitsOf(args.outDir, args.label)
   };
-  const written = writeRun(run, args.outDir);
+  const written = writeRun(annotate(run, readAnnotations(args.outDir, args.label)), args.outDir);
   console.log(`\nWrote ${written.jsonPath}`);
   console.log(`Wrote ${written.markdownPath}`);
   releaseLock();

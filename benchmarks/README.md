@@ -51,6 +51,13 @@ they cannot reach the shell, and the shell is the only place a key has actually 
 
 Repetitions: five for B0, B1 and the final run; three for intermediate checks.
 
+Re-running a label resumes it from its journal. The budget is part of the measurement, so a resume
+must repeat the original `--limits`: leaving them off means the runtime's defaults, not "the same as
+before". A resume whose effective limits differ from the records already in the journal is refused,
+with the differences printed. `--accept-mixed-limits` goes ahead anyway and writes a marker into the
+journal, and the rendered result then states that its records were measured under more than one
+budget.
+
 Without a key, everything except the model call can still be exercised:
 
 ```bash

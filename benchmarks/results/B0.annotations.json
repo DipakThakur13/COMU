@@ -1,0 +1,13 @@
+{
+  "servedModel": {
+    "id": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "provider": "nvidia",
+    "launchedAs": "nvidia/nemotron-3-ultra-550b-a55b",
+    "reason": "That label was wrong. The runtime's defaultProviderFactory does not pass the requested modelId to the NVIDIA provider, which falls back to its built-in default, so every model request in this run was served by Nemotron 3.5 Lightning 30B-A3B, as the model field of each model_request.succeeded event shows. The records were written with the name the run was launched under; this report names the model that served them. The defect is recorded in docs/B0_FINDINGS.md."
+  },
+  "limitations": [
+    "Repair caveat: the repair budget (maxRepairTimeMs, 180 s) is measured from the start of the task, not the start of repair. Any verification failure more than three minutes into a task ends with REPAIR_TIMEOUT before a single repair attempt, so a failure class of REPAIR_TIMEOUT with 0 repair attempts reflects this defect, not repair exhausted.",
+    "T7 zeros are an instrument result, not a capability result. The read-only onboarding tasks are verified anyway, because verification requiredness is derived from prompt wording rather than from the task contract; both T7 TypeScript fixtures fail their own typecheck in their untouched state; and the rubric then scores whatever text the failed run left. Peak context in T7 stayed at 1.7-5.2% of the window. See docs/B0_FINDINGS.md.",
+    "The typecheck signal carries no information for T1-T4. Those fixtures declare their typecheck as node --check, which in Node 22.14 exits 0 on any file containing an export without checking it. A passing typecheck there says nothing about the code. Correctness is unaffected: the grader runs the tests, not the typecheck."
+  ]
+}
