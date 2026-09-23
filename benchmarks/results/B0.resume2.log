@@ -4436,3 +4436,360 @@ Re-measuring 11 the provider killed: t3-ts-extract rep 1, t4-ts-async rep 1, t7-
   delta: ' points',
   index: 62
 }
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165874750-req-1790165723175-gb45ek8-reasoning-63',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:54.750Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' in',
+  index: 63
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165875540-req-1790165723175-gb45ek8-reasoning-64',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:55.540Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' wrong',
+  index: 64
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165876413-req-1790165723175-gb45ek8-reasoning-65',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:56.413Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' direction',
+  index: 65
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165877300-req-1790165723175-gb45ek8-reasoning-66',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:57.300Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.\n\n',
+  index: 66
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165878206-req-1790165723175-gb45ek8-reasoning-67',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:58.206Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'We',
+  index: 67
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165879110-req-1790165723175-gb45ek8-reasoning-68',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:17:59.110Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' need',
+  index: 68
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165880134-req-1790165723175-gb45ek8-reasoning-69',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:00.134Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' to',
+  index: 69
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165880951-req-1790165723175-gb45ek8-reasoning-70',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:00.951Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' explore',
+  index: 70
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165881898-req-1790165723175-gb45ek8-reasoning-71',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:01.898Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' code',
+  index: 71
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165882843-req-1790165723175-gb45ek8-reasoning-72',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:02.843Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: 'base',
+  index: 72
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165883805-req-1790165723175-gb45ek8-reasoning-73',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:03.805Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' to',
+  index: 73
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165884770-req-1790165723175-gb45ek8-reasoning-74',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:04.770Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' identify',
+  index: 74
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165885760-req-1790165723175-gb45ek8-reasoning-75',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:05.760Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' modules',
+  index: 75
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165886750-req-1790165723175-gb45ek8-reasoning-76',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:06.750Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 76
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165887749-req-1790165723175-gb45ek8-reasoning-77',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:07.749Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' Let',
+  index: 77
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165888758-req-1790165723175-gb45ek8-reasoning-78',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:08.758Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: "'s",
+  index: 78
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165889791-req-1790165723175-gb45ek8-reasoning-79',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:09.791Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' start',
+  index: 79
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165890820-req-1790165723175-gb45ek8-reasoning-80',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:10.820Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' by',
+  index: 80
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165891861-req-1790165723175-gb45ek8-reasoning-81',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:11.861Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' listing',
+  index: 81
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165892915-req-1790165723175-gb45ek8-reasoning-82',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:12.915Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' directory',
+  index: 82
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165893979-req-1790165723175-gb45ek8-reasoning-83',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:13.979Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: ' structure',
+  index: 83
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165895046-req-1790165723175-gb45ek8-reasoning-84',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:15.046Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'reasoning',
+  delta: '.',
+  index: 84
+}
+[Event model.token_delta] {
+  type: 'model.token_delta',
+  eventId: 'evt-1790165900344-req-1790165723175-gb45ek8-text-0',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:20.344Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  channel: 'main',
+  subagentId: undefined,
+  kind: 'text',
+  delta: '\n',
+  index: 0
+}
+[Event model_request.succeeded] {
+  type: 'model_request.succeeded',
+  eventId: 'evt-1790165900633-fvep',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:20.633Z',
+  requestId: 'req-1790165723175-gb45ek8',
+  runId: 'task-1790165723160-olhkh0',
+  attempt: 1,
+  latencyMs: 177457,
+  usage: { promptTokens: 1193, completionTokens: 110, totalTokens: 1303 },
+  costUsd: undefined,
+  model: 'nvidia/nemotron-3.5-lightning-30b-a3b'
+}
+[Event plan.step.completed] {
+  type: 'plan.step.completed',
+  eventId: 'evt-1790165900635',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:20.635Z',
+  planId: 'plan-1790165723175-y3woh',
+  planVersion: 1,
+  stepId: 'step-1-investigate',
+  resultSummary: undefined
+}
+[Event plan.step.started] {
+  type: 'plan.step.started',
+  eventId: 'evt-1790165900635',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:20.635Z',
+  planId: 'plan-1790165723175-y3woh',
+  planVersion: 1,
+  stepId: 'step-2-implement'
+}
+[Event agent.status] {
+  type: 'agent.status',
+  eventId: 'evt-1790165900635-vrd4ch4h2c',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:20.635Z',
+  status: 'Thinking...',
+  state: 'THINKING'
+}
+[Event model_request.created] {
+  type: 'model_request.created',
+  eventId: 'evt-1790165900635-xexn',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:20.635Z',
+  requestId: 'req-1790165900635-jjx0ct1',
+  runId: 'task-1790165723160-olhkh0',
+  attempt: 1
+}
+[Event model_request.started] {
+  type: 'model_request.started',
+  eventId: 'evt-1790165900635-ke8z',
+  taskId: 'task-1790165723160-olhkh0',
+  timestamp: '2026-09-23T12:18:20.635Z',
+  requestId: 'req-1790165900635-jjx0ct1',
+  runId: 'task-1790165723160-olhkh0',
+  attempt: 1
+}
