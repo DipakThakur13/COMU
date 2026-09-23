@@ -39,6 +39,7 @@ import editSvg from "@vscode/codicons/src/icons/edit.svg?raw";
 import newFileSvg from "@vscode/codicons/src/icons/new-file.svg?raw";
 import closeSvg from "@vscode/codicons/src/icons/close.svg?raw";
 import historySvg from "@vscode/codicons/src/icons/history.svg?raw";
+import folderSvg from "@vscode/codicons/src/icons/folder.svg?raw";
 
 const SOURCES = {
   check: checkSvg,
@@ -68,7 +69,8 @@ const SOURCES = {
   edit: editSvg,
   create: newFileSvg,
   close: closeSvg,
-  history: historySvg
+  history: historySvg,
+  folder: folderSvg
 } as const;
 
 export type IconName = keyof typeof SOURCES;

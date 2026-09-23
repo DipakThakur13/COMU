@@ -156,7 +156,16 @@ export interface TaskStartedEvent extends AgentEventBase {
 
 export interface AgentStatusEvent extends AgentEventBase {
   type: "agent.status";
+  /** The sentence the runtime uses for this transition, e.g. "Executing tools...". */
   status: string;
+  /**
+   * The state machine's own name for what it moved to, e.g. "TOOL_CALLING".
+   *
+   * `status` is a message written for a log, and a consumer that has to infer the state from its
+   * wording gets it wrong as soon as the wording changes. The state belongs to the interface's
+   * live status line; the message does not belong in history at all.
+   */
+  state?: string;
 }
 
 /** Published once per task when the interaction mode is settled, whether chosen by the user or classified. */
@@ -171,11 +180,25 @@ export interface TaskModeResolvedEvent extends AgentEventBase {
 export interface ToolStartedEvent extends AgentEventBase {
   type: "tool.started";
   tool: string;
+  /**
+   * The one thing this call is about: a path, a directory, a search query or a command line.
+   *
+   * Bounded and deliberately not the argument object. An interface that only knows the tool's
+   * name can say nothing more useful than the tool's name, which is how "Generic started:
+   * list_directory" happened; carrying the whole arguments would put file content into the event
+   * stream, which is not the interface's business.
+   */
+  target?: string;
+  /** The model's id for this call, so a completion can be paired with its start. */
+  toolCallId?: string;
 }
 
 export interface ToolCompletedEvent extends AgentEventBase {
   type: "tool.completed";
   tool: string;
+  /** See ToolStartedEvent.target. */
+  target?: string;
+  toolCallId?: string;
   result?: any;
 }
 
@@ -183,6 +206,9 @@ export interface ChangeCreatedEvent extends AgentEventBase {
   type: "change.created";
   path: string;
   operation: "CREATE" | "MODIFY";
+  /** Lines added and removed against what was on disk before the task touched the file. */
+  additions?: number;
+  deletions?: number;
 }
 
 export interface TaskCompletedEvent extends AgentEventBase {

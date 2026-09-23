@@ -65,9 +65,10 @@ describe("Which surfaces exist", () => {
     expect(availableTabs(session({ taskId: "t1", status: "running" })).map(t => t.id)).toEqual([]);
   });
 
-  it("offers Overview once the task has an outcome", () => {
-    expect(availableTabs(session({ taskId: "t1", status: "completed" })).map(t => t.id)).toContain("overview");
-    expect(availableTabs(session({ finalText: "Done." })).map(t => t.id)).toContain("overview");
+  it("offers Overview once the task has something to summarise", () => {
+    // A task that simply finished has nothing here the stream and the header did not already say.
+    expect(availableTabs(session({ taskId: "t1", status: "completed" })).map(t => t.id)).toEqual([]);
+    expect(availableTabs(session({ approvals: [{ decision: "DENIED" } as never] })).map(t => t.id)).toContain("overview");
     expect(availableTabs(session({ error: { code: "E", message: "m" } })).map(t => t.id)).toContain("overview");
   });
 
@@ -79,7 +80,7 @@ describe("Which surfaces exist", () => {
   });
 
   it("keeps a stable order so a tab does not move under the pointer as content arrives", () => {
-    const all = availableTabs(session({ taskId: "t", status: "completed", verification, memory, workers }));
+    const all = availableTabs(session({ taskId: "t", status: "failed", error: { code: "E", message: "m" }, verification, memory, workers }));
     expect(all.map(t => t.id)).toEqual(["overview", "verification", "workers", "memory"]);
   });
 });
@@ -92,7 +93,7 @@ describe("Opening and closing", () => {
   });
 
   it("labels every tab in words, never an icon alone", () => {
-    draw(session({ taskId: "t", status: "completed", verification, memory, workers }));
+    draw(session({ taskId: "t", status: "failed", error: { code: "E", message: "m" }, verification, memory, workers }));
     for (const name of ["Overview", "Verification", "Workers", "Memory"]) {
       expect(screen.getByRole("tab", { name: new RegExp(name) }).textContent).toContain(name);
     }
@@ -224,8 +225,8 @@ describe("Overview", () => {
   });
 
   it("says so rather than rendering an empty panel when there is nothing to summarise", () => {
-    // Reachable only by opening Overview directly; availableTabs would not offer it.
-    draw(session({ taskId: "t", status: "completed" }), "overview");
+    // A task stopped before it produced anything still earns the tab, and the panel says so.
+    draw(session({ taskId: "t", status: "cancelled" }), "overview");
     expect(screen.getByText("Nothing to summarise yet")).toBeTruthy();
   });
 });

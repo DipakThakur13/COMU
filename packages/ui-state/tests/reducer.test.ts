@@ -262,24 +262,36 @@ describe("reduceEvent: workers and changes", () => {
 
   it("has no per-change decision field, because nothing reverts a written file", () => {
     const state = reduceEvent(createInitialSessionState(), ev("change.created", { path: "a.ts", operation: "CREATE" }));
-    expect(Object.keys(state.changes[0])).toEqual(["path", "operation"]);
+    expect(Object.keys(state.changes[0]).sort()).toEqual(["additions", "deletions", "operation", "path"]);
+    expect(Object.keys(state.changes[0])).not.toContain("decision");
   });
 });
 
 describe("activity grouping and bounds", () => {
   it("collapses consecutive reads into one group and breaks the run on a different activity", () => {
     const state = reduceAll([
-      ev("tool.completed", { tool: "read_file", path: "a.ts" }),
-      ev("tool.completed", { tool: "read_file", path: "b.ts" }),
-      ev("tool.completed", { tool: "read_file", path: "c.ts" }),
-      ev("tool.completed", { tool: "write_file", path: "d.ts" }),
-      ev("tool.completed", { tool: "read_file", path: "e.ts" })
+      ev("tool.completed", { tool: "read_file", target: "a.ts", result: { path: "a.ts" } }),
+      ev("tool.completed", { tool: "read_file", target: "b.ts", result: { path: "b.ts" } }),
+      ev("tool.completed", { tool: "read_file", target: "c.ts", result: { path: "c.ts" } }),
+      ev("change.created", { path: "d.ts", operation: "MODIFY", additions: 2, deletions: 1 }),
+      ev("tool.completed", { tool: "read_file", target: "e.ts", result: { path: "e.ts" } })
     ]);
     expect(state.activity).toHaveLength(3);
     const group = state.activity[0];
     expect(isActivityGroup(group)).toBe(true);
     expect((group as any).items).toHaveLength(3);
     expect(group.title).toBe("Read 3 files");
+    // The count is not the whole story: the first subject is named and the rest are counted.
+    expect(group.shortDescription).toBe("a.ts +2 more");
+    expect(state.activity[1].title).toBe("Edited d.ts");
+    expect((state.activity[1] as any).metric).toBe("+2 −1");
+  });
+
+  it("keeps a group's identity as it grows, so expanding it does not collapse again", () => {
+    const first = reduceAll([ev("tool.completed", { tool: "read_file", target: "a.ts", result: { path: "a.ts" } }),
+      ev("tool.completed", { tool: "read_file", target: "b.ts", result: { path: "b.ts" } })]);
+    const grown = reduceEvent(first, ev("tool.completed", { tool: "read_file", target: "c.ts", result: { path: "c.ts" } }));
+    expect(grown.activity[0].id).toBe(first.activity[0].id);
   });
 
   it("caps the timeline at the runtime's own ceiling and counts what was elided", () => {

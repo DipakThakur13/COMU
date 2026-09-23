@@ -30,6 +30,8 @@ is usually the most useful part.
 | [0013](0013-no-shell-and-windows-shims.md) | No shell, ever — and what that costs on Windows | Command execution |
 | [0014](0014-a-credential-never-reaches-the-shell.md) | The credential never reaches a command line, and everything written is checked first | Measurement |
 | [0015](0015-a-measurement-that-takes-hours-must-survive-hours.md) | A measurement that takes hours has to survive hours | Measurement |
+| [0016](0016-the-activity-stream-reports-work-not-state.md) | The activity stream reports the agent's work, not the orchestrator's state | Extension ↔ webview |
+| [0017](0017-meaning-travels-in-a-typed-field-not-in-a-display-string.md) | Meaning travels in a typed field, never in a display string | Events and contracts |
 
 ## What belongs here
 

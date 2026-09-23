@@ -111,10 +111,13 @@ export function App() {
               entries={session.activity}
               elidedCount={session.elidedCount}
               streamingText={session.streaming?.text}
+              live={session.live}
               expandedIds={ui.expandedActivityIds}
               onToggle={store.toggleExpanded}
               status={session.status}
               onSaveCode={store.saveCode}
+              onOpenFile={store.openFile}
+              onRequestDiff={store.requestDiff}
               emptyContent={
                 session.taskId ? undefined : (
                   <Onboarding

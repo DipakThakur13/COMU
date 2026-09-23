@@ -54,6 +54,7 @@ export type ActivityCategory =
 
 export type ToolCategory =
   | "Read"
+  | "Explore"
   | "Search"
   | "Edit"
   | "Write"
@@ -68,13 +69,35 @@ export type ToolCategory =
 
 export type ActivityStatus = "completed" | "active" | "pending" | "warning" | "failed";
 
+/**
+ * How loudly a row speaks.
+ *
+ * The stream used to give a failure, an edit and a directory listing the same grey dot, so the one
+ * row a person needed was the hardest to find. Every row now declares which of three levels it
+ * belongs to and the interface renders each level differently:
+ *
+ * - `outcome`  — the task finished, failed, or is blocked on a person. Bordered, unmissable.
+ * - `substance`— work that changed something or decided something: edits, commands, verification.
+ * - `routine`  — looking around: reads, searches, directory listings. Dimmed, and folded into
+ *                counts when consecutive.
+ */
+export type ActivityLevel = "outcome" | "substance" | "routine";
+
 export interface ActivityItem {
   id: string;
   category: ActivityCategory;
   toolCategory?: ToolCategory;
+  level: ActivityLevel;
   status: ActivityStatus;
   title: string;
   shortDescription?: string;
+  /**
+   * The row's one measurement, shown right-aligned: "+12 −3", "2 failed", "18 matches".
+   *
+   * Undefined when there is nothing to measure. A slot that renders "unknown" is worse than no
+   * slot, so there is no placeholder value here and never an empty string.
+   */
+  metric?: string;
   timestamp: string;
   durationMs?: number;
   details?: Record<string, unknown>;
@@ -85,9 +108,11 @@ export interface ActivityGroup {
   isGroup: true;
   category: ActivityCategory;
   toolCategory: ToolCategory;
+  level: ActivityLevel;
   status: ActivityStatus;
   title: string;
   shortDescription?: string;
+  metric?: string;
   items: ActivityItem[];
   timestamp: string;
 }
@@ -164,6 +189,21 @@ export interface ApprovalView {
   expiresAt: string;
 }
 
+/**
+ * What is happening right now.
+ *
+ * "Thinking", "Executing tools" and "Observing results" are not events: they are the absence of
+ * one. They belong in a single line that updates in place and disappears when the task ends, not
+ * in a history that keeps every state the loop passed through. Nothing here is ever appended to
+ * the activity stream.
+ */
+export interface LiveStatus {
+  /** One phrase, in words a person would use: "Thinking", "Reading login.ts", "Running npm test". */
+  label: string;
+  /** When this phase began, so the line can count up without the reducer holding a clock. */
+  startedAt: string;
+}
+
 /** The assistant's turn as it is being generated. Folded into the activity stream when it ends. */
 export interface StreamingView {
   requestId: string;
@@ -227,6 +267,10 @@ export interface SessionState {
   /** Activity items dropped from the front once the cap was reached. */
   elidedCount: number;
   streaming?: StreamingView;
+  /** The live status line. Undefined whenever the task is not running. */
+  live?: LiveStatus;
+  /** The limit the runtime reported, so the outcome can say why in plain language. */
+  limit?: string;
 
   changes: ChangeView[];
   workingSet: WorkingSetView;

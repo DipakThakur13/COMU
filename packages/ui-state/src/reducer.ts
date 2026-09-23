@@ -1,6 +1,6 @@
 import { AgentEvent, TaskAutonomy } from "@comu/protocol";
 import { appendActivity, groupActivity } from "./group.js";
-import { eventKey, normalizeEvent } from "./normalize.js";
+import { categorizeToolName, describeFailure, eventKey, humanAgentState, liveToolLabel, normalizeEvent } from "./normalize.js";
 import {
   ActivityEntry,
   ActivityItem,
@@ -52,6 +52,7 @@ export function startTask(
   next.status = "running";
   next.agentState = "STARTING";
   next.timing = { startedAt: Date.now(), waitingMs: 0 };
+  next.live = { label: "Starting", startedAt: new Date().toISOString() };
   if (input.mode && input.mode !== "AUTO") {
     next.mode = input.mode as SessionState["mode"];
     next.modeSource = "explicit";
@@ -121,6 +122,7 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
       next.status = "running";
       next.agentState = "STARTING";
       next.timing = { ...next.timing, startedAt: next.timing.startedAt ?? (Date.parse(e.timestamp) || undefined) };
+      next.live = { label: "Starting", startedAt: e.timestamp };
       break;
 
     case "task.mode_resolved":
@@ -128,24 +130,48 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
       next.modeSource = e.source;
       break;
 
+    /*
+     * A status is what is happening now, so it lands in the live line and nowhere else.
+     *
+     * The state is read from the event's own `state` field rather than inferred from the wording
+     * of its message, which is how "Executing tools..." ended up being both the header's idea of
+     * the state and a permanent row of history. The message is still honoured for a runtime that
+     * predates the field.
+     */
     case "agent.status": {
       const raw = String(e.status || "");
       const upper = raw.toUpperCase();
-      if (KNOWN_AGENT_STATES.has(upper)) next.agentState = upper as SessionState["agentState"];
-      if (upper.startsWith("WAITING")) {
+      const declared = typeof e.state === "string" ? e.state.toUpperCase() : undefined;
+      const state = declared && KNOWN_AGENT_STATES.has(declared) ? declared : KNOWN_AGENT_STATES.has(upper) ? upper : undefined;
+
+      if (state) next.agentState = state as SessionState["agentState"];
+      if (state === "WAITING_FOR_USER" || upper.startsWith("WAITING")) {
         next.status = "waiting_for_user";
-      } else if (upper === "COMPLETED") {
+      } else if (state === "COMPLETED" || upper === "COMPLETED") {
         next.agentState = "COMPLETED";
-      } else if (upper === "FAILED") {
+      } else if (state === "FAILED" || upper === "FAILED") {
         next.agentState = "FAILED";
-      } else if (next.status === "waiting_for_user" && upper !== "CANCELLED") {
+      } else if (next.status === "waiting_for_user" && state !== "CANCELLED" && upper !== "CANCELLED") {
         next.status = "running";
       }
+
+      next.live = TERMINAL_AGENT_STATES.has(next.agentState)
+        ? undefined
+        : { label: humanAgentState(state) ?? cleanStatusMessage(raw), startedAt: e.timestamp };
       break;
     }
 
+    case "tool.started":
+      next.live = { label: liveToolLabel(String(e.tool || ""), e.target), startedAt: e.timestamp };
+      break;
+
     case "change.created":
-      next.changes = upsertChange(next.changes, { path: e.path, operation: e.operation });
+      next.changes = upsertChange(next.changes, {
+        path: e.path,
+        operation: e.operation,
+        additions: e.additions,
+        deletions: e.deletions
+      });
       next.workingSet = noteModified(next.workingSet, e.path);
       break;
 
@@ -219,6 +245,10 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
       const interaction = e.interaction;
       next.pendingInteraction = interaction;
       next.status = "waiting_for_user";
+      // The card is the live state while it is on screen, full width and with its own countdown.
+      // A status line underneath it saying the same thing is the repetition this panel is short of
+      // room for. The next transition after the decision sets the line again.
+      next.live = undefined;
       if (interaction?.type === "APPROVAL") {
         next.pendingApproval = {
           interactionId: interaction.interactionId,
@@ -265,15 +295,24 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
       next.timing = { ...next.timing, endedAt: Date.parse(e.timestamp) || Date.now() };
       next.pendingApproval = undefined;
       next.pendingInteraction = undefined;
+      next.live = undefined;
+      // The answer is printed once. A reply that streamed into the stream grows into its final
+      // text in place; one that never streamed gets the row it never had.
+      next = foldFinalText(next, e.finalText, e.timestamp);
       break;
 
     case "task.failed":
       next.status = "failed";
       next.agentState = "FAILED";
-      next.error = { code: e.payload?.code || "TASK_FAILED", message: e.payload?.message || e.error || "Task failed" };
+      next.error = {
+        code: e.payload?.code || (next.limit ? "LIMIT_REACHED" : "TASK_FAILED"),
+        message: e.payload?.message || e.error || "Task failed",
+        hint: next.limit ? "Raise the limit or split the task." : undefined
+      };
       next.timing = { ...next.timing, endedAt: Date.parse(e.timestamp) || Date.now() };
       next.pendingApproval = undefined;
       next.pendingInteraction = undefined;
+      next.live = undefined;
       break;
 
     case "task.cancelled":
@@ -282,10 +321,21 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
       next.timing = { ...next.timing, endedAt: Date.parse(e.timestamp) || Date.now() };
       next.pendingApproval = undefined;
       next.pendingInteraction = undefined;
+      next.live = undefined;
       break;
 
+    /*
+     * A limit is not an event a person needs in their history; it is the reason the failure that
+     * follows will give. Recording it here is what lets one row say "Failed · time limit reached"
+     * instead of two rows saying "Max execution time reached" and "Task failed: LIMIT_REACHED".
+     */
     case "agent.limit_reached":
-      next.error = { code: "LIMIT_REACHED", message: `Limit reached: ${e.limit}`, hint: "Raise the limit or split the task." };
+      next.limit = e.limit;
+      next.error = {
+        code: "LIMIT_REACHED",
+        message: describeFailure({ code: "LIMIT_REACHED", message: "" }, e.limit) ?? `Limit reached: ${e.limit}`,
+        hint: "Raise the limit or split the task."
+      };
       break;
 
     default:
@@ -297,7 +347,9 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
     next.workingSet = noteInspected(next.workingSet, inspected);
   }
 
-  const item = normalizeEvent(event);
+  // The second pass: what the agent did, rather than which state the loop was in when it did it.
+  // The mode and the limit are the context that decides whether an event earns a row at all.
+  const item = normalizeEvent(event, { mode: next.mode, limit: next.limit });
   if (item) {
     next = withActivity(next, item);
   }
@@ -313,9 +365,14 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
 function inspectedPath(event: AgentEvent): string | undefined {
   if (event.type !== "tool.started" && event.type !== "tool.completed") return undefined;
   const e = event as any;
-  const candidate = e.path ?? e.filePath ?? e.result?.path ?? e.result?.filePath;
+  // `target` is whatever the call was about, which for a search is a query and for a command is a
+  // command line. Only the tools whose subject is a file may contribute one.
+  const targetIsPath = FILE_TOOL_CATEGORIES.has(categorizeToolName(String(e.tool || "")));
+  const candidate = e.path ?? e.filePath ?? e.result?.path ?? e.result?.filePath ?? (targetIsPath ? e.target : undefined);
   return typeof candidate === "string" && candidate ? candidate : undefined;
 }
+
+const FILE_TOOL_CATEGORIES = new Set(["Read", "Edit", "Write", "Create"]);
 
 /** Newest first, de-duplicated, bounded. */
 function noteInspected(set: WorkingSetView, path: string): WorkingSetView {
@@ -391,16 +448,47 @@ function foldStreamingRequest(state: SessionState, requestId: string): { streami
   if (!current || current.requestId !== requestId || !current.text.trim()) {
     return { streaming: current && current.requestId === requestId ? undefined : current, activity: state.activity };
   }
-  const item: ActivityItem = {
-    id: `msg-${requestId}`,
+  const item = messageItem(`msg-${requestId}`, current.text.trim(), current.startedAt, current.reasoning || undefined);
+  return { streaming: undefined, activity: capActivity(appendActivity(state.activity, item)).entries };
+}
+
+function messageItem(id: string, text: string, timestamp: string, reasoning?: string): ActivityItem {
+  return {
+    id,
     category: "AGENT_MESSAGE",
+    level: "substance",
     status: "completed",
     title: "Assistant",
-    shortDescription: current.text.trim(),
-    timestamp: current.startedAt,
-    details: { text: current.text.trim(), reasoning: current.reasoning || undefined }
+    shortDescription: text,
+    timestamp,
+    details: { text, reasoning }
   };
-  return { streaming: undefined, activity: capActivity(appendActivity(state.activity, item)).entries };
+}
+
+/**
+ * Makes the reply that is already in the stream the final one, rather than printing it again.
+ *
+ * `task.completed` carries the whole answer, and the last assistant row usually holds the same
+ * answer as it streamed in. Replacing that row's text in place is the difference between a reply
+ * that grows into its final form and a reply that appears twice, once truncated in the stream and
+ * once in full in a panel below it.
+ */
+function foldFinalText(state: SessionState, finalText: string | undefined, timestamp: string): SessionState {
+  const text = (finalText || "").trim();
+  if (!text) return state;
+
+  for (let index = state.activity.length - 1; index >= 0; index--) {
+    const entry = state.activity[index];
+    if (isActivityGroup(entry) || entry.category !== "AGENT_MESSAGE") continue;
+    const streamed = (entry.shortDescription || "").trim();
+    // The same answer, or the beginning of it: the row is the reply, so it becomes the whole reply.
+    if (!text.startsWith(streamed) && !streamed.startsWith(text)) break;
+    const merged = messageItem(entry.id, text, entry.timestamp, (entry.details as any)?.reasoning);
+    return { ...state, activity: state.activity.map((e, i) => (i === index ? merged : e)) };
+  }
+
+  const { entries } = capActivity(appendActivity(state.activity, messageItem(`msg-final`, text, timestamp)));
+  return { ...state, activity: entries };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -412,6 +500,15 @@ const KNOWN_AGENT_STATES = new Set([
   "OBSERVING", "VERIFYING", "DIAGNOSING", "REPAIRING", "WAITING_FOR_USER", "COMPLETED",
   "FAILED", "CANCELLED", "LIMIT_REACHED"
 ]);
+
+/** Once the task is in one of these there is no "now" left to report, so the live line goes away. */
+const TERMINAL_AGENT_STATES = new Set(["COMPLETED", "FAILED", "CANCELLED", "LIMIT_REACHED"]);
+
+/** A runtime message written for a log, trimmed to something a status line can say. */
+function cleanStatusMessage(message: string): string {
+  const trimmed = message.replace(/\.{3}$/, "").trim();
+  return trimmed || "Working";
+}
 
 function withActivity(state: SessionState, item: ActivityItem): SessionState {
   const { entries, elided } = capActivity(appendActivity(state.activity, item));

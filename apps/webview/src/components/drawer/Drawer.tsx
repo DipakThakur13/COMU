@@ -51,15 +51,17 @@ export function availableTabs(session: SessionState): DrawerTab[] {
 /**
  * Overview earns a tab once the task has produced something to summarise. A task that has only
  * just started has its status in the header already, so opening a drawer for it says nothing new.
+ *
+ * The final reply is deliberately not one of these: it lives in the stream, and a tab that only
+ * ever repeated it was half of why the answer was printed twice.
  */
 function hasOverview(session: SessionState): boolean {
   return Boolean(
-    session.finalText ||
-      session.error ||
+    session.error ||
       session.diagnosis ||
       session.repairs.length > 0 ||
       session.approvals.length > 0 ||
-      (session.taskId && session.status !== "running" && session.status !== "idle")
+      session.status === "cancelled"
   );
 }
 

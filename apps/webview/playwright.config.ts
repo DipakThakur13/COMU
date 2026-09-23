@@ -23,8 +23,29 @@ export default defineConfig({
 
   expect: {
     toHaveScreenshot: {
-      // A small tolerance absorbs sub-pixel text antialiasing without hiding a layout change.
-      maxDiffPixelRatio: 0.01,
+      /*
+       * No changed pixel is acceptable, and none is needed.
+       *
+       * This used to be `maxDiffPixelRatio: 0.01`, which sounds strict and is not: the panel is
+       * 400x840, so one percent is 3,360 pixels, and at 900px wide it is 7,560. Measured against
+       * this suite, renaming the status pill from "Completed" to "Finished" changes 144 pixels and
+       * altering the separators on the header's second line changes 31 to 290. Every one of those
+       * fits inside the old ceiling, which is how a rewritten header line was absorbed silently
+       * while the suite reported 163 passing.
+       *
+       * Zero is achievable because every source of variation is held still rather than tolerated:
+       * the clock is fixed (`setFixedTime`, not `install`, which still advances), animations are
+       * disabled, the caret is hidden, motion is reduced, and the device scale is pinned. Three
+       * consecutive runs produce byte-identical renders.
+       *
+       * If a future renderer introduces genuine sub-pixel noise, find what varies and freeze it,
+       * or `mask` that one element in the assertion that needs it. Do not raise this number: a
+       * ceiling in pixels is a budget for changes nobody will see, and the changes that matter
+       * here are of exactly that size.
+       */
+      maxDiffPixels: 0,
+      // Per-pixel colour distance before a pixel counts as different at all. Absorbs a rounding
+      // difference in a blended colour without absorbing a glyph.
       threshold: 0.2,
       animations: "disabled",
       caret: "hide"

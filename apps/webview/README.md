@@ -22,7 +22,7 @@ Everything is in the URL, so a state worth looking at can be shared as a link:
 
 | Parameter | Values |
 | --- | --- |
-| `fixture` | `idle`, `running`, `approval`, `completed`, `failed`, `long` |
+| `fixture` | `idle`, `running`, `approval`, `approval-create`, `approval-command`, `approval-push`, `completed`, `chat`, `changes`, `drawer`, `failed`, `long` |
 | `theme` | `dark`, `light`, `hc-dark`, `hc-light` |
 | `width` | `280`, `340`, `400`, `900`, `full` |
 | `speed` | `0` (instant), `40`, `120`, `400` ms between events |
@@ -46,6 +46,11 @@ imported, so none of it reaches the production bundle.
 - **Design for 280px first.** Nothing may break mid-word or overflow horizontally. Test at 280,
   340, 400 and 900.
 - **Motion is functional only** and respects `prefers-reduced-motion`.
+- **A row is something that happened.** What is happening *now* belongs to the live status line
+  pinned below the stream, which is replaced in place and disappears with the task. The three row
+  levels — outcome, substance, routine — are what make a failure impossible to mistake for a
+  directory listing. See
+  [decision 0016](../../docs/decisions/0016-the-activity-stream-reports-work-not-state.md).
 
 ## State
 

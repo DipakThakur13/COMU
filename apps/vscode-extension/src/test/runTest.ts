@@ -3,7 +3,10 @@ import { runTests } from '@vscode/test-electron';
 
 async function main() {
     try {
-        const extensionDevelopmentPath = path.resolve(__dirname, '../../../');
+        // The extension's own root, two levels up from dist/test. It used to be three, which
+        // pointed VS Code at apps/ and worked only because VS Code went looking for a manifest
+        // inside it; a sibling app acquiring an `engines.vscode` would have broken the suite.
+        const extensionDevelopmentPath = path.resolve(__dirname, '../../');
         const extensionTestsPath = path.resolve(__dirname, './suite/index');
 
         await runTests({

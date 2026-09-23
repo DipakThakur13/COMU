@@ -17,6 +17,7 @@ const FIXTURES = [
   "approval-command",
   "approval-push",
   "completed",
+  "chat",
   "changes",
   "failed",
   "settings",
@@ -46,11 +47,17 @@ const SETTINGS = new Set<string>(["settings"]);
 const THEMES = ["dark", "light", "hc-dark"] as const;
 const WIDTHS = [280, 400, 900] as const;
 
-/** Fixed so the elapsed clock and any date formatting are the same on every run. */
+/**
+ * Fixed so the elapsed clock and any date formatting are the same on every run.
+ *
+ * `setFixedTime`, not `install`: an installed clock still advances, so the elapsed seconds in the
+ * header and the live status line rendered a second or two apart between runs. That was the whole
+ * of the measured run-to-run noise, and it is the reason the tolerance used to need to be loose.
+ */
 const FROZEN_NOW = new Date("2026-09-20T10:04:30.000Z");
 
 async function openPanel(page: Page, fixture: string, theme: string, width: number) {
-  await page.clock.install({ time: FROZEN_NOW });
+  await page.clock.setFixedTime(FROZEN_NOW);
   const surface = SURFACE[fixture as (typeof FIXTURES)[number]];
   // speed=0 delivers the whole fixture at once: no paced replay, nothing in flight.
   const settings = SETTINGS.has(fixture) ? "&settings=1" : "";

@@ -29,18 +29,32 @@
 }
 
 /* ── Row ────────────────────────────────────────────────────────── */
+/*
+ * Three levels, three densities. Vertical space is the scarcest resource in a 350px panel, so
+ * routine work is compact and undecorated, substance gets a normal row, and only an outcome is
+ * allowed to take a block of its own.
+ */
 .row {
-  border-bottom: 1px solid color-mix(in srgb, var(--comu-border) 55%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--comu-border) 40%, transparent);
+}
+
+.row[data-level="routine"] {
+  border-bottom-color: transparent;
 }
 
 .rowHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--comu-space-2);
   width: 100%;
-  padding: var(--comu-space-2) var(--comu-space-3);
+  padding: 5px var(--comu-space-3);
   text-align: left;
   background: transparent;
+}
+
+.row[data-level="routine"] .rowHeader {
+  padding: 2px var(--comu-space-3);
+  color: var(--comu-text-muted);
 }
 
 .rowHeader:hover:not(:disabled) {
@@ -56,19 +70,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 18px;
-  margin-top: 1px;
-}
-
-.rowBody {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+  width: 14px;
+  flex: none;
 }
 
 .rowTitle {
+  flex: 1;
+  min-width: 0;
   font-size: var(--comu-text-sm);
   color: var(--comu-text);
   /* One line, truncated: a 280px panel must never break a path mid-word. */
@@ -77,16 +85,21 @@
   white-space: nowrap;
 }
 
-.rowSubtitle {
+.row[data-level="routine"] .rowTitle {
   font-size: var(--comu-text-xs);
   color: var(--comu-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* The row's one measurement. Never rendered when there is nothing to measure. */
+.rowMetric {
+  flex: none;
+  font-size: var(--comu-text-xs);
+  font-family: var(--comu-font-mono);
   white-space: nowrap;
 }
 
 .rowChevron {
-  margin-top: 3px;
+  flex: none;
   color: var(--comu-text-muted);
 }
 
@@ -99,24 +112,147 @@
   overflow-wrap: anywhere;
 }
 
-/* ── Assistant message ──────────────────────────────────────────── */
-.rowMessage {
+.detailAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: var(--comu-space-2);
+  padding: 0;
+  background: transparent;
+  color: var(--comu-text-link);
+  font-size: var(--comu-text-xs);
+  white-space: nowrap;
+}
+
+.detailAction:hover {
+  text-decoration: underline;
+}
+
+.rowDetailBlock {
+  padding: 0 var(--comu-space-3) var(--comu-space-2) 34px;
+}
+
+.rowDetailMeta {
+  margin: 0 0 var(--comu-space-1);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.outputPre {
+  margin: 0 0 var(--comu-space-1);
+  padding: var(--comu-space-1) var(--comu-space-2);
+  max-height: 220px;
+  overflow: auto;
+  border-radius: var(--comu-radius-sm);
+  background: var(--comu-surface-code);
+  font-family: var(--comu-font-mono);
+  font-size: var(--comu-text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── Outcome ────────────────────────────────────────────────────── */
+/*
+ * The one row that must never look like the rows above it. Bordered, tinted by its own status and
+ * full width, with the reason in the sentence a person would say rather than the runtime's code.
+ */
+.outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--comu-space-2);
+  margin: var(--comu-space-2) var(--comu-space-2);
+  padding: var(--comu-space-2);
+  border: 1px solid var(--comu-border);
+  border-radius: var(--comu-radius-md);
   background: var(--comu-surface-raised);
 }
 
-.messageClamped,
+.outcome[data-status="failed"] {
+  border-color: color-mix(in srgb, var(--comu-status-error) 55%, var(--comu-border));
+  background: var(--comu-tint-error);
+}
+
+.outcome[data-status="completed"] {
+  border-color: color-mix(in srgb, var(--comu-status-ok) 45%, var(--comu-border));
+  background: var(--comu-tint-ok);
+}
+
+.outcome[data-status="warning"] {
+  border-color: color-mix(in srgb, var(--comu-status-warn) 45%, var(--comu-border));
+  background: var(--comu-tint-warn);
+}
+
+.outcome[data-status="pending"] {
+  border-color: color-mix(in srgb, var(--comu-status-waiting) 45%, var(--comu-border));
+  background: var(--comu-tint-waiting);
+}
+
+.outcomeIcon {
+  display: flex;
+  align-items: center;
+  height: 18px;
+  flex: none;
+}
+
+.outcomeBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.outcomeTitle {
+  font-size: var(--comu-text-md);
+  font-weight: 600;
+  color: var(--comu-text);
+}
+
+.outcomeReason {
+  font-size: var(--comu-text-sm);
+  color: var(--comu-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* ── Live status line ───────────────────────────────────────────── */
+/*
+ * One line, replaced continuously, gone when the task ends. It sits outside the scroller so it
+ * cannot scroll away and cannot accumulate.
+ */
+.live {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-2);
+  padding: var(--comu-space-1) var(--comu-space-3);
+  border-top: 1px solid var(--comu-border);
+  background: var(--comu-surface-raised);
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+}
+
+.liveLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liveElapsed {
+  flex: none;
+  font-family: var(--comu-font-mono);
+}
+
+/* ── Assistant message ──────────────────────────────────────────── */
+.rowMessage {
+  padding: var(--comu-space-2) var(--comu-space-3);
+  background: var(--comu-surface-raised);
+}
+
 .messageFull {
   font-size: var(--comu-text-sm);
   color: var(--comu-text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.messageClamped {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .caret {
@@ -137,7 +273,7 @@
 }
 
 .reasoning {
-  padding: 0 var(--comu-space-3) var(--comu-space-2) 34px;
+  padding: var(--comu-space-1) 0 0;
   font-size: var(--comu-text-xs);
   color: var(--comu-text-muted);
 }
@@ -163,7 +299,7 @@
   display: flex;
   align-items: center;
   gap: var(--comu-space-2);
-  padding: 2px 0;
+  padding: 1px 0;
   font-size: var(--comu-text-xs);
   color: var(--comu-text-muted);
   min-width: 0;
@@ -175,12 +311,59 @@
   white-space: nowrap;
 }
 
+.groupItemLink {
+  padding: 0;
+  max-width: 100%;
+  background: transparent;
+  color: var(--comu-text-link);
+  font-size: var(--comu-text-xs);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupItemLink:hover {
+  text-decoration: underline;
+}
+
+/* ── Verification checks ────────────────────────────────────────── */
+.checkList {
+  margin: 0;
+  padding: 0 var(--comu-space-3) var(--comu-space-2) 34px;
+  list-style: none;
+}
+
+.checkItem {
+  display: flex;
+  align-items: center;
+  gap: var(--comu-space-2);
+  padding: 1px 0;
+  font-size: var(--comu-text-xs);
+  min-width: 0;
+}
+
+.checkName {
+  flex: 1;
+  min-width: 0;
+  color: var(--comu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkStatus {
+  flex: none;
+  color: var(--comu-text-muted);
+}
+
 /* ── Status colours ─────────────────────────────────────────────── */
 .statusOk { color: var(--comu-status-ok); }
 .statusRunning { color: var(--comu-status-running); }
 .statusWarn { color: var(--comu-status-warn); }
 .statusError { color: var(--comu-status-error); }
 .statusWaiting { color: var(--comu-status-waiting); }
+.statusMuted { color: var(--comu-text-muted); }
 
 /* ── Elided banner ──────────────────────────────────────────────── */
 .elided {
@@ -199,6 +382,11 @@
   position: absolute;
   right: var(--comu-space-3);
   bottom: var(--comu-space-2);
+}
+
+/* Clear of the live status line, which owns the bottom edge while a task runs. */
+.followAboveLive {
+  bottom: 30px;
 }
 
 /* ── Assistant message body ─────────────────────────────────────────────── */

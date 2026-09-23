@@ -183,17 +183,30 @@ const pushInteraction = {
 const startup: AgentEvent[] = [
   e("task.started"),
   e("task.mode_resolved", { mode: "AGENT", source: "explicit", confidence: 1, reasons: ["mode selected by user"] }),
-  e("agent.status", { status: "ANALYZING" }),
+  e("agent.status", { status: "Analyzing task and workspace requirements", state: "ANALYZING" }),
   e("memory.retrieved", { count: 2 }),
   e("plan.created", { planId: plan.planId, planVersion: 1, plan }),
   e("plan.step.started", { planId: plan.planId, planVersion: 1, stepId: "s1" }),
-  e("agent.status", { status: "THINKING" }),
-  e("tool.started", { tool: "search_text", pattern: "loginRouter" }),
-  e("tool.completed", { tool: "search_text", result: { matches: [{ file: "src/auth/login.ts", line: 4 }] } }),
-  e("tool.started", { tool: "read_file", path: "src/auth/login.ts" }),
-  e("tool.completed", { tool: "read_file", path: "src/auth/login.ts", result: { path: "src/auth/login.ts" } }),
-  e("tool.completed", { tool: "read_file", path: "src/auth/rate_limit.ts", result: { path: "src/auth/rate_limit.ts" } }),
-  e("tool.completed", { tool: "read_file", path: "src/server.ts", result: { path: "src/server.ts" } }),
+  e("agent.status", { status: "Thinking...", state: "THINKING" }),
+  e("agent.status", { status: "Executing tools...", state: "TOOL_CALLING" }),
+  e("tool.started", { tool: "list_directory", target: "src/auth", toolCallId: "c0" }),
+  e("tool.completed", {
+    tool: "list_directory",
+    target: "src/auth",
+    toolCallId: "c0",
+    result: [{ name: "login.ts" }, { name: "rate_limit.ts" }, { name: "session.ts" }]
+  }),
+  e("tool.started", { tool: "search_text", target: "loginRouter", toolCallId: "c1" }),
+  e("tool.completed", {
+    tool: "search_text",
+    target: "loginRouter",
+    toolCallId: "c1",
+    result: { matches: [{ path: "src/auth/login.ts", line: 4 }, { path: "src/server.ts", line: 18 }] }
+  }),
+  e("tool.started", { tool: "read_file", target: "src/auth/login.ts", toolCallId: "c2" }),
+  e("tool.completed", { tool: "read_file", target: "src/auth/login.ts", toolCallId: "c2", result: { path: "src/auth/login.ts", lineCount: 64 } }),
+  e("tool.completed", { tool: "read_file", target: "src/auth/rate_limit.ts", result: { path: "src/auth/rate_limit.ts", lineCount: 21 } }),
+  e("tool.completed", { tool: "read_file", target: "src/server.ts", result: { path: "src/server.ts", lineCount: 132 } }),
   e("plan.step.completed", { planId: plan.planId, planVersion: 1, stepId: "s1", resultSummary: "Found src/auth/login.ts" }),
   e("plan.step.started", { planId: plan.planId, planVersion: 1, stepId: "s2" })
 ];
@@ -214,10 +227,24 @@ const completedTail: AgentEvent[] = [
     usage: { promptTokens: 18450, completionTokens: 890, totalTokens: 19340 },
     costUsd: 0.0421
   }),
-  e("change.created", { path: "src/auth/login.ts", operation: "MODIFY" }),
-  e("change.created", { path: "src/auth/rate_limit.ts", operation: "CREATE" }),
+  e("change.created", { path: "src/auth/login.ts", operation: "MODIFY", additions: 12, deletions: 3 }),
+  e("change.created", { path: "src/auth/rate_limit.ts", operation: "CREATE", additions: 18, deletions: 0 }),
   e("plan.step.completed", { planId: plan.planId, planVersion: 1, stepId: "s2", resultSummary: "Limiter added" }),
   e("plan.step.started", { planId: plan.planId, planVersion: 1, stepId: "s3" }),
+  e("tool.started", { tool: "execute_command", target: "npm test", toolCallId: "c9" }),
+  e("tool.completed", {
+    tool: "execute_command",
+    target: "npm test",
+    toolCallId: "c9",
+    result: {
+      executable: "npm",
+      args: ["test"],
+      exitCode: 0,
+      stdout: ["> api@1.0.0 test", "", "  42 passing (1.2s)"].join(NEWLINE),
+      stderr: "",
+      durationMs: 1200
+    }
+  }),
   e("verification.started", { verificationId: "v1" }),
   e("verification.completed", {
     verificationId: "v1",
@@ -313,7 +340,7 @@ export const FIXTURES: Fixture[] = [
     description: "Blocked on a human decision, with a real diff and three scope grants.",
     events: [
       ...startup,
-      e("agent.status", { status: "Waiting for approval: Modify src/auth/login.ts (+12 -3)" }),
+      e("agent.status", { status: "Waiting for approval: Modify src/auth/login.ts (+12 -3)", state: "WAITING_FOR_USER" }),
       e("interaction.requested", { interactionId: "act-fixture-1", interaction: approvalInteraction })
     ]
   },
@@ -350,6 +377,7 @@ export const FIXTURES: Fixture[] = [
       }),
       e("repair.started", { repairAttemptId: "rep-1", attemptNumber: 1, targetFiles: ["src/auth/login.ts"] }),
       e("repair.failed", { repairAttemptId: "rep-1", attemptNumber: 1, reason: "Same failure fingerprint after repair" }),
+      e("agent.limit_reached", { limit: "duplicateRepairStrategy" }),
       e("task.failed", { error: "Repair limit reached", payload: { code: "DUPLICATE_REPAIR_STRATEGY", message: "The same repair was attempted twice with the same result." } })
     ]
   },
@@ -359,7 +387,7 @@ export const FIXTURES: Fixture[] = [
     description: "A created file renders as the file itself, not a diff against nothing.",
     events: [
       ...startup,
-      e("agent.status", { status: "Waiting for approval: Create src/auth/rate_limit.ts (+18 -0)" }),
+      e("agent.status", { status: "Waiting for approval: Create src/auth/rate_limit.ts (+18 -0)", state: "WAITING_FOR_USER" }),
       e("interaction.requested", { interactionId: "act-fixture-2", interaction: createInteraction })
     ]
   },
@@ -369,7 +397,7 @@ export const FIXTURES: Fixture[] = [
     description: "The exact argument vector and cwd, never a joined shell string. Countdown is urgent.",
     events: [
       ...startup,
-      e("agent.status", { status: "Waiting for approval: Run npm run test:integration" }),
+      e("agent.status", { status: "Waiting for approval: Run npm run test:integration", state: "WAITING_FOR_USER" }),
       e("interaction.requested", { interactionId: "act-fixture-3", interaction: commandInteraction })
     ]
   },
@@ -379,7 +407,7 @@ export const FIXTURES: Fixture[] = [
     description: "Marked distinctly and offers no session grant, in any autonomy level.",
     events: [
       ...startup,
-      e("agent.status", { status: "Waiting for approval: Push branch fix/rate-limit" }),
+      e("agent.status", { status: "Waiting for approval: Push branch fix/rate-limit", state: "WAITING_FOR_USER" }),
       e("interaction.requested", { interactionId: "act-fixture-4", interaction: pushInteraction })
     ]
   },
@@ -407,15 +435,49 @@ export const FIXTURES: Fixture[] = [
     memories
   },
   {
+    id: "chat",
+    label: "Chat turn",
+    description: "A conversational reply: the answer, and nothing else around it.",
+    events: [
+      e("task.started"),
+      e("task.mode_resolved", { mode: "CHAT", source: "deterministic", confidence: 1, reasons: ["mode selected by user"] }),
+      e("agent.status", { status: "Thinking...", state: "THINKING" }),
+      e("model_request.created", { requestId: "req-chat", runId: "fixture-task", attempt: 1 }),
+      ...[
+        "The limiter is per IP and bounded: ",
+        "each bucket holds a count and an expiry, ",
+        "and buckets are dropped as they expire."
+      ].map((text, index) =>
+        e("model.token_delta", { requestId: "req-chat", runId: "fixture-task", channel: "main", kind: "text", delta: text, index })
+      ),
+      e("model_request.succeeded", {
+        requestId: "req-chat",
+        runId: "fixture-task",
+        attempt: 1,
+        latencyMs: 900,
+        usage: { promptTokens: 620, completionTokens: 48, totalTokens: 668 },
+        costUsd: 0.0009
+      }),
+      e("task.completed", {
+        finalText:
+          "The limiter is per IP and bounded: each bucket holds a count and an expiry, and buckets are dropped as they expire."
+      })
+    ]
+  },
+  {
     id: "long",
     label: "Long run",
     description: "Twelve hundred events, for checking virtualisation and the elided affordance.",
     events: [
       ...startup,
       ...Array.from({ length: 1200 }, (_, i) =>
-        i % 5 === 0
-          ? e("tool.completed", { tool: "read_file", path: `src/module_${i}/index.ts`, result: { path: `src/module_${i}/index.ts` } })
-          : e("agent.status", { status: i % 2 === 0 ? "THINKING" : "TOOL_CALLING" })
+        i % 2 === 0
+          ? e("tool.completed", {
+              tool: "read_file",
+              target: `src/module_${i}/index.ts`,
+              result: { path: `src/module_${i}/index.ts`, lineCount: 40 + (i % 60) }
+            })
+          : e("change.created", { path: `src/module_${i}/index.ts`, operation: "MODIFY", additions: 1 + (i % 9), deletions: i % 4 })
       ),
       ...completedTail
     ]

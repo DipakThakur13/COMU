@@ -29153,6 +29153,7 @@ var require_dist16 = __commonJS({
       InteractionManager: () => InteractionManager2,
       ModelIntentClassifier: () => ModelIntentClassifier,
       SubagentManager: () => SubagentManager2,
+      describeToolTarget: () => describeToolTarget,
       formatStepSummary: () => formatStepSummary,
       permissionsFromContract: () => permissionsFromContract,
       stripPoliteness: () => stripPoliteness,
@@ -29853,6 +29854,21 @@ var require_dist16 = __commonJS({
       }
     };
     var import_context_engine = require_dist15();
+    var MAX_TOOL_TARGET_CHARS = 160;
+    function describeToolTarget(tool, args) {
+      if (!args || typeof args !== "object") return void 0;
+      let raw;
+      if (tool === "execute_command") {
+        raw = [args.executable, ...Array.isArray(args.args) ? args.args : []].filter(Boolean).join(" ");
+      } else if (tool === "delegate_subtask") {
+        raw = args.goal ?? args.type;
+      } else {
+        raw = args.path ?? args.query ?? args.pattern ?? args.directory ?? args.url;
+      }
+      if (typeof raw !== "string" || !raw.trim()) return void 0;
+      const value = raw.trim();
+      return value.length > MAX_TOOL_TARGET_CHARS ? `${value.slice(0, MAX_TOOL_TARGET_CHARS)}...` : value;
+    }
     function formatStepSummary(text, maxLen = 140) {
       if (!text) return void 0;
       let cleaned = text.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
@@ -29949,7 +29965,9 @@ var require_dist16 = __commonJS({
           eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2)}`,
           taskId: ctx.taskId,
           timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-          status: message || to
+          status: message || to,
+          // Published alongside the message so a consumer never has to infer the state from wording.
+          state: to
         });
       }
       async run(ctx) {
@@ -30477,6 +30495,8 @@ Please implement targeted fixes to resolve this failure.`
               ctx.onEvent({
                 type: "tool.completed",
                 tool: tc.name,
+                target: describeToolTarget(tc.name, tc.arguments),
+                toolCallId: tc.id,
                 result: { error },
                 eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                 taskId: ctx.taskId,
@@ -30504,6 +30524,8 @@ Please implement targeted fixes to resolve this failure.`
             ctx.onEvent({
               type: "tool.started",
               tool: tc.name,
+              target: describeToolTarget(tc.name, tc.arguments),
+              toolCallId: tc.id,
               eventId: `evt-${Date.now()}`,
               taskId: ctx.taskId,
               timestamp: (/* @__PURE__ */ new Date()).toISOString()
@@ -30706,19 +30728,25 @@ Please implement targeted fixes to resolve this failure.`
                     throw toolError;
                   } else {
                     const operation = tc.name === "create_file" && !baselineExists ? "CREATE" : "MODIFY";
+                    const newContent = finalContent || tc.arguments.content || "edited";
                     this.diffEngine.recordChange(
                       changeSet,
                       targetPath,
                       operation,
-                      finalContent || tc.arguments.content || "edited",
+                      newContent,
                       baselineContent,
                       baselineHash,
                       finalHash
+                    );
+                    const counts = ApprovalGate.countChanges(
+                      this.diffEngine.createUnifiedDiff(targetPath, baselineContent ?? "", newContent)
                     );
                     ctx.onEvent({
                       type: "change.created",
                       path: targetPath,
                       operation,
+                      additions: counts.additions,
+                      deletions: counts.deletions,
                       eventId: `evt-${Date.now()}`,
                       taskId: ctx.taskId,
                       timestamp: (/* @__PURE__ */ new Date()).toISOString()
@@ -30732,6 +30760,8 @@ Please implement targeted fixes to resolve this failure.`
               ctx.onEvent({
                 type: "tool.completed",
                 tool: tc.name,
+                target: describeToolTarget(tc.name, tc.arguments),
+                toolCallId: tc.id,
                 result,
                 eventId: `evt-${Date.now()}`,
                 taskId: ctx.taskId,
@@ -30761,6 +30791,8 @@ Please implement targeted fixes to resolve this failure.`
               ctx.onEvent({
                 type: "tool.completed",
                 tool: tc.name,
+                target: describeToolTarget(tc.name, tc.arguments),
+                toolCallId: tc.id,
                 result: { error: e.message },
                 eventId: `evt-${Date.now()}`,
                 taskId: ctx.taskId,

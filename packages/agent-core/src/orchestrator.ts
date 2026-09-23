@@ -21,6 +21,33 @@ import {
   WorkspaceIntegrityResult
 } from "@comu/protocol";
 
+const MAX_TOOL_TARGET_CHARS = 160;
+
+/**
+ * The one bounded string that says what a tool call is about.
+ *
+ * Tool events used to carry the tool's name and nothing else, so an interface could only report
+ * that a tool ran, never what it ran on. This publishes the single argument a person would name if
+ * asked what the agent just did — the path, the query, the command line — and nothing else:
+ * carrying the whole argument object would put file content into the event stream.
+ */
+export function describeToolTarget(tool: string, args: any): string | undefined {
+  if (!args || typeof args !== "object") return undefined;
+
+  let raw: unknown;
+  if (tool === "execute_command") {
+    raw = [args.executable, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(" ");
+  } else if (tool === "delegate_subtask") {
+    raw = args.goal ?? args.type;
+  } else {
+    raw = args.path ?? args.query ?? args.pattern ?? args.directory ?? args.url;
+  }
+
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const value = raw.trim();
+  return value.length > MAX_TOOL_TARGET_CHARS ? `${value.slice(0, MAX_TOOL_TARGET_CHARS)}...` : value;
+}
+
 export function formatStepSummary(text?: string, maxLen = 140): string | undefined {
   if (!text) return undefined;
   // Strip any inline <think>...</think> or <thought>...</thought>
@@ -141,7 +168,9 @@ export class AgentOrchestrator {
       eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2)}`,
       taskId: ctx.taskId,
       timestamp: new Date().toISOString(),
-      status: message || to
+      status: message || to,
+      // Published alongside the message so a consumer never has to infer the state from wording.
+      state: to
     });
   }
 
@@ -764,6 +793,8 @@ export class AgentOrchestrator {
           ctx.onEvent({
             type: "tool.completed",
             tool: tc.name,
+            target: describeToolTarget(tc.name, tc.arguments),
+            toolCallId: tc.id,
             result: { error },
             eventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             taskId: ctx.taskId,
@@ -795,6 +826,8 @@ export class AgentOrchestrator {
         ctx.onEvent({
           type: "tool.started",
           tool: tc.name,
+          target: describeToolTarget(tc.name, tc.arguments),
+          toolCallId: tc.id,
           eventId: `evt-${Date.now()}`,
           taskId: ctx.taskId,
           timestamp: new Date().toISOString()
@@ -1016,19 +1049,28 @@ export class AgentOrchestrator {
                 throw toolError;
               } else {
                 const operation = tc.name === "create_file" && !baselineExists ? "CREATE" : "MODIFY";
+                const newContent = finalContent || tc.arguments.content || "edited";
                 this.diffEngine.recordChange(
                   changeSet,
                   targetPath,
                   operation,
-                  finalContent || tc.arguments.content || "edited",
+                  newContent,
                   baselineContent,
                   baselineHash,
                   finalHash
+                );
+                // Counted against what was actually on disk, from the same diff the approval card
+                // would have shown. A write that happened without an approval is otherwise the one
+                // change nothing can report the size of.
+                const counts = ApprovalGate.countChanges(
+                  this.diffEngine.createUnifiedDiff(targetPath, baselineContent ?? "", newContent)
                 );
                 ctx.onEvent({
                   type: "change.created",
                   path: targetPath,
                   operation,
+                  additions: counts.additions,
+                  deletions: counts.deletions,
                   eventId: `evt-${Date.now()}`,
                   taskId: ctx.taskId,
                   timestamp: new Date().toISOString()
@@ -1043,6 +1085,8 @@ export class AgentOrchestrator {
           ctx.onEvent({
             type: "tool.completed",
             tool: tc.name,
+            target: describeToolTarget(tc.name, tc.arguments),
+            toolCallId: tc.id,
             result,
             eventId: `evt-${Date.now()}`,
             taskId: ctx.taskId,
@@ -1074,6 +1118,8 @@ export class AgentOrchestrator {
           ctx.onEvent({
             type: "tool.completed",
             tool: tc.name,
+            target: describeToolTarget(tc.name, tc.arguments),
+            toolCallId: tc.id,
             result: { error: e.message },
             eventId: `evt-${Date.now()}`,
             taskId: ctx.taskId,

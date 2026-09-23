@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import type { SessionState } from "@comu/ui-state";
-import { Button, Icon, StatusPill, StatusTone } from "./primitives/index.js";
+import { describeFailure, humanAgentState } from "@comu/ui-state";
+import { Button, StatusPill, StatusTone } from "./primitives/index.js";
 import styles from "./header.module.css";
 
 function toneFor(session: SessionState): { tone: StatusTone; label: string } {
   switch (session.status) {
     case "running":
-      return { tone: "running", label: humanState(session.agentState) };
+      return { tone: "running", label: humanAgentState(session.agentState) ?? "Running" };
     case "waiting_for_user":
       return { tone: "waiting", label: "Waiting for you" };
     case "cancelling":
@@ -22,22 +23,13 @@ function toneFor(session: SessionState): { tone: StatusTone; label: string } {
   }
 }
 
-function humanState(state: SessionState["agentState"]): string {
-  const words: Record<string, string> = {
-    STARTING: "Starting",
-    CLASSIFYING: "Classifying",
-    ANALYZING: "Analysing",
-    PLANNING: "Planning",
-    THINKING: "Thinking",
-    TOOL_CALLING: "Running tools",
-    OBSERVING: "Observing",
-    VERIFYING: "Verifying",
-    DIAGNOSING: "Diagnosing",
-    REPAIRING: "Repairing",
-    WAITING_FOR_USER: "Waiting for you"
-  };
-  return words[state] ?? "Running";
-}
+const MODE_WORDS: Record<string, string> = {
+  CHAT: "Chat",
+  ASK: "Ask",
+  PLAN: "Plan",
+  AGENT: "Agent",
+  AMBIGUOUS: "Needs clarifying"
+};
 
 function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -53,11 +45,12 @@ function formatTokens(n: number): string {
 }
 
 /**
- * Status, progress, elapsed time and budget burn.
+ * The state, and then everything else.
  *
- * Usage comes from the provider on every request and used to be discarded. Showing what a task is
- * costing while it runs is the cheapest trust win available; when the model has no known price the
- * header shows tokens only rather than inventing a figure.
+ * The state is the headline and carries its reason when it has one, because "Failed" on its own
+ * sends a person hunting through the stream for why. The facts below it are secondary and all of
+ * them are real: a model with no published price contributes no cost slot at all, rather than a
+ * slot that says the cost is unknown.
  */
 export function Header({
   session,
@@ -84,12 +77,24 @@ export function Header({
 
   const plan = session.plan;
   const stepLabel = plan && plan.currentIndex >= 0 ? `Step ${plan.currentIndex + 1} of ${plan.steps.length}` : undefined;
+  const reason = session.status === "failed" ? describeFailure(session.error, session.limit) : undefined;
+  const mode = session.mode ? MODE_WORDS[session.mode] ?? session.mode : undefined;
+  const cost = session.usage.costKnown ? session.usage.costUsd : undefined;
+
+  // Secondary line: only the facts that exist. An empty slot beats a slot that says it is empty.
+  const facts = [
+    mode,
+    stepLabel,
+    session.timing.startedAt ? formatElapsed(elapsed) : undefined,
+    session.usage.totalTokens > 0 ? `${formatTokens(session.usage.totalTokens)} tokens` : undefined,
+    cost !== undefined ? `$${cost < 0.1 ? cost.toFixed(4) : cost.toFixed(2)}` : undefined
+  ].filter(Boolean) as string[];
 
   return (
     <header className={styles.header}>
       <div className={styles.topRow}>
         <StatusPill tone={tone}>{label}</StatusPill>
-        {stepLabel ? <span className={styles.step}>{stepLabel}</span> : null}
+        {reason ? <span className={styles.reason}>{reason}</span> : null}
         <span className={styles.spacer} />
         {running ? (
           <Button variant="ghost" small icon="stop" label="Stop the task (Esc)" onClick={onCancel} />
@@ -97,25 +102,17 @@ export function Header({
         <Button variant="ghost" small icon="settings" label="Provider settings" onClick={onOpenSettings} />
       </div>
 
-      {session.taskId ? (
-        <div className={styles.metrics} aria-label="Task metrics">
-          <span className={styles.metric} title="Elapsed time, excluding time spent waiting for you">
-            <Icon name="history" size={11} />
-            {formatElapsed(elapsed)}
-          </span>
-          <span className={styles.metric} title={`${session.usage.promptTokens.toLocaleString()} in, ${session.usage.completionTokens.toLocaleString()} out, over ${session.usage.requests} request(s)`}>
-            <Icon name="agent" size={11} />
-            {formatTokens(session.usage.totalTokens)} tokens
-          </span>
-          {session.usage.costKnown && session.usage.costUsd !== undefined ? (
-            <span className={styles.metric} title="Estimated from the model's published price">
-              ${session.usage.costUsd < 0.1 ? session.usage.costUsd.toFixed(4) : session.usage.costUsd.toFixed(2)}
-            </span>
-          ) : session.usage.requests > 0 ? (
-            <span className={`${styles.metric} ${styles.muted}`} title="This model has no published price, so COMU does not estimate a cost">
-              cost unknown
-            </span>
-          ) : null}
+      {session.taskId && facts.length > 0 ? (
+        <div
+          className={styles.metrics}
+          aria-label="Task metrics"
+          title={
+            session.usage.requests > 0
+              ? `${session.usage.promptTokens.toLocaleString()} in, ${session.usage.completionTokens.toLocaleString()} out, over ${session.usage.requests} request(s)`
+              : undefined
+          }
+        >
+          {facts.join(" · ")}
         </div>
       ) : null}
     </header>

@@ -65,8 +65,10 @@ export class ProviderManager {
                 },
                 {
                     id: 'nvidia/nemotron-3-ultra-550b-a55b',
-                    name: 'Nemotron 3 Ultra (Legacy)',
-                    description: 'Legacy / High Compute',
+                    // No "(Legacy)": this is the configured default model, and a warning label on
+                    // the default reads as a warning about choosing it.
+                    name: 'Nemotron 3 Ultra',
+                    description: 'High compute, long-horizon engineering',
                     contextTokens: 128000
                 }
             ]

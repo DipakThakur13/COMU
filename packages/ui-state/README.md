@@ -19,6 +19,37 @@ forwards each event to the webview with a monotonic per-task sequence number. Th
 - Token deltas carry their own monotonic index per `(requestId, kind)`; a gap there raises the
   same resync, because live text with a hole in it is worse than briefly stale text.
 
+## What earns a row
+
+The reduction has two passes. The first folds an event into `SessionState`. The second,
+`normalizeEvent`, decides whether that event is something a person would say *happened* — and it
+answers no far more often than yes.
+
+| Event | Row |
+| --- | --- |
+| `agent.status`, `task.started`, `tool.started`, `verification.started`, `repair.started`, `plan.step.started`, `plan.step.completed`, `memory.retrieved` | none; they set `live` |
+| `tool.completed` | one row for the whole call: `Read login.ts`, `Searched "fetchRecord"`, `npm test` |
+| `tool.completed` for a successful write | none; `change.created` reports it with the file and its size |
+| `agent.limit_reached` | none; it records `limit`, which the failure row then gives as its reason |
+| `task.completed` / `task.failed` / `task.cancelled` | one `outcome` row |
+
+Every row declares a **level**, and the interface renders the three differently:
+
+- `outcome` — finished, failed, or blocked on a person. One per task, bordered, with its reason in
+  plain language.
+- `substance` — work that changed or decided something: edits, commands, verification, repairs,
+  approvals, the assistant's prose.
+- `routine` — looking around: reads, searches, directory listings. Dimmed, and folded by
+  `appendActivity` into one row with a count when consecutive and of the same kind.
+
+`metric` is the row's single measurement (`+12 −3`, `2 failed`, `18 matches`) and is **undefined
+when there is nothing to measure**. Nothing in the interface renders a placeholder value.
+
+`live` is what is happening *now*: one label and a start time, replaced in place and cleared on any
+terminal state. It is never appended to `activity`, which is why the stream contains only things
+that happened. See
+[decision 0016](../../docs/decisions/0016-the-activity-stream-reports-work-not-state.md).
+
 ## Bounds
 
 | Bound | Value | Why |

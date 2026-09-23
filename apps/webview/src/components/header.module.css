@@ -18,31 +18,18 @@
   flex: 1;
 }
 
-.step {
-  font-size: var(--comu-text-xs);
+.reason {
+  min-width: 0;
+  font-size: var(--comu-text-sm);
   color: var(--comu-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* One line of facts, each of them real. Wraps rather than overflowing a narrow panel. */
 .metrics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--comu-space-1) var(--comu-space-3);
   font-size: var(--comu-text-xs);
   color: var(--comu-text-muted);
-}
-
-.metric {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  white-space: nowrap;
-}
-
-.muted {
-  opacity: 0.75;
-  font-style: italic;
+  overflow-wrap: break-word;
 }

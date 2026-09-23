@@ -20,12 +20,15 @@ const DECISION_WORDS: Record<string, string> = {
 /**
  * What happened, in one place.
  *
- * The header carries live status, so this is the after-the-fact account: the outcome, why it
- * failed if it did, what was repaired, and every approval decision with the scope it granted.
+ * The header carries live status and the stream carries the reply, so this is what neither of them
+ * says: why a task failed, what was diagnosed, what was repaired, and every approval decision with
+ * the scope it granted. The assistant's answer is deliberately not repeated here; it is already in
+ * the stream, in full, in the row it streamed into.
+ *
  * The approval list is the audit trail: an automatic denial appears here exactly like a human one.
  */
 export function OverviewPanel({ session }: { session: SessionState }) {
-  const { diagnosis, repairs, approvals, error, finalText } = session;
+  const { diagnosis, repairs, approvals, error } = session;
 
   return (
     <div className={styles.panelBody}>
@@ -38,16 +41,6 @@ export function OverviewPanel({ session }: { session: SessionState }) {
           <p className={styles.blockText}>{error.message}</p>
           {error.hint ? <p className={styles.muted}>{error.hint}</p> : null}
           <p className={styles.code}>{error.code}</p>
-        </section>
-      ) : null}
-
-      {finalText ? (
-        <section className={styles.block}>
-          <h3 className={styles.blockTitle}>
-            <Icon name="check" size={12} className={styles.toneOk} />
-            Result
-          </h3>
-          <p className={styles.blockText}>{finalText}</p>
         </section>
       ) : null}
 
@@ -125,7 +118,7 @@ export function OverviewPanel({ session }: { session: SessionState }) {
         </section>
       ) : null}
 
-      {!error && !finalText && !diagnosis && repairs.length === 0 && approvals.length === 0 ? (
+      {!error && !diagnosis && repairs.length === 0 && approvals.length === 0 ? (
         <EmptyState icon="info" title="Nothing to summarise yet">
           The outcome, any diagnosis, and every approval decision appear here once the task has made
           one.

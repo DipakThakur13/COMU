@@ -1,14 +1,17 @@
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { ActivityEntry } from "@comu/ui-state";
+import type { ActivityEntry, LiveStatus } from "@comu/ui-state";
 import { Button, EmptyState, Icon } from "../primitives/index.js";
 import { ActivityRow, StreamingRow } from "./ActivityItemView.js";
+import { LiveStatusLine } from "./LiveStatusLine.js";
 import styles from "./activity.module.css";
 
 export interface ActivityStreamProps {
   entries: ActivityEntry[];
   elidedCount: number;
   streamingText?: string;
+  /** What is happening now. Pinned below the stream, never appended to it. */
+  live?: LiveStatus;
   expandedIds: string[];
   onToggle: (id: string) => void;
   status: string;
@@ -16,6 +19,8 @@ export interface ActivityStreamProps {
   /** Rendered instead of the default empty state, for the first-run surface. */
   emptyContent?: ReactNode;
   onSaveCode?: (content: string, suggestedPath: string) => void;
+  onOpenFile?: (path: string) => void;
+  onRequestDiff?: (path: string) => void;
 }
 
 /**
@@ -32,12 +37,15 @@ export function ActivityStream({
   entries,
   elidedCount,
   streamingText,
+  live,
   expandedIds,
   onToggle,
   status,
   emptyHint,
   emptyContent,
-  onSaveCode
+  onSaveCode,
+  onOpenFile,
+  onRequestDiff
 }: ActivityStreamProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
@@ -71,7 +79,7 @@ export function ActivityStream({
     if (entries.length > 0 && expandedIds.length >= 0) virtualizer.measure();
   }, [expandedIds, entries.length, virtualizer]);
 
-  if (entries.length === 0 && !streamingText) {
+  if (entries.length === 0 && !streamingText && !live) {
     return (
       <div className={styles.stream}>
         {emptyContent ?? (
@@ -112,6 +120,8 @@ export function ActivityStream({
                     expanded={expandedIds.includes(entry.id)}
                     onToggle={onToggle}
                     onSaveCode={onSaveCode}
+                    onOpenFile={onOpenFile}
+                    onRequestDiff={onRequestDiff}
                   />
                 </div>
               );
@@ -122,8 +132,10 @@ export function ActivityStream({
         {streamingText ? <StreamingRow text={streamingText} /> : null}
       </div>
 
+      {live ? <LiveStatusLine live={live} /> : null}
+
       {!following ? (
-        <div className={styles.followAffordance}>
+        <div className={`${styles.followAffordance} ${live ? styles.followAboveLive : ""}`}>
           <Button
             variant="secondary"
             small

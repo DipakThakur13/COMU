@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, within, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { createInitialSessionState, reduceEvent, SessionState } from "@comu/ui-state";
 import type { AgentEvent } from "@comu/protocol";
 import { Header } from "../src/components/Header.js";
@@ -123,7 +123,7 @@ describe("Header", () => {
     );
     render(<Header session={withPlan} onCancel={() => {}} onOpenSettings={() => {}} />);
     expect(screen.getByText("Thinking")).toBeTruthy();
-    expect(screen.getByText("Step 2 of 3")).toBeTruthy();
+    expect(screen.getByLabelText("Task metrics").textContent).toContain("Step 2 of 3");
   });
 
   it("surfaces token usage and a cost when the model has a price", () => {
@@ -137,14 +137,27 @@ describe("Header", () => {
     expect(header.textContent).toContain("$0.0421");
   });
 
-  it("says the cost is unknown rather than showing zero", () => {
+  it("shows no cost at all when the model has no published price", () => {
+    // A slot that renders "unknown" is a dead value taking up a third of a 280px line.
     const used = reduceEvent(
       { ...base, taskId: "t1" },
       ev("model_request.succeeded", { requestId: "r1", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } })
     );
     render(<Header session={used} onCancel={() => {}} onOpenSettings={() => {}} />);
-    expect(screen.getByText("cost unknown")).toBeTruthy();
-    expect(screen.queryByText("$0.00")).toBeNull();
+    const metrics = screen.getByLabelText("Task metrics").textContent ?? "";
+    expect(metrics).toContain("15 tokens");
+    expect(metrics.toLowerCase()).not.toContain("unknown");
+    expect(metrics).not.toContain("$");
+  });
+
+  it("makes the failure and its reason the headline", () => {
+    const failed = reduceEvent(
+      reduceEvent(base, ev("agent.limit_reached", { limit: "maxExecutionTimeMs" })),
+      ev("task.failed", { error: "Limit reached", payload: { code: "LIMIT_REACHED", message: "maxExecutionTimeMs" } })
+    );
+    render(<Header session={failed} onCancel={() => {}} onOpenSettings={() => {}} />);
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByText("time limit reached")).toBeTruthy();
   });
 
   it("offers Stop only while the task is running", () => {
@@ -248,23 +261,84 @@ describe("ActivityStream", () => {
     expect(screen.getByText("Nothing running")).toBeTruthy();
   });
 
-  it("renders a grouped run of reads as one row with a count", async () => {
+  it("renders a grouped run of reads as one row naming the first file", async () => {
     const state = stateFrom([
-      ev("tool.completed", { tool: "read_file", path: "a.ts" }),
-      ev("tool.completed", { tool: "read_file", path: "b.ts" }),
-      ev("tool.completed", { tool: "read_file", path: "c.ts" })
+      ev("tool.completed", { tool: "read_file", target: "src/a.ts", result: { path: "src/a.ts" } }),
+      ev("tool.completed", { tool: "read_file", target: "src/b.ts", result: { path: "src/b.ts" } }),
+      ev("tool.completed", { tool: "read_file", target: "src/c.ts", result: { path: "src/c.ts" } })
     ]);
-    render(
+    const { container } = render(
       <ActivityStream entries={state.activity} elidedCount={0} expandedIds={[]} onToggle={() => {}} status="running" />
     );
     await settle();
     const log = screen.getByRole("log", { name: "Activity" });
     expect(log.textContent).toContain("Read 3 files");
-    expect(within(log).getByTitle("3 items").textContent).toBe("3");
+    // Routine work is dimmed and compact; nothing about it competes with an edit or a failure.
+    expect(container.querySelector('[data-level="routine"]')).toBeTruthy();
+  });
+
+  it("opens a folded file in the editor when it is clicked", async () => {
+    const onOpenFile = vi.fn();
+    const state = stateFrom([
+      ev("tool.completed", { tool: "read_file", target: "src/a.ts", result: { path: "src/a.ts" } }),
+      ev("tool.completed", { tool: "read_file", target: "src/b.ts", result: { path: "src/b.ts" } })
+    ]);
+    render(
+      <ActivityStream
+        entries={state.activity}
+        elidedCount={0}
+        expandedIds={[state.activity[0].id]}
+        onToggle={() => {}}
+        status="running"
+        onOpenFile={onOpenFile}
+      />
+    );
+    await settle();
+    fireEvent.click(screen.getByTitle("src/b.ts"));
+    expect(onOpenFile).toHaveBeenCalledWith("src/b.ts");
+  });
+
+  it("gives an outcome a shape of its own, so a failure cannot read as a directory listing", async () => {
+    const state = stateFrom([
+      ev("tool.completed", { tool: "read_file", target: "src/a.ts", result: { path: "src/a.ts" } }),
+      ev("task.failed", { error: "boom", payload: { code: "LIMIT_REACHED", message: "maxToolCalls" } })
+    ]);
+    const { container } = render(
+      <ActivityStream entries={state.activity} elidedCount={0} expandedIds={[]} onToggle={() => {}} status="failed" />
+    );
+    await settle();
+    expect(screen.getByRole("alert").textContent).toContain("Task failed");
+    expect(container.querySelector('[data-level="outcome"]')).toBeTruthy();
+  });
+
+  it("pins the live status line below the stream and never in it", async () => {
+    const state = stateFrom([ev("change.created", { path: "src/a.ts", operation: "MODIFY", additions: 1, deletions: 0 })]);
+    const { container, rerender } = render(
+      <ActivityStream
+        entries={state.activity}
+        elidedCount={0}
+        live={{ label: "Running npm test", startedAt: new Date(Date.now() - 4000).toISOString() }}
+        expandedIds={[]}
+        onToggle={() => {}}
+        status="running"
+      />
+    );
+    await settle();
+    const live = screen.getByRole("status");
+    expect(live.textContent).toContain("Running npm test");
+    expect(screen.getByRole("log", { name: "Activity" }).contains(live)).toBe(false);
+
+    // It is the state of the task, so it goes away with the task rather than piling up.
+    rerender(
+      <ActivityStream entries={state.activity} elidedCount={0} expandedIds={[]} onToggle={() => {}} status="completed" />
+    );
+    expect(container.textContent).not.toContain("Running npm test");
   });
 
   it("virtualises: a thousand entries do not become a thousand rows", async () => {
-    const events = Array.from({ length: 1000 }, (_, i) => ev("agent.status", { status: `THINKING ${i}` }));
+    const events = Array.from({ length: 1000 }, (_, i) =>
+      ev("change.created", { path: `src/module_${i}.ts`, operation: "MODIFY", additions: 1, deletions: 0 })
+    );
     const state = stateFrom(events);
     const { container } = render(
       <ActivityStream entries={state.activity} elidedCount={0} expandedIds={[]} onToggle={() => {}} status="running" />
@@ -277,7 +351,7 @@ describe("ActivityStream", () => {
   });
 
   it("says so when earlier activity was elided instead of losing it silently", () => {
-    const state = stateFrom([ev("task.started")]);
+    const state = stateFrom([ev("change.created", { path: "src/a.ts", operation: "MODIFY" })]);
     const { container } = render(
       <ActivityStream entries={state.activity} elidedCount={1200} expandedIds={[]} onToggle={() => {}} status="running" />
     );
@@ -300,7 +374,7 @@ describe("ActivityStream", () => {
   });
 
   it("marks the log busy while the task runs", () => {
-    const state = stateFrom([ev("task.started")]);
+    const state = stateFrom([ev("change.created", { path: "src/a.ts", operation: "MODIFY" })]);
     render(
       <ActivityStream entries={state.activity} elidedCount={0} expandedIds={[]} onToggle={() => {}} status="running" />
     );
