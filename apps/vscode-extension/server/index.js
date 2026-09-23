@@ -27527,125 +27527,51 @@ var require_dist12 = __commonJS({
       ResultAggregator: () => ResultAggregator,
       VerificationEngine: () => VerificationEngine2,
       VerificationPolicy: () => VerificationPolicy,
-      WorkspaceIntegrityVerifier: () => WorkspaceIntegrityVerifier
+      WorkspaceIntegrityVerifier: () => WorkspaceIntegrityVerifier,
+      isTestFile: () => isTestFile
     });
     module2.exports = __toCommonJS2(index_exports);
+    var DOC_FILE = /\.(md|txt|rst)$/i;
+    function isTestFile(path) {
+      const p = path.replace(/\\/g, "/");
+      return /\.(test|spec)\.[^/]+$/.test(p) || /(^|\/)(tests?|__tests__)\//.test(p) || /(^|\/)test_[^/]*\.py$/.test(p) || /_test\.(py|go)$/.test(p);
+    }
+    var skipAll = (reason) => [
+      { name: "Typecheck", validatorId: "run_typecheck", required: false, skipReason: reason },
+      { name: "Test Suite", validatorId: "run_tests", required: false, skipReason: reason },
+      { name: "Build", validatorId: "run_build", required: false, skipReason: reason },
+      { name: "Linter", validatorId: "run_linter", required: false, skipReason: reason }
+    ];
     var VerificationPolicy = class {
-      determinePlan(changedFiles, prompt) {
-        const rules = [];
-        const promptLower = (prompt || "").toLowerCase();
-        const isOnlyDocs = changedFiles.length > 0 && changedFiles.every((f) => f.endsWith(".md") || f.endsWith(".txt") || f.endsWith(".rst")) || changedFiles.length === 0 && (promptLower.includes("readme") || promptLower.includes("doc"));
-        if (isOnlyDocs) {
-          rules.push({
-            name: "Typecheck",
-            validatorId: "run_typecheck",
-            required: false,
-            skipReason: "Documentation change only; typecheck not required."
-          });
-          rules.push({
-            name: "Test Suite",
-            validatorId: "run_tests",
-            required: false,
-            skipReason: "Documentation change only; test suite not required."
-          });
-          rules.push({
-            name: "Build",
-            validatorId: "run_build",
-            required: false,
-            skipReason: "Documentation change only; build not required."
-          });
+      determinePlan(changedFiles, requirement) {
+        if (!requirement.verificationRequired) {
           return {
-            rules,
-            reason: "Documentation-only modification detected."
+            rules: skipAll("The task contract does not require verification: this task does not change the workspace."),
+            reason: "Verification not required by the task contract."
           };
         }
-        const isInformational = changedFiles.length === 0 && (promptLower.startsWith("give") || promptLower.startsWith("show") || promptLower.startsWith("what") || promptLower.startsWith("how") || promptLower.startsWith("why") || promptLower.startsWith("explain") || promptLower.startsWith("tell") || promptLower.startsWith("can you") || promptLower.startsWith("write a sample") || promptLower.startsWith("write sample") || promptLower.includes("sample code") || promptLower.includes("example code"));
-        if (isInformational) {
-          rules.push({
-            name: "Typecheck",
-            validatorId: "run_typecheck",
-            required: false,
-            skipReason: "Informational query; workspace typecheck not required."
-          });
-          rules.push({
-            name: "Test Suite",
-            validatorId: "run_tests",
-            required: false,
-            skipReason: "Informational query; workspace test suite not required."
-          });
-          rules.push({
-            name: "Build",
-            validatorId: "run_build",
-            required: false,
-            skipReason: "Informational query; build not required."
-          });
-          rules.push({
-            name: "Linter",
-            validatorId: "run_linter",
-            required: false,
-            skipReason: "Optional code quality check."
-          });
+        if (changedFiles.length > 0 && changedFiles.every((f) => DOC_FILE.test(f))) {
           return {
-            rules,
-            reason: "Informational query detected."
+            rules: skipAll("Documentation change only; there is nothing a check can judge."),
+            reason: "Documentation-only modification."
           };
         }
-        const hasTypeScript = changedFiles.some((f) => (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.includes(".test.") && !f.includes(".spec."));
-        const hasTests = changedFiles.some((f) => f.includes(".test.") || f.includes(".spec.") || f.includes("/tests/") || f.includes("/test/"));
+        const hasTypeScript = changedFiles.some((f) => /\.tsx?$/.test(f) && !isTestFile(f));
         const hasPackageJson = changedFiles.some((f) => f.endsWith("package.json") || f.endsWith("pnpm-lock.yaml"));
-        const isTestTask = promptLower.includes("test") || promptLower.includes("fail") || promptLower.includes("fix") || hasTests;
-        if (hasTypeScript || hasPackageJson || promptLower.includes("typecheck") || changedFiles.length === 0) {
-          rules.push({
-            name: "Typecheck",
-            validatorId: "run_typecheck",
-            required: true
-          });
+        const rules = [];
+        if (hasTypeScript || hasPackageJson || changedFiles.length === 0) {
+          rules.push({ name: "Typecheck", validatorId: "run_typecheck", required: true });
         } else {
-          rules.push({
-            name: "Typecheck",
-            validatorId: "run_typecheck",
-            required: false,
-            skipReason: "No TypeScript source files modified."
-          });
+          rules.push({ name: "Typecheck", validatorId: "run_typecheck", required: false, skipReason: "No TypeScript source files modified." });
         }
-        if (isTestTask || hasTypeScript || hasTests || changedFiles.length === 0) {
-          rules.push({
-            name: "Test Suite",
-            validatorId: "run_tests",
-            required: true
-          });
+        rules.push({ name: "Test Suite", validatorId: "run_tests", required: true });
+        if (hasPackageJson) {
+          rules.push({ name: "Build", validatorId: "run_build", required: true });
         } else {
-          rules.push({
-            name: "Test Suite",
-            validatorId: "run_tests",
-            required: false,
-            skipReason: "Non-test source modification without behavioral changes."
-          });
+          rules.push({ name: "Build", validatorId: "run_build", required: false, skipReason: "No dependency or package manifest changed." });
         }
-        if (hasPackageJson || promptLower.includes("build")) {
-          rules.push({
-            name: "Build",
-            validatorId: "run_build",
-            required: true
-          });
-        } else {
-          rules.push({
-            name: "Build",
-            validatorId: "run_build",
-            required: false,
-            skipReason: "Standard localized modification does not require full production build."
-          });
-        }
-        rules.push({
-          name: "Linter",
-          validatorId: "run_linter",
-          required: false,
-          skipReason: "Optional code quality check."
-        });
-        return {
-          rules,
-          reason: "Standard deterministic engineering verification policy applied."
-        };
+        rules.push({ name: "Linter", validatorId: "run_linter", required: false, skipReason: "Optional code quality check." });
+        return { rules, reason: "The task contract requires verification of a code change." };
       }
     };
     var ResultAggregator = class {
@@ -27653,6 +27579,19 @@ var require_dist12 = __commonJS({
         const verificationId = `verif-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         const requiredChecks = checks.filter((c) => c.required);
         const optionalChecks = checks.filter((c) => !c.required);
+        if (requiredChecks.length === 0) {
+          const notVerifiedReason = checks.length === 0 ? "No checks were planned." : `No check was required: ${checks.find((c) => c.skipReason)?.skipReason ?? "every check was optional."}`;
+          return {
+            verificationId,
+            taskId,
+            status: "NOT_VERIFIED",
+            checks,
+            summary: `Verification NOT_VERIFIED: ${notVerifiedReason}`,
+            durationMs,
+            timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+            notVerifiedReason
+          };
+        }
         let status = "PASSED";
         const failedRequired = requiredChecks.filter((c) => c.status === "FAILED");
         const unavailableRequired = requiredChecks.filter((c) => c.status === "UNAVAILABLE");
@@ -27741,7 +27680,7 @@ var require_dist12 = __commonJS({
       }
       async runVerification(ctx) {
         const startTime = Date.now();
-        const plan = this.policy.determinePlan(ctx.changedFiles, ctx.userPrompt);
+        const plan = this.policy.determinePlan(ctx.changedFiles, ctx.requirement);
         const checks = [];
         for (const rule of plan.rules) {
           if (ctx.abortSignal?.aborted) {
@@ -27768,12 +27707,26 @@ var require_dist12 = __commonJS({
           }
           const checkStart = (/* @__PURE__ */ new Date()).toISOString();
           try {
-            const result = await ctx.toolExecutor.execute(rule.validatorId, {}, ctx.toolContext);
-            const exitCode = result?.exitCode ?? (result?.status === "PASS" ? 0 : 1);
-            const isPass = result?.status === "PASS" || exitCode === 0;
+            const result2 = await ctx.toolExecutor.execute(rule.validatorId, {}, ctx.toolContext);
+            if (result2?.status === "UNAVAILABLE") {
+              checks.push({
+                id: `check-${rule.validatorId}`,
+                name: rule.name,
+                required: rule.required,
+                status: "UNAVAILABLE",
+                severity: rule.required ? "CRITICAL" : "WARNING",
+                validatorId: rule.validatorId,
+                startTime: checkStart,
+                completionTime: (/* @__PURE__ */ new Date()).toISOString(),
+                details: `Could not run: no ${rule.name.toLowerCase()} command is configured for this project.`
+              });
+              continue;
+            }
+            const exitCode = result2?.exitCode ?? (result2?.status === "PASS" ? 0 : 1);
+            const isPass = result2?.status === "PASS" || exitCode === 0;
             const maxOutputChars = 5e3;
-            const stdout = typeof result?.stdout === "string" ? result.stdout.slice(0, maxOutputChars) : "";
-            const stderr = typeof result?.stderr === "string" ? result.stderr.slice(0, maxOutputChars) : "";
+            const stdout = typeof result2?.stdout === "string" ? result2.stdout.slice(0, maxOutputChars) : "";
+            const stderr = typeof result2?.stderr === "string" ? result2.stderr.slice(0, maxOutputChars) : "";
             checks.push({
               id: `check-${rule.validatorId}`,
               name: rule.name,
@@ -27781,7 +27734,7 @@ var require_dist12 = __commonJS({
               status: isPass ? "PASSED" : "FAILED",
               severity: isPass ? void 0 : rule.required ? "CRITICAL" : "WARNING",
               validatorId: rule.validatorId,
-              command: result?.command,
+              command: result2?.command,
               cwd: ctx.workspaceRoot,
               exitCode,
               startTime: checkStart,
@@ -27791,7 +27744,7 @@ var require_dist12 = __commonJS({
                 stdout,
                 stderr,
                 exitCode,
-                durationMs: result?.durationMs
+                durationMs: result2?.durationMs
               }
             });
           } catch (err) {
@@ -27815,9 +27768,19 @@ var require_dist12 = __commonJS({
           }
         }
         const durationMs = Date.now() - startTime;
-        return ResultAggregator.aggregate(ctx.taskId, checks, durationMs);
+        const result = ResultAggregator.aggregate(ctx.taskId, checks, durationMs);
+        return ctx.baseline ? assessEvidence(result, ctx.baseline, ctx.changedFiles) : result;
       }
     };
+    function assessEvidence(result, baseline, changedFiles) {
+      if (result.status !== "PASSED") return result;
+      if (changedFiles.some(isTestFile)) return result;
+      const before = new Map(baseline.checks.map((c) => [c.validatorId, c.status]));
+      const evidence = result.checks.some((c) => c.required && c.status === "PASSED" && before.get(c.validatorId) !== "PASSED");
+      if (evidence) return result;
+      const notVerifiedReason = "Every required check passed before the change as well, and no test was added or changed, so they show nothing broke but not that the change does what was asked.";
+      return { ...result, status: "NOT_VERIFIED", notVerifiedReason, summary: `Verification NOT_VERIFIED: ${notVerifiedReason}` };
+    }
   }
 });
 
@@ -33818,6 +33781,8 @@ var require_dist19 = __commonJS({
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
     var index_exports = {};
     __export2(index_exports, {
+      NVIDIA_MODELS: () => NVIDIA_MODELS,
+      NvidiaModelCatalog: () => NvidiaModelCatalog2,
       NvidiaProvider: () => NvidiaProvider2
     });
     module2.exports = __toCommonJS2(index_exports);
@@ -34030,7 +33995,7 @@ var require_dist19 = __commonJS({
         }
       }
     ];
-    var NvidiaModelCatalog = class {
+    var NvidiaModelCatalog2 = class {
       static models = new Map(
         NVIDIA_MODELS.map((m) => [m.id, m])
       );
@@ -34102,7 +34067,7 @@ var require_dist19 = __commonJS({
         const startTime = Date.now();
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
-        const activeModel = model || NvidiaModelCatalog.getDefault().id;
+        const activeModel = model || NvidiaModelCatalog2.getDefault().id;
         const ping = async (modelToTest) => {
           const body = {
             model: modelToTest,
@@ -34171,9 +34136,9 @@ var require_dist19 = __commonJS({
       }
       getCapabilities() {
         try {
-          return NvidiaModelCatalog.get(this.selectedModel).capabilities;
+          return NvidiaModelCatalog2.get(this.selectedModel).capabilities;
         } catch {
-          return NvidiaModelCatalog.getDefault().capabilities;
+          return NvidiaModelCatalog2.getDefault().capabilities;
         }
       }
       mapMessages(request, supportsMultimodal) {
@@ -34245,7 +34210,7 @@ var require_dist19 = __commonJS({
         const modelId = request.model || this.selectedModel;
         let profile;
         try {
-          profile = NvidiaModelCatalog.get(modelId);
+          profile = NvidiaModelCatalog2.get(modelId);
         } catch (e) {
           throw new import_shared2.UnsupportedModelError(e.message);
         }
@@ -34637,7 +34602,7 @@ function selectProvider(modelId) {
   if (import_model_core.OllamaProvider.isOllamaModelId(lower)) {
     return { modelId, providerId: "ollama" };
   }
-  if (lower.includes("nvidia") || lower.includes("nemotron") || lower.includes("deepseek")) {
+  if (import_provider_nvidia.NvidiaModelCatalog.has(modelId)) {
     return { modelId, providerId: "nvidia" };
   }
   if (lower.includes("experiential") || lower.includes("astra")) {
@@ -34727,9 +34692,16 @@ function defaultProviderFactory(selection, providers) {
     const endpoint = providers?.["openai"]?.endpoint;
     return new import_model_core.OpenAICompatibleProvider(key, endpoint, modelId);
   }
-  const nvidiaKey = providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY;
-  const nvidiaEndpoint = providers?.["nvidia"]?.endpoint;
-  return new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint);
+  if (providerId === "nvidia") {
+    const nvidiaKey = providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY;
+    const nvidiaEndpoint = providers?.["nvidia"]?.endpoint;
+    return new import_provider_nvidia.NvidiaProvider(nvidiaKey, nvidiaEndpoint, modelId);
+  }
+  throw new Error(`No provider serves model '${modelId}'.`);
+}
+function describeAcceptedModels() {
+  const nvidia = import_provider_nvidia.NvidiaModelCatalog.list().map((m) => m.id).join(", ");
+  return `NVIDIA: ${nvidia}. Experiential Labs: gpt-6-astra. OpenAI-compatible: an id containing "gpt-4" or "openai", such as gpt-4o. Local: ollama:<model>, such as ollama:llama3.1.`;
 }
 function createToolRegistry() {
   const registry = new import_tool_core.ToolRegistry();
@@ -34847,14 +34819,12 @@ function createRuntimeApp(options = {}) {
         displayName: "NVIDIA",
         enabled: true,
         endpoint: runtimeConfig.providers?.["nvidia"]?.endpoint || import_provider_nvidia.NvidiaProvider.DEFAULT_ENDPOINT,
-        selectedModel: "Nemotron 3 Ultra",
         hasCredential: hasNvidiaKey,
         isLocal: false,
         status: hasNvidiaKey ? "CONNECTED" : "NOT_CONFIGURED",
         environmentDetected: envNvidia,
-        models: [
-          { id: "nvidia-nemotron-3-ultra", name: "Nemotron 3 Ultra", description: "NVIDIA Nemotron high-performance engineering model" }
-        ],
+        // The catalogue the provider validates against, so every id listed here is one a task accepts.
+        models: import_provider_nvidia.NvidiaModelCatalog.list().map((m) => ({ id: m.id, name: m.displayName })),
         description: "High performance cloud inference powered by NVIDIA Nemotron"
       },
       {
@@ -34900,8 +34870,7 @@ function createRuntimeApp(options = {}) {
         providerId: "nvidia",
         hasCredential: hasKey,
         environmentDetected: envNvidia,
-        status: hasKey ? "CONNECTED" : "NOT_CONFIGURED",
-        selectedModel: "Nemotron 3 Ultra"
+        status: hasKey ? "CONNECTED" : "NOT_CONFIGURED"
       });
     } else if (providerId === "experiential" || providerId === "gpt-6-astra") {
       const envExp = import_model_core.OpenAICompatibleProvider.detectEnvironmentCredential("experiential");
@@ -34986,8 +34955,22 @@ function createRuntimeApp(options = {}) {
   });
   app2.post("/v1/tasks", asyncRoute(async (req, res) => {
     const taskReq = req.body || {};
-    const modelId = taskReq.modelId || "nvidia-nemotron-3-ultra";
+    if (typeof taskReq.modelId !== "string" || !taskReq.modelId.trim()) {
+      return res.status(400).json({
+        error: "MODEL_REQUIRED",
+        code: "MODEL_REQUIRED",
+        message: `Choose a model before starting a task. Accepted: ${describeAcceptedModels()}`
+      });
+    }
+    const modelId = taskReq.modelId.trim();
     const selection = selectProvider(modelId);
+    if (!options.providerFactory && selection.providerId === "unknown") {
+      return res.status(400).json({
+        error: "UNKNOWN_MODEL",
+        code: "UNKNOWN_MODEL",
+        message: `Unknown model '${modelId}'. Accepted: ${describeAcceptedModels()}`
+      });
+    }
     if (selection.providerId === "nvidia") {
       const hasNvidia = !!(runtimeConfig.providers?.["nvidia"]?.apiKey || process.env.NVIDIA_API_KEY);
       if (!hasNvidia) {
@@ -35145,7 +35128,9 @@ function createRuntimeApp(options = {}) {
           autonomy,
           // A human can only approve what they can see: an attached event stream is the signal.
           hasHumanObserver: () => (eventStreams.get(taskId)?.length ?? 0) > 0,
-          systemPrompt: "You are an AI software engineer. Follow instructions precisely.",
+          // The orchestrator builds the task's instructions from its contract and the tools it is
+          // offered (agent-core system_prompt.ts). This is only for anything a host wants to add.
+          systemPrompt: "",
           userPrompt: taskReq.description || taskReq.prompt || "",
           limits: {
             ...taskLimits,
