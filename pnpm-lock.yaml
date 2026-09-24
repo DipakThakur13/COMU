@@ -129,6 +129,9 @@ importers:
       '@comu/provider-nvidia':
         specifier: workspace:*
         version: link:../../providers/nvidia
+      '@comu/session-store':
+        specifier: workspace:*
+        version: link:../../packages/session-store
       '@comu/ui-state':
         specifier: workspace:*
         version: link:../../packages/ui-state

@@ -154,6 +154,20 @@ export interface TaskStartedEvent extends AgentEventBase {
   type: "task.started";
 }
 
+/**
+ * A new turn of the workspace's session begins: the user said something.
+ *
+ * The first event of every task. It is the thread's boundary, typed, so a consumer never finds
+ * where one turn ends by reading a status sentence: the reducer files the previous turn away when
+ * this arrives for a new task, and the message shown for the turn is `prompt`, verbatim.
+ */
+export interface TurnStartedEvent extends AgentEventBase {
+  type: "turn.started";
+  turnId: string;
+  /** What the user asked, as sent. */
+  prompt: string;
+}
+
 export interface AgentStatusEvent extends AgentEventBase {
   type: "agent.status";
   /** The sentence the runtime uses for this transition, e.g. "Executing tools...". */
@@ -683,6 +697,7 @@ export interface ApprovalDecidedEvent extends AgentEventBase {
 
 export type AgentEvent =
   | TaskStartedEvent
+  | TurnStartedEvent
   | AgentStatusEvent
   | TaskModeResolvedEvent
   | ToolStartedEvent

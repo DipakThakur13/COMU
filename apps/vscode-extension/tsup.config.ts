@@ -10,6 +10,7 @@ export default defineConfig({
     'eventsource-parser',
     '@comu/protocol',
     '@comu/ui-state',
+    '@comu/session-store',
     '@comu/provider-nvidia',
     '@comu/model-core'
   ],

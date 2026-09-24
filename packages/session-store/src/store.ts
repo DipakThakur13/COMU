@@ -37,6 +37,11 @@ export interface StoreOptions {
   baseDir?: string;
   /** Literal credential values to redact, in addition to the key shapes below. */
   secrets?: string[];
+  /**
+   * Never change the file, even to move a corrupt one aside. For a reader that is not the store's
+   * writer: the runtime writes the session, the extension only reads it.
+   */
+  readOnly?: boolean;
 }
 
 export function defaultBaseDir(): string {
@@ -96,7 +101,7 @@ export function loadSession(workspaceRoot: string, options: StoreOptions = {}): 
   try {
     parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Session;
   } catch {
-    fs.renameSync(file, `${file}.corrupt.${Date.now()}`);
+    if (!options.readOnly) fs.renameSync(file, `${file}.corrupt.${Date.now()}`);
     return newSession(workspaceRoot);
   }
   if (parsed.version !== 1 || parsed.workspaceRoot !== normaliseRoot(workspaceRoot)) return newSession(workspaceRoot);

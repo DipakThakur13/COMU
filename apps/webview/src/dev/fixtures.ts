@@ -180,7 +180,16 @@ const pushInteraction = {
   }
 };
 
+/**
+ * A turn's opening event: what the user said. Outside the shared sequence on purpose, so adding it
+ * leaves every other fixture event's id and timestamp exactly as they were.
+ */
+function turnStart(prompt: string, taskId = "fixture-task", at = "2026-09-20T10:00:00.000Z"): AgentEvent {
+  return { type: "turn.started", eventId: `fx-turn-${taskId}`, taskId, timestamp: at, turnId: `turn-${taskId}`, prompt } as AgentEvent;
+}
+
 const startup: AgentEvent[] = [
+  turnStart("Add rate limiting to the login endpoint"),
   e("task.started"),
   e("task.mode_resolved", { mode: "AGENT", source: "explicit", confidence: 1, reasons: ["mode selected by user"] }),
   e("agent.status", { status: "Analyzing task and workspace requirements", state: "ANALYZING" }),
@@ -439,6 +448,7 @@ export const FIXTURES: Fixture[] = [
     label: "Chat turn",
     description: "A conversational reply: the answer, and nothing else around it.",
     events: [
+      turnStart("How does the login rate limiter decide when to block a request?"),
       e("task.started"),
       e("task.mode_resolved", { mode: "CHAT", source: "deterministic", confidence: 1, reasons: ["mode selected by user"] }),
       e("agent.status", { status: "Thinking...", state: "THINKING" }),
@@ -462,6 +472,39 @@ export const FIXTURES: Fixture[] = [
         finalText:
           "The limiter is per IP and bounded: each bucket holds a count and an expiry, and buckets are dropped as they expire."
       })
+    ]
+  },
+  {
+    id: "thread",
+    label: "Thread",
+    description: "Three turns of one session: a snippet, a revision of it, and an edit, each under what the user said.",
+    events: [
+      // Turn 1: a text answer.
+      turnStart("Give me an HTML snippet for a buy button", "fixture-turn-1", "2026-09-20T09:58:00.000Z"),
+      { type: "task.mode_resolved", eventId: "fx-t1-mode", taskId: "fixture-turn-1", timestamp: "2026-09-20T09:58:01.000Z", mode: "ASK", source: "deterministic", confidence: 0.9, reasons: [] } as AgentEvent,
+      {
+        type: "task.completed",
+        eventId: "fx-t1-done",
+        taskId: "fixture-turn-1",
+        timestamp: "2026-09-20T09:58:09.000Z",
+        finalText: ["Here is a button:", "", "```html", '<button class="buy">Buy now</button>', "```"].join(NEWLINE),
+        verification: "NOT_VERIFIED"
+      } as AgentEvent,
+      // Turn 2: a revision of turn 1's answer, which touched no file.
+      turnStart("Add inline CSS to it", "fixture-turn-2", "2026-09-20T09:59:00.000Z"),
+      { type: "task.mode_resolved", eventId: "fx-t2-mode", taskId: "fixture-turn-2", timestamp: "2026-09-20T09:59:01.000Z", mode: "ASK", source: "context", confidence: 0.8, reasons: [] } as AgentEvent,
+      {
+        type: "task.completed",
+        eventId: "fx-t2-done",
+        taskId: "fixture-turn-2",
+        timestamp: "2026-09-20T09:59:07.000Z",
+        finalText: ["With inline CSS:", "", "```html", '<button class="buy" style="background:#0a7;color:#fff;border:0;padding:6px 12px">Buy now</button>', "```"].join(NEWLINE),
+        verification: "NOT_VERIFIED"
+      } as AgentEvent,
+      // Turn 3, live: an edit, finished.
+      ...startup,
+      ...streamingTail,
+      ...completedTail
     ]
   },
   {

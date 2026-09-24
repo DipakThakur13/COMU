@@ -112,6 +112,8 @@ describe("Stage 1: revising what the previous turn did", () => {
     model.script({ text: 'Here is a button:\n\n```html\n<button class="buy">Buy now</button>\n```' });
     const first = await turn("give me an HTML snippet for a buy button");
     expect(first.terminal?.type).toBe("task.completed");
+    // The thread's boundary is the first event, typed, carrying what the user said.
+    expect(first.events[0]).toMatchObject({ type: "turn.started", turnId: `turn-${first.taskId}`, prompt: "give me an HTML snippet for a buy button" });
 
     model.script({ text: 'With inline CSS:\n\n```html\n<button class="buy" style="background:#0a7;color:#fff">Buy now</button>\n```' });
     const second = await turn("add inline CSS to it");

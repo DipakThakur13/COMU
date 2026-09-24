@@ -131,7 +131,8 @@
     "@comu/protocol": "workspace:*",
     "@comu/provider-nvidia": "workspace:*",
     "eventsource-parser": "^4.1.0",
-    "@comu/ui-state": "workspace:*"
+    "@comu/ui-state": "workspace:*",
+    "@comu/session-store": "workspace:*"
   },
   "devDependencies": {
     "@types/glob": "^9.0.0",

@@ -797,6 +797,9 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
   const userPrompt = taskReq.description || taskReq.prompt || "";
   const turnStartedAt = new Date().toISOString();
 
+  // The thread's boundary, first in the task's stream: a new turn, and what the user said to open it.
+  emit({ type: 'turn.started', eventId: `evt-${Date.now()}-turn`, taskId, timestamp: turnStartedAt, turnId: `turn-${taskId}`, prompt: userPrompt });
+
   /*
    * The turn, recorded in the workspace's session after the task has ended, however it ended.
    *

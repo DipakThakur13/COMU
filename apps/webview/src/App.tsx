@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { threadEntries } from "@comu/ui-state";
 import { useStore } from "./store/store.js";
 import { Header } from "./components/Header.js";
 import { Composer } from "./components/Composer.js";
@@ -25,6 +26,10 @@ export function App() {
   const settingsTarget = useStore(s => s.settingsTarget);
 
   const busy = session.status === "running" || session.status === "cancelling";
+
+  // The activity surface is the thread: every turn of the session, each opening with what the user
+  // said, the live one last. Rebuilt only when a turn or the live turn's rows change.
+  const thread = useMemo(() => threadEntries(session), [session.turns, session.activity, session.prompt, session.turnId, session.taskId]);
 
   // The legacy panel reported these two and the host logs them; losing them would quietly remove
   // the only measurement of whether the panel still starts quickly.
@@ -108,7 +113,7 @@ export function App() {
 
           <ErrorBoundary region="activity stream">
             <ActivityStream
-              entries={session.activity}
+              entries={thread}
               elidedCount={session.elidedCount}
               streamingText={session.streaming?.text}
               live={session.live}
@@ -119,7 +124,7 @@ export function App() {
               onOpenFile={store.openFile}
               onRequestDiff={store.requestDiff}
               emptyContent={
-                session.taskId ? undefined : (
+                session.taskId || session.turns.length > 0 ? undefined : (
                   <Onboarding
                     providers={providers}
                     onSuggest={store.setComposerText}

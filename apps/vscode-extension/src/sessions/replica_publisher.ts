@@ -5,8 +5,10 @@ import {
     EventSequencer,
     HostToWebviewMessage,
     SessionState,
+    TurnView,
     createInitialSessionState,
     reduceEvent,
+    restoreThread,
     startTask
 } from '@comu/ui-state';
 
@@ -57,6 +59,14 @@ export class ReplicaPublisher {
         this.sequencer.forget(this.currentTaskId);
         this.currentTaskId = input.taskId;
         this.state = startTask(this.state, input);
+        this.sendSnapshot();
+    }
+
+    /** Puts turns rebuilt from the session file into a panel that has none yet. */
+    public restoreThread(turns: TurnView[]) {
+        const next = restoreThread(this.state, turns);
+        if (next === this.state) return;
+        this.state = next;
         this.sendSnapshot();
     }
 

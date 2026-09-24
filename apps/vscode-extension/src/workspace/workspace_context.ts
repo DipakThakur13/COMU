@@ -6,6 +6,19 @@ export interface WorkspaceContextInfo {
     workspaceId: string;
 }
 
+/**
+ * The workspace folder, when it can be known without asking: the only folder, or the folder of the
+ * active editor. Undefined otherwise, so nothing that runs without a user action ever raises a
+ * folder picker.
+ */
+export function unambiguousWorkspaceRoot(): string | undefined {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return undefined;
+    if (folders.length === 1) return folders[0].uri.fsPath;
+    const active = vscode.window.activeTextEditor;
+    return active ? vscode.workspace.getWorkspaceFolder(active.document.uri)?.uri.fsPath : undefined;
+}
+
 export async function getWorkspaceContext(): Promise<WorkspaceContextInfo | null> {
     const folders = vscode.workspace.workspaceFolders;
     

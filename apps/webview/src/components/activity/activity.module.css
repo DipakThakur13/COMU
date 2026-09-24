@@ -248,6 +248,28 @@
   background: var(--comu-surface-raised);
 }
 
+/* ── User message: opens a turn ─────────────────────────────────── */
+/* Set apart from the work below it by space above and a rule, not by a new surface: the thread is
+   one column, read top to bottom. */
+.rowUser {
+  padding: var(--comu-space-2) var(--comu-space-3);
+  margin-top: var(--comu-space-3);
+  border-left: 2px solid var(--comu-text-muted);
+}
+
+.userLabel {
+  font-size: var(--comu-text-xs);
+  color: var(--comu-text-muted);
+  margin-bottom: var(--comu-space-1);
+}
+
+.userText {
+  font-size: var(--comu-text-sm);
+  color: var(--comu-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .messageFull {
   font-size: var(--comu-text-sm);
   color: var(--comu-text);

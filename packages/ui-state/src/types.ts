@@ -44,6 +44,8 @@ export type SessionStatus =
 export type ConnectionState = "connecting" | "online" | "offline";
 
 export type ActivityCategory =
+  /** What the user said to open a turn. Never produced by an agent event, only by the thread. */
+  | "USER_MESSAGE"
   | "AGENT_MESSAGE"
   | "TOOL_ACTIVITY"
   | "COMMAND_OUTPUT"
@@ -252,7 +254,35 @@ export interface ReplicationView {
   gapAt?: number;
 }
 
+/**
+ * A turn of the thread that is over: what the user asked, and what the agent did and said.
+ *
+ * The work is the turn's own activity rows, the same vocabulary the live turn uses, with ids made
+ * unique across the thread. A turn rebuilt from the session file after a restart carries a summary
+ * of its work instead of every row, since the file keeps what was changed and checked, not each
+ * tool call.
+ */
+export interface TurnView {
+  turnId: string;
+  taskId?: string;
+  prompt: string;
+  mode?: InteractionMode;
+  status: SessionStatus;
+  activity: ActivityEntry[];
+  completedVerification?: VerificationStatus;
+  startedAt?: string;
+  /** Rebuilt from the session file after a restart. */
+  restored?: boolean;
+}
+
+/** Finished turns kept in the panel. Older ones stay in the session file. */
+export const MAX_THREAD_TURNS = 50;
+
 export interface SessionState {
+  /** Finished turns of this workspace's session, oldest first. The live turn is not among them. */
+  turns: TurnView[];
+  /** The live turn, from turn.started. */
+  turnId?: string;
   taskId?: string;
   prompt?: string;
   modelId?: string;

@@ -22,6 +22,7 @@ const FIXTURES = [
   "failed",
   "settings",
   "long",
+  "thread",
   "drawer-overview",
   "drawer-verification",
   "drawer-workers",

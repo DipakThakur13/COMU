@@ -1,6 +1,6 @@
-import { AgentEvent, TaskAutonomy } from "@comu/protocol";
+import { AgentEvent, TaskAutonomy, TurnStartedEvent } from "@comu/protocol";
 import { appendActivity, groupActivity } from "./group.js";
-import { categorizeToolName, describeFailure, eventKey, humanAgentState, liveToolLabel, normalizeEvent } from "./normalize.js";
+import { categorizeToolName, describeFailure, diffMetric, eventKey, humanAgentState, liveToolLabel, normalizeEvent } from "./normalize.js";
 import {
   ActivityEntry,
   ActivityItem,
@@ -9,10 +9,12 @@ import {
   MAX_INSPECTED_FILES,
   MAX_SEEN_EVENT_IDS,
   MAX_STREAM_CHARS,
+  MAX_THREAD_TURNS,
   PlanView,
   SequencedEvent,
   SessionState,
   StreamingView,
+  TurnView,
   WorkerView,
   WorkingSetView,
   isActivityGroup
@@ -24,6 +26,7 @@ export function createInitialSessionState(autonomy: TaskAutonomy = "ask"): Sessi
     status: "idle",
     agentState: "IDLE",
     autonomy,
+    turns: [],
     activity: [],
     elidedCount: 0,
     changes: [],
@@ -39,13 +42,17 @@ export function createInitialSessionState(autonomy: TaskAutonomy = "ask"): Sessi
   };
 }
 
-/** Starts a fresh task, keeping only connection and composer-level preferences. */
+/**
+ * Starts a fresh task. The live turn is filed into the thread; everything else about it is reset,
+ * keeping only the connection and composer-level preferences.
+ */
 export function startTask(
   state: SessionState,
   input: { taskId: string; prompt: string; modelId?: string; autonomy: TaskAutonomy; mode?: string }
 ): SessionState {
   const next = createInitialSessionState(input.autonomy);
   next.connection = state.connection;
+  next.turns = fileLiveTurn(state);
   next.taskId = input.taskId;
   next.prompt = input.prompt;
   next.modelId = input.modelId;
@@ -58,6 +65,171 @@ export function startTask(
     next.modeSource = "explicit";
   }
   return next;
+}
+
+/**
+ * The thread with the live turn filed into it, oldest turns dropped past MAX_THREAD_TURNS.
+ *
+ * The turn's rows keep their own vocabulary; only their ids change, prefixed with the task, since
+ * two turns' ids collide otherwise (every completed turn has a "msg-final" row).
+ */
+export function fileLiveTurn(state: SessionState): TurnView[] {
+  if (!state.taskId && !state.prompt && state.activity.length === 0) return state.turns;
+  const key = state.taskId ?? state.turnId ?? `turn-${state.turns.length}`;
+  const turn: TurnView = {
+    turnId: state.turnId ?? `turn-${key}`,
+    ...(state.taskId ? { taskId: state.taskId } : {}),
+    prompt: state.prompt ?? "",
+    ...(state.mode ? { mode: state.mode } : {}),
+    status: state.status,
+    activity: state.activity.map(entry => prefixEntry(entry, key)),
+    ...(state.completedVerification ? { completedVerification: state.completedVerification } : {}),
+    ...(state.live?.startedAt ? { startedAt: state.live.startedAt } : state.timing.startedAt ? { startedAt: new Date(state.timing.startedAt).toISOString() } : {})
+  };
+  return [...state.turns, turn].slice(-MAX_THREAD_TURNS);
+}
+
+function prefixEntry(entry: ActivityEntry, key: string): ActivityEntry {
+  if (isActivityGroup(entry)) {
+    return { ...entry, id: `${key}/${entry.id}`, items: entry.items.map(item => ({ ...item, id: `${key}/${item.id}` })) };
+  }
+  return { ...entry, id: `${key}/${entry.id}` };
+}
+
+/**
+ * A turn begins. For a new task the live turn is filed into the thread and the live fields reset,
+ * exactly as startTask does on the host; for the task already live (the host began it on submit)
+ * this only records the turn and the message the user sent.
+ */
+function beginTurn(state: SessionState, event: TurnStartedEvent, key: string): SessionState {
+  let next: SessionState;
+  if (state.taskId && state.taskId !== event.taskId) {
+    next = createInitialSessionState(state.autonomy);
+    next.connection = state.connection;
+    next.modelId = state.modelId;
+    next.turns = fileLiveTurn(state);
+    next.status = "running";
+    next.agentState = "STARTING";
+    next.timing = { startedAt: Date.parse(event.timestamp) || undefined, waitingMs: 0 };
+    next.live = { label: "Starting", startedAt: event.timestamp };
+    next.replication = state.replication;
+  } else {
+    next = { ...state };
+  }
+  next.seenEventIds = rememberEvent(next.seenEventIds, key);
+  next.taskId = event.taskId;
+  next.turnId = event.turnId;
+  next.prompt = event.prompt;
+  return next;
+}
+
+/**
+ * What the session file keeps about a turn: enough to show it again after a restart. Structural,
+ * so this package never depends on the store that reads the file, which the webview cannot load.
+ */
+export interface RecordedTurn {
+  turnId: string;
+  taskId: string;
+  userMessage: string;
+  mode?: string;
+  status: "completed" | "failed" | "cancelled";
+  finalText: string;
+  error?: string;
+  changes: Array<{ path: string; operation: "CREATE" | "MODIFY"; additions: number; deletions: number }>;
+  verification: string;
+  startedAt: string;
+  endedAt: string;
+}
+
+const RECORDED_VERIFICATION = new Set(["PASSED", "FAILED", "PARTIAL", "UNAVAILABLE", "NOT_VERIFIED"]);
+
+/**
+ * A recorded turn as the thread shows it, in the same row vocabulary as a live one: an edit or
+ * create row per changed file, the verification outcome, and the answer. It is a summary, since the
+ * file keeps what was changed and checked rather than every tool call, and it says so.
+ */
+export function restoredTurn(record: RecordedTurn): TurnView {
+  const key = record.taskId;
+  const rows: ActivityEntry[] = record.changes.map((change, i) => {
+    const created = change.operation === "CREATE";
+    const name = change.path.split("/").pop() ?? change.path;
+    return {
+      id: `${key}/change-${i}`,
+      category: "TOOL_ACTIVITY",
+      toolCategory: created ? "Create" : "Edit",
+      level: "substance",
+      status: "completed",
+      title: `${created ? "Created" : "Edited"} ${name}`,
+      shortDescription: change.path,
+      metric: diffMetric(change.additions, change.deletions),
+      timestamp: record.endedAt,
+      details: { path: change.path, operation: change.operation }
+    } satisfies ActivityItem;
+  });
+  if (RECORDED_VERIFICATION.has(record.verification) && record.changes.length > 0) {
+    const passed = record.verification === "PASSED";
+    rows.push({
+      id: `${key}/verification`,
+      category: "VALIDATION",
+      toolCategory: "Verification",
+      level: "substance",
+      status: passed ? "completed" : record.verification === "FAILED" ? "failed" : "warning",
+      title: passed ? "Verified" : record.verification === "NOT_VERIFIED" ? "Not verified" : `Verification ${record.verification.toLowerCase().replace(/_/g, " ")}`,
+      timestamp: record.endedAt
+    });
+  }
+  const answer = record.status === "completed" ? record.finalText : [record.error, record.finalText].filter(Boolean).join("\n\n");
+  if (answer) rows.push({ ...messageItem(`${key}/msg-final`, answer, record.endedAt), status: record.status === "completed" ? "completed" : "failed" });
+  return {
+    turnId: record.turnId,
+    taskId: record.taskId,
+    prompt: record.userMessage,
+    ...(record.mode ? { mode: record.mode as TurnView["mode"] } : {}),
+    status: record.status,
+    activity: rows,
+    ...(RECORDED_VERIFICATION.has(record.verification) ? { completedVerification: record.verification as TurnView["completedVerification"] } : {}),
+    startedAt: record.startedAt,
+    restored: true
+  };
+}
+
+/**
+ * Puts the turns rebuilt from the session file into a panel that has none yet, which is how the
+ * thread survives a restart. A panel that already has turns keeps its own: they are richer than
+ * anything the file can rebuild.
+ */
+export function restoreThread(state: SessionState, turns: TurnView[]): SessionState {
+  if (state.turns.length > 0 || turns.length === 0) return state;
+  return { ...state, turns: turns.slice(-MAX_THREAD_TURNS) };
+}
+
+/**
+ * The whole thread as one list of rows: each turn opens with what the user said and continues with
+ * the agent's work and answer, the live turn last. This is what the activity surface shows; a
+ * single turn looks exactly as a task always did, with the user's message above it.
+ */
+export function threadEntries(state: SessionState): ActivityEntry[] {
+  const out: ActivityEntry[] = [];
+  for (const turn of state.turns) {
+    out.push(userMessageRow(turn.turnId, turn.prompt, turn.startedAt));
+    out.push(...turn.activity);
+  }
+  if (state.prompt) {
+    out.push(userMessageRow(state.turnId ?? `turn-${state.taskId ?? "live"}`, state.prompt, state.live?.startedAt));
+  }
+  out.push(...state.activity);
+  return out;
+}
+
+function userMessageRow(turnId: string, prompt: string, timestamp?: string): ActivityItem {
+  return {
+    id: `${turnId}/user`,
+    category: "USER_MESSAGE",
+    level: "outcome",
+    status: "completed",
+    title: prompt,
+    timestamp: timestamp ?? ""
+  };
 }
 
 /**
@@ -108,6 +280,12 @@ export function reduceEvent(state: SessionState, event: AgentEvent): SessionStat
 
   const key = eventKey(event);
   if (state.seenEventIds.includes(key)) return state;
+
+  // The thread's boundary. Handled before anything reads the event's taskId, because for a new task
+  // the live turn has to be filed away first.
+  if (event.type === "turn.started") {
+    return beginTurn(state, event as TurnStartedEvent, key);
+  }
 
   let next: SessionState = { ...state, seenEventIds: rememberEvent(state.seenEventIds, key) };
   const e = event as any;

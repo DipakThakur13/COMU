@@ -6,7 +6,9 @@ import { TaskAutonomy, TASK_AUTONOMY_LEVELS } from '@comu/protocol';
 import { RuntimeClient } from '../runtime/runtime_client';
 import { SSEClient } from '../runtime/sse_client';
 import { TaskSessionStore } from '../sessions/task_session_store';
-import { getWorkspaceContext } from '../workspace/workspace_context';
+import { getWorkspaceContext, unambiguousWorkspaceRoot } from '../workspace/workspace_context';
+import { loadSession } from '@comu/session-store';
+import { restoredTurn } from '@comu/ui-state';
 import { getEditorContext } from '../workspace/editor_context';
 import { openDiff } from '../diff/diff_viewer';
 import { ProviderManager } from './provider_manager';
@@ -18,6 +20,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     /** Authoritative session state for the React interface. Idle while the flag is off. */
     private readonly replica = new ReplicaPublisher();
+    private threadRestored = false;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -76,6 +79,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'ready':
                 case 'webview_ready':
                     console.log('[COMU STARTUP] T7: Extension Host ready signal received from webview');
+                    this.restoreThreadFromSession();
                     this.sendSettingsToWebview();
                     this.sendProvidersToWebview().catch(() => {});
                     break;
@@ -225,6 +229,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 defaultModelId: vscode.workspace.getConfiguration('comu').get<string>('defaultModel')
             };
             void this._view.webview.postMessage(msg);
+        }
+    }
+
+    /**
+     * Puts the workspace's session back in the panel, once, when the panel first opens. This is what
+     * makes the thread survive closing VS Code. The runtime writes the session file; this only reads
+     * it. With several folders open and no editor to say which, nothing is restored rather than the
+     * wrong folder's thread.
+     */
+    private restoreThreadFromSession() {
+        if (this.threadRestored) return;
+        this.threadRestored = true;
+        const root = unambiguousWorkspaceRoot();
+        if (!root) return;
+        try {
+            const session = loadSession(root, { readOnly: true });
+            this.replica.restoreThread(session.turns.filter(turn => !turn.textDropped).map(restoredTurn));
+        } catch (e: any) {
+            console.error(`[COMU] The session for ${root} could not be read: ${e?.message || e}`);
         }
     }
 

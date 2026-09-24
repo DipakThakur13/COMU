@@ -91,6 +91,9 @@ export const ActivityRow = memo(function ActivityRow({
   onOpenFile,
   onRequestDiff
 }: ActivityRowProps) {
+  if (entry.category === "USER_MESSAGE") {
+    return <UserMessageRow entry={entry as ActivityItem} />;
+  }
   if (entry.category === "AGENT_MESSAGE") {
     return <MessageRow entry={entry as ActivityItem} onSaveCode={onSaveCode} />;
   }
@@ -167,6 +170,19 @@ function OutcomeRow({ entry }: { entry: ActivityItem }) {
  * Never clamped and never repeated: the row the reply streamed into is the row it stays in, which
  * is why there is no separate result panel anywhere in the interface.
  */
+/**
+ * What the user said, opening a turn of the thread. The rows below it, down to the next one, are
+ * that turn: the agent's work and its answer.
+ */
+function UserMessageRow({ entry }: { entry: ActivityItem }) {
+  return (
+    <div className={`${styles.row} ${styles.rowUser}`} data-level="outcome" data-status="completed" data-role="user">
+      <div className={styles.userLabel}>You</div>
+      <div className={styles.userText}>{entry.title}</div>
+    </div>
+  );
+}
+
 function MessageRow({ entry, onSaveCode }: { entry: ActivityItem; onSaveCode?: (content: string, suggestedPath: string) => void }) {
   const reasoning = (entry.details as { reasoning?: string } | undefined)?.reasoning;
   return (
