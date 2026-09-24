@@ -1,4 +1,36 @@
-import type { LimitDifference, RunRecord } from "./types.js";
+import { providerKill, type LimitDifference, type RunRecord } from "./types.js";
+
+export function cellKey(record: { fixtureId: string; rep: number }): string {
+  return `${record.fixtureId}#${record.rep}`;
+}
+
+/** What a resumed run keeps, measures again, and skips. */
+export interface ResumePlan {
+  /** Cells in scope that the provider killed and `--redo-provider-failures` will measure again. */
+  redo: RunRecord[];
+  /** Cells not to run again, by cellKey. */
+  done: Set<string>;
+  /** In-scope records the resumed run keeps: the ones a budget change would be judged against. */
+  standing: RunRecord[];
+}
+
+/**
+ * Decides, from the journal, which cells a resumed run skips and which it measures again.
+ *
+ * `previous` is one record per cell, the latest. A cell the provider killed counts as done unless
+ * `redoProviderFailures` is set, so the run never pays for it twice without being asked. Only cells
+ * within `reps` are re-measured or judged: a rep 1 resume neither re-measures nor is judged by rep 3.
+ */
+export function planResume(previous: RunRecord[], reps: number, redoProviderFailures: boolean): ResumePlan {
+  const inScope = previous.filter(r => r.rep <= reps);
+  const redo = redoProviderFailures ? inScope.filter(r => providerKill(r) !== null) : [];
+  const redoKeys = new Set(redo.map(cellKey));
+  return {
+    redo,
+    done: new Set(previous.filter(r => !redoKeys.has(cellKey(r))).map(cellKey)),
+    standing: inScope.filter(r => !redoKeys.has(cellKey(r)))
+  };
+}
 
 /**
  * Whether a resumed run would measure under the budget the journal was measured under.

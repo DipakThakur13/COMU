@@ -20,7 +20,8 @@ import { agentAuthored, classifyFailure, refineFailureClass, summarise } from ".
 import { acquireRunLock, killedByProvider, latestPerCell, renderMarkdown } from "../src/report.js";
 import { configureProvider, createCounters, fold, startRuntime, type TaskOutcome } from "../src/runner.js";
 import { SelfTestModel } from "../src/selftest_model.js";
-import type { GraderVerdict, RunRecord } from "../src/types.js";
+import { planResume } from "../src/resume.js";
+import { providerKill, type GraderVerdict, type RunRecord } from "../src/types.js";
 
 /**
  * Tests for the instrument.
@@ -234,6 +235,21 @@ describe("Failure classification", () => {
     expect(classifyFailure({ outcome: o, verdict: bad, unnecessary: [], peakContextRatio: 0.1 })).toBe("loop_truncation");
   });
 
+  it("files a provider kill as such ahead of the verdict and of any wording", () => {
+    // "503 Service Unavailable" once read as verification_unavailable, and a correct verdict once
+    // hid the kill entirely. The counters decide, and they are checked first.
+    const gateway = { timeouts: 0, rateLimits: 0, gateway: 1, other: 0 };
+    const o = outcome({ finalText: "NVIDIA API Error: 503 Service Unavailable", providerFailures: gateway });
+    expect(classifyFailure({ outcome: o, verdict: bad, unnecessary: [], peakContextRatio: 0 })).toBe("provider_error");
+    expect(classifyFailure({ outcome: o, verdict: good, unnecessary: [], peakContextRatio: 0 })).toBe("provider_error");
+    // The same wording with nothing counted is not a provider kill.
+    const uncounted = outcome({ finalText: "provider said no" });
+    expect(classifyFailure({ outcome: uncounted, verdict: bad, unnecessary: [], peakContextRatio: 0 })).not.toBe("provider_error");
+    // A completed run survived its provider failure; it is judged on its work.
+    const recovered = outcome({ status: "completed", providerFailures: gateway });
+    expect(classifyFailure({ outcome: recovered, verdict: good, unnecessary: [], peakContextRatio: 0 })).toBeNull();
+  });
+
   it("recognises a regression", () => {
     const verdict: GraderVerdict = { correct: false, reason: "", regressions: ["a.b"], stillFailing: [] };
     expect(classifyFailure({ outcome: outcome({ status: "completed" }), verdict, unnecessary: [], peakContextRatio: 0 })).toBe(
@@ -293,8 +309,8 @@ describe("Summarising", () => {
       record({ fixtureId: "b", rep: 1 })
     ]);
     expect(summary.perFixture).toEqual([
-      { fixtureId: "a", tier: "T1", correct: 1, of: 2, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0 },
-      { fixtureId: "b", tier: "T1", correct: 1, of: 1, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0 }
+      { fixtureId: "a", tier: "T1", correct: 1, of: 2, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0, providerKilled: 0 },
+      { fixtureId: "b", tier: "T1", correct: 1, of: 1, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0, providerKilled: 0 }
     ]);
     expect(summary.failureCounts).toEqual({ planning_miss: 1 });
   });
@@ -379,7 +395,11 @@ describe("Summarising", () => {
       grader: { correct: false, reason: "The test suite could not be run.", regressions: [], stillFailing: [] }
     });
     expect(refineFailureClass(killed)).toBe("provider_error");
-    expect(summarise([killed]).failureCounts).toEqual({ provider_error: 1 });
+    // Filed as a provider error, and then not counted as a failure of any class: it is not a result.
+    const summary = summarise([killed]);
+    expect(summary.failureCounts).toEqual({});
+    expect(summary.runs).toBe(0);
+    expect(summary.providerKilled).toEqual([{ fixtureId: "f", rep: 1, cause: "gateway", comuError: "NVIDIA API Error: 504 - " }]);
   });
 
   it("files an exhausted budget as truncation, not as an unexplained grader failure", () => {
@@ -505,13 +525,37 @@ describe("Summarising", () => {
           falseFailure: true,
           comuStatus: "failed",
           comuError: "LIMIT_REACHED: The task stopped early: an execution limit was reached.",
-          providerFailures: { timeouts: 1, rateLimits: 0, gateway: 0, other: 0 }
+          providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }
         })
       ]
     });
     expect(markdown).toContain("False failures, with causes");
     expect(markdown).toContain("LIMIT_REACHED");
-    expect(markdown).toContain("1/0/0/0");
+    expect(markdown).toContain("0/0/0/0");
+  });
+
+  it("does not call correct work a false failure when the provider ended the run", () => {
+    // The provider outranks the verdict: COMU did not say the work had failed, the provider stopped it.
+    const markdown = renderMarkdown({
+      label: "killed-but-correct",
+      startedAt: "2026-09-20T00:00:00.000Z",
+      finishedAt: "2026-09-20T00:10:00.000Z",
+      model: { id: "m", provider: "p" },
+      gitCommit: "abc1234",
+      reps: 1,
+      concurrency: 1,
+      records: [
+        record({
+          fixtureId: "t3-py-rename",
+          falseFailure: true,
+          comuStatus: "failed",
+          providerFailures: { timeouts: 1, rateLimits: 0, gateway: 0, other: 0 }
+        })
+      ]
+    });
+    expect(markdown).not.toContain("False failures, with causes");
+    expect(markdown).toContain("## Not measured: ended by the provider");
+    expect(markdown).toMatch(/\| t3-py-rename \| T1 [^|]*\| not measured \(\+1 killed by provider\) \| 0 \| 0 \|/);
   });
 });
 
@@ -573,6 +617,86 @@ describe("Re-measuring a cell the provider killed", () => {
     );
     expect(summary.runs).toBe(2);
     expect(summary.perFixture[0].of).toBe(2);
+  });
+});
+
+describe("B1's two provider kills", () => {
+  /*
+   * The regression this exists for: the only two records B1 wrote, copied from
+   * results/B1.journal.jsonl with their exact error text and counters.
+   *
+   * Both were stored as grader_failed_other, because the record-time classifier looked for the word
+   * "provider" in the error text and neither message contains it. The counters had it right all
+   * along. Every assertion here is on the counters: the wording is swapped out below to prove that
+   * the next new message cannot reopen this.
+   */
+  const stillFailing = { correct: false, reason: "Required tests still failing.", regressions: [], stillFailing: ["t"] };
+  const interval = record({
+    fixtureId: "t1-py-interval",
+    ecosystem: "python",
+    durationMs: 515_827,
+    concurrency: 2,
+    comuStatus: "failed",
+    comuError: "Failed to call NVIDIA API: fetch failed",
+    toolCalls: 1,
+    modelRequests: 1,
+    providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 1 },
+    failureClass: "grader_failed_other",
+    grader: stillFailing
+  });
+  const currency = record({
+    fixtureId: "t1-ts-currency",
+    durationMs: 535_313,
+    concurrency: 2,
+    comuStatus: "failed",
+    comuError: "NVIDIA API Error: 504 - ",
+    toolCalls: 2,
+    modelRequests: 2,
+    providerFailures: { timeouts: 0, rateLimits: 0, gateway: 1, other: 0 },
+    failureClass: "grader_failed_other",
+    grader: stillFailing
+  });
+
+  it("classifies both as provider kills, named by the counter that moved", () => {
+    expect(providerKill(interval)).toBe("other");
+    expect(providerKill(currency)).toBe("gateway");
+    expect(refineFailureClass(interval)).toBe("provider_error");
+    expect(refineFailureClass(currency)).toBe("provider_error");
+  });
+
+  it("decides from the counters, whatever the message says", () => {
+    const reworded = (r: RunRecord) => ({ ...r, comuError: "Upstream said something nobody has seen before" });
+    expect(providerKill(reworded(interval))).toBe("other");
+    expect(providerKill(reworded(currency))).toBe("gateway");
+    // The same messages with nothing counted are not provider kills.
+    const uncounted = (r: RunRecord) => ({ ...r, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 } });
+    expect(providerKill(uncounted(interval))).toBeNull();
+    expect(providerKill(uncounted(currency))).toBeNull();
+  });
+
+  it("selects both for --redo-provider-failures, and neither without it", () => {
+    const previous = latestPerCell([interval, currency]);
+    const redo = planResume(previous, 1, true);
+    expect(redo.redo.map(r => r.fixtureId).sort()).toEqual(["t1-py-interval", "t1-ts-currency"]);
+    expect(redo.done.size).toBe(0);
+    expect(redo.standing).toEqual([]);
+
+    const plain = planResume(previous, 1, false);
+    expect(plain.redo).toEqual([]);
+    expect([...plain.done].sort()).toEqual(["t1-py-interval#1", "t1-ts-currency#1"]);
+  });
+
+  it("excludes both from the score rather than counting them as failures", () => {
+    const summary = summarise([interval, currency]);
+    expect(summary.runs).toBe(0);
+    expect(summary.correct).toBe(0);
+    expect(summary.failureCounts).toEqual({});
+    expect(summary.providerKilled.map(c => `${c.fixtureId}:${c.cause}`).sort()).toEqual(["t1-py-interval:other", "t1-ts-currency:gateway"]);
+    expect(summary.perFixture.every(f => f.of === 0 && f.providerKilled === 1)).toBe(true);
+    // A fixture with no measured cell is not "always correct".
+    expect(summary.reliability).toEqual({ always: 0, sometimes: 0, never: 0 });
+    // What the provider did still shows.
+    expect(summary.providerFailures).toEqual({ timeouts: 0, rateLimits: 0, gateway: 1, other: 1 });
   });
 });
 

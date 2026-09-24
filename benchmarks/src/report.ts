@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   TIER_NAMES,
-  droppedConnection,
+  providerKill,
   type BenchmarkRun,
   type MixedLimitsMarker,
   type RunAnnotations,
@@ -156,11 +156,7 @@ export function latestPerCell(records: RunRecord[]): RunRecord[] {
 
 /** Whether the provider, rather than the agent, ended this run, including by dropping the connection. */
 export function killedByProvider(record: RunRecord): boolean {
-  if (record.comuStatus === "completed") return false;
-  if (droppedConnection(record)) return true;
-  const f = record.providerFailures;
-  if (!f) return false;
-  return f.timeouts + f.rateLimits + f.gateway + f.other > 0;
+  return providerKill(record) !== null;
 }
 
 export function writeRun(run: BenchmarkRun, outDir: string): { jsonPath: string; markdownPath: string } {
@@ -215,7 +211,11 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push(`# Benchmark run: ${run.label}`);
   lines.push("");
   lines.push(`Model \`${run.model.id}\` via ${run.model.provider}. Commit \`${run.gitCommit}\`.`);
-  lines.push(`${run.reps} repetitions per fixture, ${summary.runs} runs, started ${run.startedAt}.`);
+  const killed = summary.providerKilled.length;
+  lines.push(
+    `${run.reps} repetitions per fixture, ${summary.runs} runs measured, started ${run.startedAt}.` +
+      (killed > 0 ? ` ${killed} more ${killed === 1 ? "was" : "were"} ended by the provider and ${killed === 1 ? "is" : "are"} not counted anywhere below; see "Not measured".` : "")
+  );
   const served = run.annotations?.servedModel;
   if (served) {
     lines.push("");
@@ -260,8 +260,11 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push("|---|---|---|---|---|---|---|---|");
   for (const entry of summary.perFixture) {
     const tier = TIER_NAMES[entry.tier as Tier] ?? entry.tier;
+    // A fixture whose every cell the provider ended has no result, which is not the same as 0 of 0.
+    const correct = entry.of > 0 ? `${entry.correct} of ${entry.of}` : "not measured";
+    const killedNote = entry.providerKilled > 0 ? ` (+${entry.providerKilled} killed by provider)` : "";
     lines.push(
-      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${entry.correct} of ${entry.of} | ${entry.falseFailures} | ${entry.falseCompletions} | ${entry.unverifiedCompletions} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
+      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${correct}${killedNote} | ${entry.falseFailures} | ${entry.falseCompletions} | ${entry.unverifiedCompletions} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
     );
   }
   lines.push("");
@@ -277,17 +280,19 @@ export function renderMarkdown(run: BenchmarkRun): string {
   lines.push(`| False completions | ${summary.falseCompletions} |`);
   lines.push(`| False failures | ${summary.falseFailures} |`);
   lines.push(`| Unverified completions (COMU said NOT_VERIFIED) | ${summary.unverifiedCompletions} |`);
+  // With nothing measured there is no spread to show, and zeros would read as a measurement.
+  const none = "no run measured";
   lines.push(
-    `| Wall clock, median (range) | ${fmtSeconds(summary.durationMs.median)} (${fmtSeconds(summary.durationMs.min)} to ${fmtSeconds(summary.durationMs.max)}) |`
+    `| Wall clock, median (range) | ${summary.runs === 0 ? none : `${fmtSeconds(summary.durationMs.median)} (${fmtSeconds(summary.durationMs.min)} to ${fmtSeconds(summary.durationMs.max)})`} |`
   );
   lines.push(
-    `| Prompt tokens per run, median (range) | ${fmtCount(summary.promptTokens.median)} (${fmtCount(summary.promptTokens.min)} to ${fmtCount(summary.promptTokens.max)}) |`
+    `| Prompt tokens per run, median (range) | ${summary.runs === 0 ? none : `${fmtCount(summary.promptTokens.median)} (${fmtCount(summary.promptTokens.min)} to ${fmtCount(summary.promptTokens.max)})`} |`
   );
   // Named, not just measured. "10.3% of the window" prompts no action; "t2-ts-endpoint reached
   // 10.3%" says which fixture to look at first when context budgeting lands.
-  const worst = [...summary.perFixture].sort((a, b) => b.peakContextRatio - a.peakContextRatio)[0];
+  const worst = summary.perFixture.filter(f => f.of > 0).sort((a, b) => b.peakContextRatio - a.peakContextRatio)[0];
   lines.push(
-    `| Largest prompt seen, as a share of the window | ${(summary.maxPeakContextRatio * 100).toFixed(1)}%${worst ? `, by ${worst.fixtureId}` : ""} |`
+    `| Largest prompt seen, as a share of the window | ${worst ? `${(summary.maxPeakContextRatio * 100).toFixed(1)}%, by ${worst.fixtureId}` : none} |`
   );
   lines.push(`| Total prompt tokens | ${fmtCount(summary.totalPromptTokens)} |`);
   lines.push(`| Total completion tokens | ${fmtCount(summary.totalCompletionTokens)} |`);
@@ -309,7 +314,7 @@ export function renderMarkdown(run: BenchmarkRun): string {
    * on work that was already done. Each of those is a different defect and only one of them is
    * COMU's.
    */
-  const falseFailures = run.records.filter(r => r.falseFailure);
+  const falseFailures = run.records.filter(r => r.falseFailure && !providerKill(r));
   if (falseFailures.length > 0) {
     lines.push("## False failures, with causes");
     lines.push("");
@@ -320,6 +325,27 @@ export function renderMarkdown(run: BenchmarkRun): string {
     for (const r of falseFailures) {
       const said = (r.comuError || r.comuStatus || "").replace(/\s+/g, " ").slice(0, 160) || "nothing recorded";
       lines.push(`| ${r.fixtureId} | ${r.rep} | ${said} | ${fmtFailures(r.providerFailures)} |`);
+    }
+    lines.push("");
+  }
+
+  /*
+   * Cells the provider ended.
+   *
+   * Listed, not scored. The model never answered, so the grader had nothing of the agent's to
+   * grade; counting these as failures reported a gateway outage as a regression. The cause is the
+   * provider failure counter that moved, never the error text.
+   */
+  if (summary.providerKilled.length > 0) {
+    lines.push("## Not measured: ended by the provider");
+    lines.push("");
+    lines.push("Excluded from correctness, k of n, false completions and failures, and failure classes.");
+    lines.push("");
+    lines.push("| Fixture | Rep | Cause | Provider said |");
+    lines.push("|---|---|---|---|");
+    for (const cell of summary.providerKilled) {
+      const said = cell.comuError.replace(/\s+/g, " ").replace(/\|/g, "\\|").slice(0, 160) || "nothing recorded";
+      lines.push(`| ${cell.fixtureId} | ${cell.rep} | ${cell.cause} | ${said} |`);
     }
     lines.push("");
   }

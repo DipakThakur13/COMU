@@ -163,6 +163,41 @@ export function droppedConnection(record: { harnessError?: string }): boolean {
   return /^(terminated|fetch failed|other side closed|socket hang up)\b|ECONNRESET|ECONNREFUSED|EPIPE|UND_ERR_SOCKET/i.test(error);
 }
 
+/** What ended a run the provider killed: the counter that moved, or the connection being severed. */
+export type ProviderKillCause = keyof ProviderFailureCounts | "dropped_connection";
+
+const PROVIDER_FAILURE_KEYS = ["timeouts", "rateLimits", "gateway", "other"] as const;
+
+/**
+ * Whether the provider, rather than the agent, ended this run, and how.
+ *
+ * Decided from the counters, never from the error text (decision 0017). The text is the provider's
+ * prose and changes with every outage: B1's two cells died with "Failed to call NVIDIA API: fetch
+ * failed" and "NVIDIA API Error: 504 - ", neither of which says "provider", and both were filed as
+ * grader failures by a classifier that looked for that word. The counters already said other: 1 and
+ * gateway: 1.
+ *
+ * A run that did not complete with any provider failure counted is a kill, named by the largest
+ * counter (ties go to the order the counters are declared in). A completed run is never one: a
+ * failure that was retried and recovered is not a reason to discard the measurement.
+ */
+export function providerKill(record: {
+  comuStatus: string;
+  providerFailures?: ProviderFailureCounts;
+  harnessError?: string;
+}): ProviderKillCause | null {
+  if (record.comuStatus === "completed") return null;
+  const failures = record.providerFailures;
+  let cause: keyof ProviderFailureCounts | null = null;
+  for (const key of PROVIDER_FAILURE_KEYS) {
+    const count = failures?.[key] ?? 0;
+    if (count > 0 && (cause === null || count > (failures?.[cause] ?? 0))) cause = key;
+  }
+  if (cause) return cause;
+  // No provider event arrived to count, because the stream carrying it was severed.
+  return droppedConnection(record) ? "dropped_connection" : null;
+}
+
 
 export interface GraderVerdict {
   correct: boolean;

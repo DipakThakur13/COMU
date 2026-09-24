@@ -1,5 +1,12 @@
 import type { AgentEvent } from "@comu/protocol";
-import { droppedConnection, type FailureClass, type GraderVerdict, type ProviderFailureCounts, type RunRecord } from "./types.js";
+import {
+  providerKill,
+  type FailureClass,
+  type GraderVerdict,
+  type ProviderFailureCounts,
+  type ProviderKillCause,
+  type RunRecord
+} from "./types.js";
 
 /**
  * Records written before the breakdown existed carry no counts, so every read defaults to zero.
@@ -58,8 +65,15 @@ export interface ClassifyInput {
  * Ordered, first match wins, most specific cause first. A run the grader accepts has no failure
  * class even when it was untidy; untidiness is recorded separately so it can be counted without
  * being confused with failure.
+ *
+ * The one exception to "the grader decides" is a provider kill, which is checked before the verdict
+ * and from the counters rather than the text. When the model never answered, the grader had nothing
+ * of the agent's to grade, whichever way it came out.
  */
 export function classifyFailure({ outcome, verdict, unnecessary, peakContextRatio }: ClassifyInput): FailureClass | null {
+  if (providerKill({ comuStatus: outcome.status, providerFailures: outcome.providerFailures, harnessError: outcome.harnessError })) {
+    return "provider_error";
+  }
   if (verdict.correct) return null;
 
   const text = errorTextOf(outcome.events, outcome);
@@ -72,9 +86,6 @@ export function classifyFailure({ outcome, verdict, unnecessary, peakContextRati
   }
   if (outcome.verificationStatus === "UNAVAILABLE" || text.includes("unavailable")) {
     return "verification_unavailable";
-  }
-  if (outcome.status === "failed" && text.includes("provider")) {
-    return "provider_error";
   }
   if (verdict.regressions.length > 0) {
     return "regression_introduced";
@@ -112,33 +123,22 @@ export function agentAuthored(paths: string[]): string[] {
  * The class a record should have carried, decided from what was stored rather than from the event
  * text.
  *
- * `classifyFailure` runs while a task is still in memory and reaches its provider verdict by
- * looking for the word "provider" in the error text. NVIDIA says "NVIDIA API Error: 504", which
- * contains no such word, so a task the provider killed mid-refactor was filed as an unexplained
- * grader failure. A repair budget exhausted at "REPAIR_TIMEOUT" landed in the same place. Three of
- * the first four failures in B0 were filed there, which makes the class distribution useless
- * exactly where it is supposed to be informative.
+ * Records written before `classifyFailure` read the counters were classified by looking for the
+ * word "provider" in the error text. NVIDIA says "NVIDIA API Error: 504", which contains no such
+ * word, so a task the provider killed mid-refactor was filed as an unexplained grader failure. A
+ * repair budget exhausted at "REPAIR_TIMEOUT" landed in the same place. Three of the first four
+ * failures in B0 were filed there, and both of B1's first two records.
  *
  * This runs at report time instead of at record time on purpose. A run takes hours, so the
  * classifier cannot be corrected mid-flight without leaving one journal holding records sorted by
  * two different rules. The stored class stays in the journal for audit; the report uses this.
  */
 export function refineFailureClass(record: RunRecord): FailureClass | null {
+  // Ahead of the verdict: the provider ended the task, so whatever the grader found is not the agent's.
+  if (providerKill(record)) return "provider_error";
   if (record.grader.correct) return null;
 
-  const failures = record.providerFailures;
   const error = record.comuError ?? "";
-
-  // The connection to the run was severed. No provider event arrived to count, but the agent did not fail.
-  if (droppedConnection(record)) return "provider_error";
-
-  // The provider ended the task. Whatever the agent had done by then is not what is being measured.
-  if (record.comuStatus === "failed" && failures) {
-    if (failures.gateway > 0 || failures.rateLimits > 0 || failures.other > 0) return "provider_error";
-    // A timeout is the one cause the benchmark can create for itself under concurrency, so it is
-    // named as a provider error rather than blamed on the agent.
-    if (failures.timeouts > 0) return "provider_error";
-  }
 
   // A budget ran out. The agent did not fail at the work; it was not allowed to continue.
   if (/REPAIR_TIMEOUT|REPAIR_LIMIT_REACHED|VALIDATION_LIMIT_REACHED|LIMIT_REACHED/.test(error)) {
@@ -185,9 +185,11 @@ export function assembleRecord(input: AssembleInput): RunRecord {
   const peakContextRatio = input.contextWindow > 0 ? outcome.peakPromptTokens / input.contextWindow : 0;
 
   // The two directions of disagreement between COMU and reality. Named separately because they
-  // have different causes and different costs: one destroys trust, the other wastes work.
+  // have different causes and different costs: one destroys trust, the other wastes work. A run the
+  // provider ended is neither: COMU did not say the work had failed, the provider stopped it.
+  const killed = providerKill({ comuStatus: outcome.status, providerFailures: outcome.providerFailures, harnessError: outcome.harnessError });
   const falseCompletion = outcome.status === "completed" && !verdict.correct;
-  const falseFailure = outcome.status !== "completed" && verdict.correct;
+  const falseFailure = outcome.status !== "completed" && verdict.correct && !killed;
 
   return {
     fixtureId: input.fixtureId,
@@ -239,8 +241,19 @@ export interface Spread {
   max: number;
 }
 
+/** A cell the provider ended. Not a measurement of COMU, so it is listed rather than scored. */
+export interface ProviderKilledCell {
+  fixtureId: string;
+  rep: number;
+  cause: ProviderKillCause;
+  comuError: string;
+}
+
 export interface Summary {
+  /** Cells that measured COMU: every record except those the provider killed. */
   runs: number;
+  /** Cells the provider ended, excluded from every count of COMU's work and from k of n. */
+  providerKilled: ProviderKilledCell[];
   correct: number;
   falseCompletions: number;
   falseFailures: number;
@@ -281,8 +294,10 @@ export interface Summary {
     falseCompletions: number;
     /** Runs COMU completed while saying nothing verified the change (NOT_VERIFIED). */
     unverifiedCompletions: number;
+    /** Runs the provider ended, not counted in `of`. */
+    providerKilled: number;
   }>;
-  /** Fixtures that always, sometimes and never produced correct work. */
+  /** Fixtures that always, sometimes and never produced correct work. A fixture with no measured cell is none of these. */
   reliability: { always: number; sometimes: number; never: number };
 }
 
@@ -294,27 +309,69 @@ function spread(values: number[]): Spread {
   return { median, min: sorted[0], max: sorted[sorted.length - 1] };
 }
 
+/**
+ * A run's records, reduced to what it says about COMU.
+ *
+ * A cell the provider killed is set aside before anything is counted: not correct, not failed, not
+ * in k of n, not in any failure class. It is listed instead, with its cause, so a gateway outage
+ * reads as missing measurements rather than as a regression. Token totals and provider failure
+ * counts still include it, because those describe what was spent and what the provider did.
+ */
 export function summarise(records: RunRecord[]): Summary {
-  const correct = records.filter(r => r.grader.correct);
-  const failureCounts: Record<string, number> = {};
+  const providerKilled: ProviderKilledCell[] = [];
+  const measured: RunRecord[] = [];
   for (const record of records) {
+    const cause = providerKill(record);
+    if (cause) providerKilled.push({ fixtureId: record.fixtureId, rep: record.rep, cause, comuError: record.comuError ?? "" });
+    else measured.push(record);
+  }
+
+  const failureCounts: Record<string, number> = {};
+  for (const record of measured) {
     const cls = refineFailureClass(record);
     if (cls) failureCounts[cls] = (failureCounts[cls] ?? 0) + 1;
   }
 
   const byFixture = new Map<
     string,
-    { tier: string; correct: number; of: number; peakContextRatio: number; providerFailures: ProviderFailureCounts; falseFailures: number; falseCompletions: number; unverifiedCompletions: number }
+    {
+      tier: string;
+      correct: number;
+      of: number;
+      peakContextRatio: number;
+      providerFailures: ProviderFailureCounts;
+      falseFailures: number;
+      falseCompletions: number;
+      unverifiedCompletions: number;
+      providerKilled: number;
+    }
   >();
   for (const record of records) {
-    const entry = byFixture.get(record.fixtureId) ?? { tier: record.tier, correct: 0, of: 0, peakContextRatio: 0, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0 };
-    entry.of += 1;
-    if (unverifiedCompletion(record)) entry.unverifiedCompletions += 1;
-    if (record.falseFailure) entry.falseFailures += 1;
-    if (record.falseCompletion) entry.falseCompletions += 1;
-    if (record.grader.correct) entry.correct += 1;
-    entry.peakContextRatio = Math.max(entry.peakContextRatio, record.peakContextRatio);
+    const entry = byFixture.get(record.fixtureId) ?? {
+      tier: record.tier,
+      correct: 0,
+      of: 0,
+      peakContextRatio: 0,
+      providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
+      falseFailures: 0,
+      falseCompletions: 0,
+      unverifiedCompletions: 0,
+      providerKilled: 0
+    };
+    // What the provider did is counted for every cell.
     for (const k of FAILURE_KEYS) entry.providerFailures[k] += record.providerFailures?.[k] ?? 0;
+
+    // What COMU did is counted only for cells that measured it.
+    if (providerKill(record)) {
+      entry.providerKilled += 1;
+    } else {
+      entry.of += 1;
+      if (unverifiedCompletion(record)) entry.unverifiedCompletions += 1;
+      if (record.falseFailure) entry.falseFailures += 1;
+      if (record.falseCompletion) entry.falseCompletions += 1;
+      if (record.grader.correct) entry.correct += 1;
+      entry.peakContextRatio = Math.max(entry.peakContextRatio, record.peakContextRatio);
+    }
     byFixture.set(record.fixtureId, entry);
   }
 
@@ -328,16 +385,20 @@ export function summarise(records: RunRecord[]): Summary {
       providerFailures: v.providerFailures,
       falseFailures: v.falseFailures,
       falseCompletions: v.falseCompletions,
-      unverifiedCompletions: v.unverifiedCompletions
+      unverifiedCompletions: v.unverifiedCompletions,
+      providerKilled: v.providerKilled
     }))
     .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId));
 
+  const scored = perFixture.filter(f => f.of > 0);
+
   return {
-    runs: records.length,
-    correct: correct.length,
-    falseCompletions: records.filter(r => r.falseCompletion).length,
-    unverifiedCompletions: records.filter(unverifiedCompletion).length,
-    falseFailures: records.filter(r => r.falseFailure).length,
+    runs: measured.length,
+    providerKilled,
+    correct: measured.filter(r => r.grader.correct).length,
+    falseCompletions: measured.filter(r => r.falseCompletion).length,
+    unverifiedCompletions: measured.filter(unverifiedCompletion).length,
+    falseFailures: measured.filter(r => r.falseFailure).length,
     totalPromptTokens: records.reduce((sum, r) => sum + r.promptTokens, 0),
     totalCompletionTokens: records.reduce((sum, r) => sum + r.completionTokens, 0),
     providerFailures: records.reduce(
@@ -347,15 +408,15 @@ export function summarise(records: RunRecord[]): Summary {
       },
       { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 } as ProviderFailureCounts
     ),
-    durationMs: spread(records.map(r => r.durationMs)),
-    promptTokens: spread(records.map(r => r.promptTokens)),
-    maxPeakContextRatio: records.reduce((max, r) => Math.max(max, r.peakContextRatio), 0),
+    durationMs: spread(measured.map(r => r.durationMs)),
+    promptTokens: spread(measured.map(r => r.promptTokens)),
+    maxPeakContextRatio: measured.reduce((max, r) => Math.max(max, r.peakContextRatio), 0),
     failureCounts,
     perFixture,
     reliability: {
-      always: perFixture.filter(f => f.correct === f.of).length,
-      sometimes: perFixture.filter(f => f.correct > 0 && f.correct < f.of).length,
-      never: perFixture.filter(f => f.correct === 0).length
+      always: scored.filter(f => f.correct === f.of).length,
+      sometimes: scored.filter(f => f.correct > 0 && f.correct < f.of).length,
+      never: scored.filter(f => f.correct === 0).length
     }
   };
 }

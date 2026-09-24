@@ -11,7 +11,6 @@ import {
   acquireRunLock,
   appendMixedLimitsMarker,
   appendRecord,
-  killedByProvider,
   latestPerCell,
   readJournal,
   readJournalMarkers,
@@ -19,7 +18,7 @@ import {
   annotate,
   writeRun
 } from "./report.js";
-import { describeLimitDifferences, limitDifferences } from "./resume.js";
+import { describeLimitDifferences, limitDifferences, planResume } from "./resume.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
 import { assertNoSecretInArgv, loadLocalEnv } from "./secrets.js";
@@ -226,11 +225,7 @@ async function main(): Promise<void> {
    * record stays in the journal as the audit trail for why the cell was re-run; the later record
    * supersedes it.
    */
-  // Only cells this invocation will run: a rep 1 resume neither re-measures nor is judged by rep 3.
-  const inScope = previous.filter(r => r.rep <= args.reps);
-  const redo = args.redoProviderFailures ? inScope.filter(killedByProvider) : [];
-  const redoKeys = new Set(redo.map(r => `${r.fixtureId}#${r.rep}`));
-  const done = new Set(previous.filter(r => !redoKeys.has(`${r.fixtureId}#${r.rep}`)).map(r => `${r.fixtureId}#${r.rep}`));
+  const { redo, done, standing } = planResume(previous, args.reps, args.redoProviderFailures);
 
   if (previous.length > 0) {
     console.log(`Resuming '${args.label}': ${previous.length} runs already recorded.`);
@@ -256,7 +251,6 @@ async function main(): Promise<void> {
       incoming.set(fixture.spec.id, resolved.limits as unknown as Record<string, number>);
     }
 
-    const standing = inScope.filter(r => !redoKeys.has(`${r.fixtureId}#${r.rep}`));
     const differences = limitDifferences(standing, id => incoming.get(id));
     if (differences.length > 0) {
       console.error(`The journal for '${args.label}' was measured under a different budget:`);
@@ -385,6 +379,12 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`${summary.correct} of ${summary.runs} correct.`);
   console.log(`False completions: ${summary.falseCompletions}. False failures: ${summary.falseFailures}.`);
+  if (summary.providerKilled.length > 0) {
+    console.log(
+      `Not measured, ended by the provider: ${summary.providerKilled.map(c => `${c.fixtureId} rep ${c.rep} (${c.cause})`).join(", ")}. ` +
+        "Re-run the label with --redo-provider-failures to measure them."
+    );
+  }
   if (Object.keys(summary.failureCounts).length > 0) {
     console.log(`Failure classes: ${JSON.stringify(summary.failureCounts)}`);
   }

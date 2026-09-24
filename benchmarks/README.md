@@ -99,6 +99,13 @@ Two metrics deserve naming because they point in opposite directions:
 - **False failure**: COMU reported failure, the grader says the work was correct. Wasteful, and
   usually a verification or completion-gate defect rather than an agent defect.
 
+A cell the provider ended is not a measurement of COMU and is not scored. A run that did not
+complete with any provider failure counted (timeout, rate limit, gateway, other), or whose
+connection was severed, is listed under "Not measured" with the counter that moved as its cause,
+and is left out of k of n, the false completion and false failure counts and the failure classes.
+The decision reads the counters, never the error text, which changes with every outage. Re-run the
+label with `--redo-provider-failures` to measure those cells.
+
 Results are reported per fixture as k of n, never as a pooled rate. Averaging a fixture that always
 works with one that never does produces a number true of neither, and hides the distinction the
 benchmark exists to show: succeeding three times in five is a different product from five in five.
