@@ -10,7 +10,7 @@ import { ToolCapability } from "@comu/tool-core";
 import { ModelRequestManager } from "@comu/model-core";
 import { ProviderCancelledError } from "@comu/shared";
 import { basename } from "path";
-import type { TurnContext } from "@comu/session-store";
+import type { CheckpointEntry, TurnContext } from "@comu/session-store";
 import { sessionHistory, sessionSection } from "./system_prompt.js";
 
 export const CHAT_SYSTEM_PROMPT =
@@ -43,6 +43,8 @@ export interface AgentKernelInput {
   userPrompt: string;
   /** The session this turn continues. Absent on a session's first turn. */
   session?: TurnContext;
+  /** See OrchestratorContext.checkpoint. */
+  checkpoint?: (entry: CheckpointEntry) => void;
   workspaceRoot: string;
   workspaceId?: string;
   limits: AgentLimits;

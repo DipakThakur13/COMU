@@ -37,6 +37,26 @@ export interface ToolUse {
   calls: number;
 }
 
+/**
+ * One file as it was before a turn first changed it.
+ *
+ * Recorded before the write, not after the turn, so a turn that dies mid-way still leaves a record
+ * of what it was about to change. A hash, not content: restoring "to before this turn" rebuilds
+ * the content by reversing the turn's recorded diff, and this hash is what proves the rebuild
+ * right. Data only; there is no restore yet.
+ */
+export interface CheckpointEntry {
+  /** Workspace-relative, forward slashes. */
+  path: string;
+  /** Whether the file existed. A restore must never delete a file that did. */
+  existed: boolean;
+  /** sha256 of the content before the change; absent when the file did not exist or could not be read. */
+  hash?: string;
+  /** The file existed but its content could not be read (for example, over the read limit). */
+  unreadable?: boolean;
+  capturedAt: string;
+}
+
 export interface Turn {
   turnId: string;
   taskId: string;
@@ -53,6 +73,8 @@ export interface Turn {
   tools: ToolUse[];
   verification: TurnVerification;
   verificationSummary?: string;
+  /** Every file the turn touched, as it was before the turn's first change to it. */
+  checkpoint?: CheckpointEntry[];
   startedAt: string;
   endedAt: string;
   /**
@@ -111,4 +133,9 @@ export interface Session {
   turns: Turn[];
   workingState: WorkingState;
   changeSet: Record<string, SessionChange>;
+  /**
+   * Checkpoints of turns still running, by task id. Moved onto the turn when it is recorded. An
+   * entry left here belongs to a turn that never finished, which is exactly when it is needed.
+   */
+  openCheckpoints?: Record<string, CheckpointEntry[]>;
 }

@@ -26,7 +26,7 @@ import {
 } from '@comu/model-core';
 import { AgentEvent, ProviderConfig, TaskMode, TASK_MODES, TaskAutonomy, TASK_AUTONOMY_LEVELS } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
-import { appendTurn, buildTurnContext, loadSession, type TurnContext } from '@comu/session-store';
+import { appendTurn, buildTurnContext, loadSession, recordCheckpoint, relativePath, type TurnContext } from '@comu/session-store';
 import { turnFromTask, type FinishedTask } from './session_turns.js';
 
 export type ProviderFactory = (selection: ProviderSelection, config: Record<string, any>) => ModelProvider;
@@ -850,6 +850,15 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
         // The session this turn continues. Undefined on a workspace's first turn, which is then built
         // exactly as a single task always was.
         session: sessionContextFor(workspaceRoot),
+        // Written to the session before the write it precedes. A checkpoint that cannot be written
+        // is logged and the change goes ahead: it is data for a later restore, not a gate.
+        checkpoint: entry => {
+          try {
+            recordCheckpoint(workspaceRoot, taskId, { ...entry, path: relativePath(workspaceRoot, entry.path) }, { baseDir: options.sessionStoreDir });
+          } catch (e: any) {
+            console.error(`[Task ${taskId}] checkpoint for ${entry.path} not recorded: ${e?.message || e}`);
+          }
+        },
         limits: {
           ...taskLimits,
           approvalTimeoutMs,

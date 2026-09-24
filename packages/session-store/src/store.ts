@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
-import type { Session, SessionChange, Turn, TurnChange, WorkingState } from "./types.js";
+import type { CheckpointEntry, Session, SessionChange, Turn, TurnChange, WorkingState } from "./types.js";
 
 /**
  * Where a session lives, and how it is kept.
@@ -123,6 +123,9 @@ export function appendTurn(workspaceRoot: string, turn: Turn, options: StoreOpti
 
   const session = loadSession(workspaceRoot, options);
   const bounded = redactTurn(boundTurn(turn), options.secrets ?? []);
+  const checkpoint = session.openCheckpoints?.[turn.taskId];
+  if (checkpoint && checkpoint.length > 0) bounded.checkpoint = checkpoint;
+  if (session.openCheckpoints) delete session.openCheckpoints[turn.taskId];
   session.turns.push(bounded);
   accumulateChanges(session, bounded);
   session.workingState = deriveWorkingState(session);
@@ -130,6 +133,35 @@ export function appendTurn(workspaceRoot: string, turn: Turn, options: StoreOpti
 
   writeSession(file, enforceCap(session));
   return session;
+}
+
+/** Checkpoints of unfinished turns kept at most, so a run of crashes cannot grow the file without end. */
+const MAX_OPEN_CHECKPOINT_TASKS = 20;
+
+/**
+ * Records a file as it was, before a running turn first changes it.
+ *
+ * Written to disk now, before the change, not when the turn ends: a turn that dies half way through
+ * its changes is the case a checkpoint exists for. A second entry for the same file in the same
+ * turn is ignored, since only the state before the turn's first change counts.
+ */
+export function recordCheckpoint(workspaceRoot: string, taskId: string, entry: CheckpointEntry, options: StoreOptions = {}): void {
+  const file = sessionFilePath(workspaceRoot, options);
+  if (fs.existsSync(file)) {
+    const owner = readOwner(file);
+    if (owner !== undefined && owner !== normaliseRoot(workspaceRoot)) {
+      throw new Error(`The session file at ${file} belongs to another workspace; the checkpoint was not recorded.`);
+    }
+  }
+  const session = loadSession(workspaceRoot, options);
+  const open = (session.openCheckpoints ??= {});
+  const entries = (open[taskId] ??= []);
+  if (entries.some(e => e.path === entry.path)) return;
+  entries.push(entry);
+
+  const tasks = Object.keys(open);
+  for (const stale of tasks.slice(0, Math.max(0, tasks.length - MAX_OPEN_CHECKPOINT_TASKS))) delete open[stale];
+  writeSession(file, session);
 }
 
 function readOwner(file: string): string | undefined {

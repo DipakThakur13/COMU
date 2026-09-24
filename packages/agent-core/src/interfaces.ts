@@ -9,7 +9,7 @@ import {
   RepairAttempt,
   WorkspaceIntegrityResult
 } from "@comu/protocol";
-import type { TurnContext } from "@comu/session-store";
+import type { CheckpointEntry, TurnContext } from "@comu/session-store";
 
 export type AgentState =
   | "IDLE"
@@ -46,6 +46,11 @@ export interface OrchestratorContext {
    * nothing from it goes into the memory engine.
    */
   session?: TurnContext;
+  /**
+   * Called before the turn's first change to each file, with the file as it was. The host records
+   * it in the session before the write happens. Synchronous on purpose: the write waits for it.
+   */
+  checkpoint?: (entry: CheckpointEntry) => void;
   limits: AgentLimits;
   onEvent: (event: AgentEvent) => void;
   abortSignal?: AbortSignal;

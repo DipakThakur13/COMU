@@ -15,6 +15,8 @@ import { MemoryEngine } from "@comu/memory-engine";
 import { SubagentManager } from "./subagent_manager.js";
 import { WorkingSetManager, WorkingSet } from "@comu/context-engine";
 import { buildTaskSystemPrompt, sessionHistory } from "./system_prompt.js";
+import { existsSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import {
   TaskPlan,
   VerificationResult,
@@ -223,6 +225,7 @@ export class AgentOrchestrator {
       systemPrompt: ctx.systemPrompt,
       userPrompt: ctx.userPrompt,
       session: ctx.session,
+      checkpoint: ctx.checkpoint,
       workspaceRoot: ctx.workspaceRoot,
       workspaceId: ctx.workspaceId,
       limits: ctx.limits,
@@ -1015,6 +1018,19 @@ export class AgentOrchestrator {
                   baselineExists = true;
                 } catch (e) {
                   baselineExists = false;
+                }
+                // The turn's first change to this file: record what it was before the write happens.
+                // A failed read is not proof of absence (a file over the read limit fails too), so
+                // existence is checked on its own; a restore must never delete a file that existed.
+                if (ctx.checkpoint && typeof targetPath === "string") {
+                  const existed = baselineExists || existsSync(resolvePath(ctx.workspaceRoot, targetPath));
+                  ctx.checkpoint({
+                    path: targetPath,
+                    existed,
+                    ...(baselineExists && baselineHash ? { hash: baselineHash } : {}),
+                    ...(existed && !baselineExists ? { unreadable: true } : {}),
+                    capturedAt: new Date().toISOString()
+                  });
                 }
               } else {
                 baselineContent = existingRecord.originalContent;
