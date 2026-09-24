@@ -10,17 +10,18 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@comu/protocol": "workspace:*",
-    "@comu/tool-core": "workspace:*",
-    "@comu/model-core": "workspace:*",
-    "@comu/diff-engine": "workspace:*",
-    "@comu/shared": "workspace:*",
-    "@comu/planning-engine": "workspace:*",
-    "@comu/verification-engine": "workspace:*",
+    "@comu/context-engine": "workspace:*",
     "@comu/diagnostics-engine": "workspace:*",
-    "@comu/repair-engine": "workspace:*",
+    "@comu/diff-engine": "workspace:*",
     "@comu/memory-engine": "workspace:*",
-    "@comu/context-engine": "workspace:*"
+    "@comu/model-core": "workspace:*",
+    "@comu/planning-engine": "workspace:*",
+    "@comu/protocol": "workspace:*",
+    "@comu/repair-engine": "workspace:*",
+    "@comu/session-store": "workspace:*",
+    "@comu/shared": "workspace:*",
+    "@comu/tool-core": "workspace:*",
+    "@comu/verification-engine": "workspace:*"
   },
   "exports": {
     ".": {

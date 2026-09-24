@@ -1,5 +1,6 @@
 import { AgentOrchestrator } from "./orchestrator.js";
-import { IntentRouter, IntentClassification } from "./interaction/intent_router.js";
+import { IntentRouter, IntentClassification, RouterContext } from "./interaction/intent_router.js";
+import type { InteractionMode } from "./interaction/interaction_modes.js";
 import { TaskContract } from "./interaction/task_contract.js";
 import { ClarificationHandler } from "./interaction/clarification_handler.js";
 import { ModelIntentClassifier } from "./interaction/model_intent_classifier.js";
@@ -9,6 +10,8 @@ import { ToolCapability } from "@comu/tool-core";
 import { ModelRequestManager } from "@comu/model-core";
 import { ProviderCancelledError } from "@comu/shared";
 import { basename } from "path";
+import type { TurnContext } from "@comu/session-store";
+import { sessionHistory, sessionSection } from "./system_prompt.js";
 
 export const CHAT_SYSTEM_PROMPT =
   "You are COMU, an AI software engineer working inside VS Code. " +
@@ -16,6 +19,18 @@ export const CHAT_SYSTEM_PROMPT =
   "You have no tools in this turn and cannot read or change files or run commands; " +
   "if the user wants work done in the repository, say what you would do and suggest switching to Agent, Plan or Ask mode. " +
   "Do not invent details about the workspace you cannot see.";
+
+/**
+ * What the router knows about the conversation: the previous turn's mode, and whether it changed
+ * any files. Both come from the session; without one, a message is routed on its own words.
+ */
+function routerContext(input: AgentKernelInput): RouterContext {
+  const previous = input.session?.previousTurn;
+  return {
+    activeTaskId: input.taskId,
+    ...(previous?.mode ? { previousMode: previous.mode as InteractionMode, previousChangedFiles: previous.changedFiles } : {})
+  };
+}
 
 export interface AgentKernelInput {
   taskId: string;
@@ -26,6 +41,8 @@ export interface AgentKernelInput {
   autonomy?: TaskAutonomy;
   systemPrompt: string;
   userPrompt: string;
+  /** The session this turn continues. Absent on a session's first turn. */
+  session?: TurnContext;
   workspaceRoot: string;
   workspaceId?: string;
   limits: AgentLimits;
@@ -192,8 +209,13 @@ export class AgentKernel {
         input.runId,
         {
           prompt: input.userPrompt,
-          systemPrompt: `${input.systemPrompt ? input.systemPrompt + "\n\n" : ""}${CHAT_SYSTEM_PROMPT}${workspaceHint}`,
-          messages: [{ role: "user", content: input.userPrompt }]
+          systemPrompt: [
+            `${input.systemPrompt ? input.systemPrompt + "\n\n" : ""}${CHAT_SYSTEM_PROMPT}${workspaceHint}`,
+            input.session ? sessionSection(input.session).text : ""
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          messages: [...sessionHistory(input.session), { role: "user", content: input.userPrompt }]
           // no tools: CHAT never executes anything
         },
         input.abortSignal
@@ -256,7 +278,7 @@ export class AgentKernel {
     }
     return this.router.routeWithFallback(
       input.userPrompt,
-      { activeTaskId: input.taskId },
+      routerContext(input),
       this.buildClassifier(input),
       { taskId: input.taskId, runId: input.runId },
       input.abortSignal
@@ -362,7 +384,7 @@ export class AgentKernel {
 
     const rerouted = await this.router.routeWithFallback(
       userPrompt,
-      { activeTaskId: input.taskId },
+      routerContext(input),
       this.buildClassifier(input),
       { taskId: input.taskId, runId: input.runId },
       input.abortSignal

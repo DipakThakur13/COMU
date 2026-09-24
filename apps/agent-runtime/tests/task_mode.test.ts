@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { Server } from "http";
 import fs from "node:fs";
 import path from "node:path";
@@ -24,12 +24,23 @@ describe("POST /v1/tasks honours the requested mode (Phase 0.4)", () => {
   let server: Server;
   let baseUrl: string;
   let fixtureRoot: string;
+  let sessionDir: string;
   const model = new EchoModel();
 
-  beforeAll(async () => {
+  // Each test is one task on its own. Tasks in one workspace are turns of one session, so sharing a
+  // workspace would make every test after the first a follow-up to the one before it.
+  beforeEach(() => {
     fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "comu-mode-"));
     fs.writeFileSync(path.join(fixtureRoot, "README.md"), "# fixture", "utf8");
-    const app = createRuntimeApp({ providerFactory: () => model });
+  });
+
+  afterEach(() => {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+  });
+
+  beforeAll(async () => {
+    sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "comu-mode-sessions-"));
+    const app = createRuntimeApp({ providerFactory: () => model, sessionStoreDir: sessionDir });
     await new Promise<void>(resolve => {
       server = app.listen(0, "127.0.0.1", () => {
         baseUrl = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -45,7 +56,7 @@ describe("POST /v1/tasks honours the requested mode (Phase 0.4)", () => {
 
   afterAll(async () => {
     await new Promise<void>(resolve => server.close(() => resolve()));
-    fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    fs.rmSync(sessionDir, { recursive: true, force: true });
   });
 
   async function startTask(body: Record<string, unknown>) {

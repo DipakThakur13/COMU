@@ -71,6 +71,26 @@ describe("Agent Kernel & Interaction Boundary (Batch 1)", () => {
       expect(result.requiresClarification).toBe(true);
     });
 
+    // A follow-up to a text answer that changed nothing revises that answer; it is not sent to AGENT
+    // for its verb. But only when it is not about the workspace: after an ASK that found a bug,
+    // "now fix the bug you found" is a change request, and keeping ASK would complete silently.
+    it("keeps a text answer's mode for its follow-up, and only when the follow-up is not about the workspace", () => {
+      const afterAnswer = { previousMode: "ASK" as const, previousChangedFiles: 0 };
+      expect(router.route("add inline CSS to it", afterAnswer).mode).toBe("ASK");
+      expect(router.route("make it shorter", { previousMode: "CHAT", previousChangedFiles: 0 }).mode).toBe("CHAT");
+      expect(router.route("now fix the bug you found", afterAnswer).mode).toBe("AGENT");
+      expect(router.route("add the button to src/app.html", afterAnswer).mode).toBe("AGENT");
+      expect(router.route("give me a plan for the migration", afterAnswer).mode).toBe("PLAN");
+      // After a turn that changed files, or with no session at all, the words decide as before.
+      expect(router.route("add inline CSS to it", { previousMode: "ASK", previousChangedFiles: 2 }).mode).toBe("AGENT");
+      expect(router.route("add inline CSS to it").mode).toBe("AGENT");
+    });
+
+    it("routes undo and revert to AGENT rather than asking what was meant", () => {
+      expect(router.route("undo that").mode).toBe("AGENT");
+      expect(router.route("revert the last change").mode).toBe("AGENT");
+    });
+
     it("should use context for follow-up additive requests", () => {
       const result = router.route("also update the documentation", { previousMode: "AGENT" });
       expect(result.mode).toBe("AGENT");

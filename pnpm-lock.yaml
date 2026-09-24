@@ -74,6 +74,9 @@ importers:
       '@comu/repair-engine':
         specifier: workspace:*
         version: link:../../packages/repair-engine
+      '@comu/session-store':
+        specifier: workspace:*
+        version: link:../../packages/session-store
       '@comu/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -246,6 +249,9 @@ importers:
       '@comu/repair-engine':
         specifier: workspace:*
         version: link:../repair-engine
+      '@comu/session-store':
+        specifier: workspace:*
+        version: link:../session-store
       '@comu/shared':
         specifier: workspace:*
         version: link:../shared
@@ -368,6 +374,8 @@ importers:
       vitest:
         specifier: ^1.1.3
         version: 1.6.1(@types/node@20.19.43)(jsdom@25.0.1)
+
+  packages/session-store: {}
 
   packages/shared: {}
 

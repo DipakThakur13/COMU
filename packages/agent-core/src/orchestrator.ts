@@ -14,7 +14,7 @@ import { InteractionManager } from "./interaction_manager.js";
 import { MemoryEngine } from "@comu/memory-engine";
 import { SubagentManager } from "./subagent_manager.js";
 import { WorkingSetManager, WorkingSet } from "@comu/context-engine";
-import { buildTaskSystemPrompt } from "./system_prompt.js";
+import { buildTaskSystemPrompt, sessionHistory } from "./system_prompt.js";
 import {
   TaskPlan,
   VerificationResult,
@@ -28,6 +28,16 @@ const MAX_TOOL_TARGET_CHARS = 160;
 interface TaskVerificationContext {
   requirement: VerificationRequirement;
   baseline?: VerificationResult;
+}
+
+/**
+ * What the agent last said, without its reasoning markup. Carried on a failed result too: a failed
+ * turn is still part of the conversation, and the next message is often "why did that fail",
+ * asked of this report.
+ */
+function spokenText(text: string | undefined): string | undefined {
+  const clean = text?.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
+  return clean || undefined;
 }
 
 /**
@@ -212,6 +222,7 @@ export class AgentOrchestrator {
       autonomy: ctx.autonomy,
       systemPrompt: ctx.systemPrompt,
       userPrompt: ctx.userPrompt,
+      session: ctx.session,
       workspaceRoot: ctx.workspaceRoot,
       workspaceId: ctx.workspaceId,
       limits: ctx.limits,
@@ -383,7 +394,9 @@ export class AgentOrchestrator {
       ? `${ctx.userPrompt}\n\n[SUPPLEMENTARY PROJECT KNOWLEDGE - Active workspace files remain authoritative]:\n${memoryContext}`
       : ctx.userPrompt;
 
-    const messages: ModelMessage[] = [{ role: "user", content: initialPrompt }];
+    // Earlier turns go in as the messages they were, so a correction in this turn lands against what
+    // the model actually said last time rather than against a description of it.
+    const messages: ModelMessage[] = [...sessionHistory(ctx.session), { role: "user", content: initialPrompt }];
 
     // Defence in depth: a read-only task is never even offered a mutating tool. Enforcement below
     // catches the model naming one anyway.
@@ -422,7 +435,8 @@ export class AgentOrchestrator {
         workspaceRoot: ctx.workspaceRoot,
         autonomy,
         tools: tools.map(t => t.name),
-        expectedMutation: contract.expectedMutation
+        expectedMutation: contract.expectedMutation,
+        session: ctx.session
       }),
       ctx.systemPrompt?.trim()
     ]
@@ -737,6 +751,7 @@ export class AgentOrchestrator {
                 return {
                   status: "failed",
                   error: reason,
+                  finalText: spokenText(lastAssistantText),
                   steps,
                   changeSet,
                   plan: planManager.getPlan(),
@@ -762,6 +777,7 @@ export class AgentOrchestrator {
             return {
               status: "failed",
               error: errSummary,
+              finalText: spokenText(lastAssistantText),
               steps,
               changeSet,
               plan: planManager.getPlan(),
@@ -816,7 +832,7 @@ export class AgentOrchestrator {
           taskId: ctx.taskId,
           timestamp: new Date().toISOString()
         });
-        return { status: "failed", error: err.message, steps, changeSet, plan: planManager.getPlan() };
+        return { status: "failed", error: err.message, finalText: spokenText(lastAssistantText), steps, changeSet, plan: planManager.getPlan() };
       }
 
       if (response.text && response.text !== "Default completion") {
@@ -1116,7 +1132,7 @@ export class AgentOrchestrator {
                       taskId: ctx.taskId,
                       timestamp: new Date().toISOString()
                     });
-                    return { status: "failed", error: "WORKSPACE_STATE_UNKNOWN", steps, changeSet, plan: planManager.getPlan() };
+                    return { status: "failed", error: "WORKSPACE_STATE_UNKNOWN", finalText: spokenText(lastAssistantText), steps, changeSet, plan: planManager.getPlan() };
                   } else {
                     this.transition(ctx, "FAILED", "Integrity Error: Workspace mutated despite tool failure");
                     ctx.onEvent({
@@ -1127,7 +1143,7 @@ export class AgentOrchestrator {
                       taskId: ctx.taskId,
                       timestamp: new Date().toISOString()
                     });
-                    return { status: "failed", error: "WORKSPACE_STATE_CHANGED_AFTER_TOOL_FAILURE", steps, changeSet, plan: planManager.getPlan() };
+                    return { status: "failed", error: "WORKSPACE_STATE_CHANGED_AFTER_TOOL_FAILURE", finalText: spokenText(lastAssistantText), steps, changeSet, plan: planManager.getPlan() };
                   }
                 }
                 throw toolError;
@@ -1469,6 +1485,7 @@ export class AgentOrchestrator {
       return {
         status: "failed",
         error: gateFailureReason,
+        finalText: spokenText(finalText),
         steps,
         changeSet,
         plan: planManager.getPlan(),

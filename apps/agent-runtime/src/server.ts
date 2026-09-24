@@ -26,6 +26,8 @@ import {
 } from '@comu/model-core';
 import { AgentEvent, ProviderConfig, TaskMode, TASK_MODES, TaskAutonomy, TASK_AUTONOMY_LEVELS } from '@comu/protocol';
 import { InMemoryTaskEventStore } from './event_store.js';
+import { appendTurn, buildTurnContext, loadSession, type TurnContext } from '@comu/session-store';
+import { turnFromTask, type FinishedTask } from './session_turns.js';
 
 export type ProviderFactory = (selection: ProviderSelection, config: Record<string, any>) => ModelProvider;
 
@@ -43,6 +45,8 @@ export interface RuntimeServerOptions {
   approvalTimeoutMs?: number;
   /** Grace period for an event stream subscriber to attach before a task counts as headless. Defaults to 3 seconds. */
   approvalObserverGraceMs?: number;
+  /** Where session files live. Defaults to the app data directory, beside the memory store. */
+  sessionStoreDir?: string;
 }
 
 export const AUTH_HEADER = 'authorization';
@@ -373,6 +377,25 @@ const eventStore = new InMemoryTaskEventStore({ maxEventsPerTask: 5000 });
 const taskChangeSets = new Map<string, any>();
 const taskControllers = new Map<string, AbortController>();
 const finishedTasks = new Set<string>();
+
+/**
+ * The context a new turn in this workspace is built from. A session that cannot be read never
+ * stops the task: it runs as a first turn, and the reason is logged.
+ */
+const sessionContextFor = (workspaceRoot: string): TurnContext | undefined => {
+  try {
+    return buildTurnContext(loadSession(workspaceRoot, { baseDir: options.sessionStoreDir }));
+  } catch (e: any) {
+    console.error(`The session for ${workspaceRoot} could not be read; this turn starts without it: ${e?.message || e}`);
+    return undefined;
+  }
+};
+
+/** Every credential this runtime holds, so none of them can be written into a session file. */
+const heldSecrets = (): string[] => [
+  ...Object.values(runtimeConfig.providers).map((p: any) => p?.apiKey).filter((k): k is string => typeof k === 'string'),
+  ...['NVIDIA_API_KEY', 'OPENAI_API_KEY', 'EXPERIENTIAL_API_KEY'].map(name => process.env[name]).filter((k): k is string => !!k)
+];
 
 app.post(['/v1/config/providers', '/v1/config'], (req, res) => {
   const providers = req.body.providers || req.body.config;
@@ -771,6 +794,33 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
     } as AgentEvent);
   };
 
+  const userPrompt = taskReq.description || taskReq.prompt || "";
+  const turnStartedAt = new Date().toISOString();
+
+  /*
+   * The turn, recorded in the workspace's session after the task has ended, however it ended.
+   *
+   * A task that failed or was cancelled is still something COMU did, and "why did that fail" is the
+   * next thing the user types. Recording never fails the task: a session that cannot be written is
+   * logged, and the task's own outcome stands.
+   */
+  const recordTurn = (result?: FinishedTask["result"]) => {
+    try {
+      const turn = turnFromTask({
+        taskId,
+        workspaceRoot,
+        userMessage: userPrompt,
+        startedAt: turnStartedAt,
+        events: eventStore.getEvents(taskId),
+        result,
+        diffEngine
+      });
+      appendTurn(workspaceRoot, turn, { baseDir: options.sessionStoreDir, secrets: heldSecrets() });
+    } catch (e: any) {
+      console.error(`[Task ${taskId}] the turn could not be recorded in the session: ${e?.message || e}`);
+    }
+  };
+
   // Run asynchronously. runTask handles every failure internally, so the timer callback stays void.
   const runTask = async () => {
     try {
@@ -796,7 +846,10 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
         // The orchestrator builds the task's instructions from its contract and the tools it is
         // offered (agent-core system_prompt.ts). This is only for anything a host wants to add.
         systemPrompt: "",
-        userPrompt: taskReq.description || taskReq.prompt || "",
+        userPrompt,
+        // The session this turn continues. Undefined on a workspace's first turn, which is then built
+        // exactly as a single task always was.
+        session: sessionContextFor(workspaceRoot),
         limits: {
           ...taskLimits,
           approvalTimeoutMs,
@@ -826,11 +879,13 @@ app.post('/v1/tasks', asyncRoute(async (req, res) => {
             : `The task ended with status '${result.status}' and published no terminal event.`
       });
 
+      recordTurn(result);
       closeStreams();
       scheduleCleanup();
     } catch (e: any) {
       console.error(`Error executing task ${taskId}:`, e);
       ensureTerminalEvent(taskId, { code: 'RUNTIME_ERROR', message: e?.message || String(e) });
+      recordTurn();
       closeStreams();
       scheduleCleanup();
     }

@@ -9,6 +9,7 @@ import {
   RepairAttempt,
   WorkspaceIntegrityResult
 } from "@comu/protocol";
+import type { TurnContext } from "@comu/session-store";
 
 export type AgentState =
   | "IDLE"
@@ -38,6 +39,13 @@ export interface OrchestratorContext {
   autonomy?: TaskAutonomy;
   systemPrompt: string;
   userPrompt: string;
+  /**
+   * The session this turn belongs to: the working state, the recent turns and the last change.
+   * Absent for the first turn of a session, which is built exactly as a single task always was.
+   * Read here, never written: the host records the turn in the session after the task ends, and
+   * nothing from it goes into the memory engine.
+   */
+  session?: TurnContext;
   limits: AgentLimits;
   onEvent: (event: AgentEvent) => void;
   abortSignal?: AbortSignal;

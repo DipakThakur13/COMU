@@ -11,9 +11,17 @@ export interface IntentClassification {
 export interface RouterContext {
   activeTaskId?: string;
   previousMode?: InteractionMode;
+  /** How many files the previous turn changed, from the session. */
+  previousChangedFiles?: number;
   recentMessages?: string[];
   activeFile?: string;
 }
+
+/** Words about the workspace's own state: a message using them is about the repository. */
+const ENGINEERING_KEYWORDS = /\b(fail|failing|broken|bug|error|tests?|issue|repair|patch|changes?|edits?|mutation|refactor|benchmark|cancellation|e2e|prompt)\b/i;
+
+/** A path or a file name with an extension: the message is pointing at the workspace. */
+const FILE_REFERENCE = /[\\/]|\b[\w-]+\.[a-z0-9]{1,5}\b/i;
 
 /** Anything a model could be asked to classify on demand. */
 export interface IntentClassifier {
@@ -109,9 +117,10 @@ export class IntentRouter {
     }
 
     // 5. AGENT match (broad engineering action verbs and keywords)
-    const agentRegex = /^(fix|implement|refactor|add|update|create|delete|remove|run|test|build|check|modify|write|verify|investigate|repair|do|scenario|e2e|break|task|debug)\b/i;
-    const engineeringKeywords = /\b(fail|failing|broken|bug|error|tests?|issue|repair|patch|changes?|edits?|mutation|refactor|benchmark|cancellation|e2e|prompt)\b/i;
-    if (agentRegex.test(text) || engineeringKeywords.test(text)) {
+    // "undo" and "revert" act on the workspace: "undo that" after an edit is a change request, and
+    // without them it matched nothing and asked for clarification.
+    const agentRegex = /^(fix|implement|refactor|add|update|create|delete|remove|run|test|build|check|modify|write|verify|investigate|repair|do|scenario|e2e|break|task|debug|undo|revert)\b/i;
+    if (agentRegex.test(text) || ENGINEERING_KEYWORDS.test(text)) {
       return {
         mode: "AGENT",
         confidence: 0.8,
@@ -131,6 +140,29 @@ export class IntentRouter {
     if (!context) return null;
 
     const text = message.trim().toLowerCase();
+
+    // A follow-up to a text answer revises that answer. "add inline CSS to it", after a turn that
+    // answered with a snippet and changed nothing, would otherwise go to AGENT on the verb "add" and
+    // look for a file to change. It keeps the previous mode only when it names no file and says
+    // nothing about the workspace's own state: "now fix the bug you found" after an ASK is a change
+    // request, and inheriting ASK there would complete silently having done nothing.
+    if (
+      (context.previousMode === "ASK" || context.previousMode === "CHAT") &&
+      context.previousChangedFiles === 0 &&
+      !FILE_REFERENCE.test(text) &&
+      !ENGINEERING_KEYWORDS.test(text)
+    ) {
+      const own = this.checkDeterministic(message);
+      if (!own || own.mode === "AGENT" || own.mode === "AMBIGUOUS") {
+        return {
+          mode: context.previousMode,
+          confidence: 0.8,
+          source: "context",
+          reasons: ["follow-up to a text answer that changed no files"],
+          requiresClarification: false,
+        };
+      }
+    }
 
     // Follow-ups inherit intent context but might downgrade if asking a question
     if (context.previousMode === "AGENT") {
