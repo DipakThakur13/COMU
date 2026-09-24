@@ -145,4 +145,16 @@ describe("Planning Engine", () => {
     const valResult = validator.validate(plan);
     expect(valResult.valid).toBe(true);
   });
+
+  it("gives a read-only task one answer step, whatever its words", async () => {
+    // The contract outranks the wording: a read-only task cannot implement or validate anything.
+    for (const prompt of ["add inline CSS to it", "You have just been handed this repository and know nothing about it. Explain how it works."]) {
+      const plan = await planner.createPlan("task-6", prompt, undefined, { expectedMutation: false });
+      expect(plan.steps.map(s => s.type)).toEqual(["INVESTIGATE"]);
+      expect(validator.validate(plan).valid).toBe(true);
+    }
+    // Without a contract, or with a mutating one, the wording still decides.
+    expect((await planner.createPlan("task-7", "add inline CSS to it")).steps.length).toBeGreaterThan(1);
+    expect((await planner.createPlan("task-8", "add inline CSS to it", undefined, { expectedMutation: true })).steps.length).toBeGreaterThan(1);
+  });
 });

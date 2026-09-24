@@ -342,7 +342,9 @@ export class AgentOrchestrator {
     let currentPlan: TaskPlan;
     try {
       this.transition(ctx, "PLANNING", "Generating structured engineering plan");
-      currentPlan = await this.planner.createPlan(ctx.taskId, ctx.userPrompt, ctx.abortSignal);
+      currentPlan = await this.planner.createPlan(ctx.taskId, ctx.userPrompt, ctx.abortSignal, {
+        expectedMutation: contract.expectedMutation
+      });
     } catch (planError: any) {
       if (ctx.abortSignal?.aborted) {
         this.transition(ctx, "CANCELLED", "Task was cancelled");

@@ -101,12 +101,29 @@ export class TaskPlanner {
     };
   }
 
-  public async createPlan(taskId: string, prompt: string, signal?: AbortSignal): Promise<TaskPlan> {
+  /**
+   * A plan for the task.
+   *
+   * `expectedMutation` is the task contract's, when the caller has one, and it outranks the prompt's
+   * wording. A read-only task cannot implement or validate anything, so it gets the one answer step
+   * whatever its words: "add inline CSS to it" asked in ASK, or an onboarding question that opens
+   * "You have just been handed this repository", used to get an investigate, implement and validate
+   * plan run inside a read-only task, with the answer taken from whichever step spoke last.
+   */
+  public async createPlan(
+    taskId: string,
+    prompt: string,
+    signal?: AbortSignal,
+    contract?: { expectedMutation: boolean }
+  ): Promise<TaskPlan> {
     if (signal?.aborted) {
       throw new Error("Task planning was aborted.");
     }
 
-    const analysis = this.analyzeTask(prompt);
+    const analysis: TaskAnalysis =
+      contract?.expectedMutation === false
+        ? { complexity: "SIMPLE", intent: "EXPLORE", summary: "Read-only task: one answer", recommendedSteps: ["INVESTIGATE"] }
+        : this.analyzeTask(prompt);
     const now = new Date().toISOString();
     const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     let steps: PlanStep[] = [];
