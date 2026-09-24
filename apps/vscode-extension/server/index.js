@@ -27313,11 +27313,20 @@ var require_dist11 = __commonJS({
           recommendedSteps: ["INVESTIGATE", "IMPLEMENT", "VALIDATE"]
         };
       }
-      async createPlan(taskId, prompt, signal) {
+      /**
+       * A plan for the task.
+       *
+       * `expectedMutation` is the task contract's, when the caller has one, and it outranks the prompt's
+       * wording. A read-only task cannot implement or validate anything, so it gets the one answer step
+       * whatever its words: "add inline CSS to it" asked in ASK, or an onboarding question that opens
+       * "You have just been handed this repository", used to get an investigate, implement and validate
+       * plan run inside a read-only task, with the answer taken from whichever step spoke last.
+       */
+      async createPlan(taskId, prompt, signal, contract) {
         if (signal?.aborted) {
           throw new Error("Task planning was aborted.");
         }
-        const analysis = this.analyzeTask(prompt);
+        const analysis = contract?.expectedMutation === false ? { complexity: "SIMPLE", intent: "EXPLORE", summary: "Read-only task: one answer", recommendedSteps: ["INVESTIGATE"] } : this.analyzeTask(prompt);
         const now = (/* @__PURE__ */ new Date()).toISOString();
         const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         let steps = [];
@@ -28433,6 +28442,147 @@ var require_dist16 = __commonJS({
       return to;
     };
     var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    function buildTaskSystemPrompt(input) {
+      return joinSections(buildTaskSystemPromptSections(input));
+    }
+    function joinSections(sections) {
+      return sections.map((s) => s.text).join("\n\n");
+    }
+    function buildTaskSystemPromptSections(input) {
+      const offered = new Set(input.tools);
+      const out = [];
+      const sections = { push: (text, id = `section-${out.length}`) => out.push({ id, text, evictable: true }) };
+      sections.push(
+        "You are COMU, a software engineering agent working inside the user's repository. You act through the tools you are given; you cannot see or change anything any other way.",
+        "identity"
+      );
+      sections.push(
+        [
+          "## The workspace",
+          `The workspace root is ${input.workspaceRoot}. Every path you pass to a tool is resolved relative to that root; prefer relative paths such as src/index.ts. A path that resolves outside the root is refused.`
+        ].join("\n"),
+        "workspace"
+      );
+      if (input.session) out.push(sessionSection(input.session));
+      const guides = TOOL_GUIDE.filter((g) => g.names.some((n) => offered.has(n))).map((g) => `- ${g.guide}`);
+      if (guides.length > 0) {
+        sections.push(["## Your tools", ...guides].join("\n"));
+      }
+      const canWrite = ["edit_file", "write_file", "create_file"].some((n) => offered.has(n));
+      const canRun = offered.has("execute_command");
+      if (!canWrite && !canRun) {
+        sections.push(
+          [
+            "## This task is read-only",
+            "You cannot change files or run commands on this task. Answer from what you read, and say so if something cannot be determined without running it."
+          ].join("\n")
+        );
+      } else if (input.autonomy === "ask") {
+        sections.push(
+          [
+            "## Approval",
+            "Every file change and every command you request is shown to the user and waits for their approval before it happens. A request that is refused comes back to you as APPROVAL_DENIED; a request nobody answers in time is treated the same way. A denial means the user does not want that action: do not repeat it in another form. Propose a different approach, or ask the user how they want to proceed."
+          ].join("\n")
+        );
+      }
+      if (canWrite) {
+        sections.push(
+          [
+            "## Leave the workspace as you would want it reviewed",
+            "Change only the files the task needs. Do not create scratch files, debugging scripts, notes, backups or copies of files anywhere in the workspace: you have no tool to delete them afterwards, and every file you create is part of your change and will be reviewed as such. If you need to try something, use the project's existing tests and commands."
+          ].join("\n")
+        );
+      }
+      sections.push(
+        [
+          "## Finishing",
+          input.expectedMutation ? "You are finished when the change the task asks for is made and you have checked it with the project's tests or checks. When you stop calling tools, your final message is your report: say what you changed, in which files, and how you checked it. After you finish, COMU runs its own verification; it decides whether the task is verified, not your report." : "When you stop calling tools, your final message is your answer. Base it on what you actually read.",
+          "Never claim something you have not seen happen. If you did not run the tests, do not say they pass. If a check failed or could not run, say so plainly. An honest report of an unfinished task is better than a claim of a finished one."
+        ].join("\n"),
+        "finishing"
+      );
+      return out;
+    }
+    function sessionHistory(session) {
+      return (session?.history ?? []).map((m) => ({ role: m.role, content: m.content }));
+    }
+    function sessionSection(session) {
+      const ws = session.workingState;
+      const lines = [
+        "## Earlier in this session",
+        "This message continues a conversation in this workspace. The earlier messages are above the current one. What COMU actually did in them is recorded below; it is observed, not remembered, so trust it over the earlier messages where they disagree."
+      ];
+      if (ws.goal) lines.push("", `The previous request was: ${JSON.stringify(ws.goal)}`);
+      if (ws.filesChanged.length > 0) {
+        lines.push("", "Files changed in this session:", ...ws.filesChanged.map((f) => `- ${f.path}: ${f.summary}`));
+      }
+      if (ws.filesRead.length > 0) lines.push("", `Files read in this session: ${ws.filesRead.join(", ")}`);
+      if (ws.verification.length > 0) {
+        lines.push(
+          "",
+          "What was checked, most recent first:",
+          ...ws.verification.map((v) => `- ${CHECK_WORDS[v.status] ?? v.status}${v.files.length > 0 ? ` (${v.files.join(", ")})` : ""}${v.summary ? `: ${v.summary}` : ""}`)
+        );
+      }
+      if (ws.decisions.length > 0) lines.push("", "Decisions taken:", ...ws.decisions.map((d) => `- ${d}`));
+      if (ws.openQuestions.length > 0) lines.push("", "Questions left open:", ...ws.openQuestions.map((q) => `- ${q}`));
+      const change = session.lastChange;
+      if (change) {
+        lines.push(
+          "",
+          "### The most recent change",
+          `Made for the request ${JSON.stringify(change.userMessage)}. If you are asked to undo or adjust it, this is what it changed. A file it created can be emptied but not deleted with your tools; say so if asked to remove one.`
+        );
+        for (const file of change.files) {
+          lines.push("", `${file.path} (${file.operation === "CREATE" ? "created" : "modified"}):`);
+          lines.push(file.diff ? ["```diff", file.diff.trimEnd(), "```"].join("\n") : "(diff too large to include; read the file)");
+        }
+        if (change.diffOmitted) lines.push("", "Part of this change is not shown here; read the files before acting on it.");
+      }
+      return { id: "session", text: lines.join("\n"), evictable: false };
+    }
+    var TOOL_GUIDE;
+    var CHECK_WORDS;
+    var init_system_prompt = __esm({
+      "src/system_prompt.ts"() {
+        "use strict";
+        TOOL_GUIDE = [
+          {
+            names: ["get_workspace_tree", "list_directory", "search_text", "read_file"],
+            guide: "Finding your way: get_workspace_tree for the layout, list_directory for one folder, search_text to find where a symbol or string is used, read_file to read a file. Search before reading many files, and read a file before you change it."
+          },
+          {
+            names: ["edit_file", "write_file", "create_file"],
+            guide: "Changing files: edit_file for a targeted change to an existing file (preferred, it keeps the rest of the file intact), write_file to replace a file's whole content, create_file for a new file the task needs."
+          },
+          {
+            names: ["run_tests", "run_typecheck", "run_build", "run_linter"],
+            guide: "Checking your work: run_tests, run_typecheck, run_build and run_linter run the project's own configured commands. Use them to confirm a change rather than assuming it works."
+          },
+          {
+            names: ["execute_command"],
+            guide: "execute_command runs one program with arguments, without a shell, in the workspace. Use it when no dedicated tool fits; prefer the dedicated tools above."
+          },
+          {
+            names: ["git_status", "git_diff", "git_create_branch", "git_stage_files", "git_commit", "git_push"],
+            guide: "Git: git_status and git_diff to see what has changed. Do not stage, commit, branch or push unless the task asks for it."
+          },
+          { names: ["web_docs"], guide: "web_docs looks up library or API documentation when the code alone does not answer a question." },
+          {
+            names: ["delegate_subtask"],
+            guide: "delegate_subtask hands a bounded read-only investigation to a supervised worker. Use it for a self-contained question, not for the main work."
+          }
+        ];
+        CHECK_WORDS = {
+          PASSED: "verified, checks passed",
+          FAILED: "checks failed",
+          PARTIAL: "partly verified",
+          UNAVAILABLE: "checks could not run",
+          NOT_VERIFIED: "not verified: nothing checked it",
+          NONE: "not checked"
+        };
+      }
+    });
     function stripPoliteness(message) {
       let text = message.trim();
       for (let i = 0; i < 4; i++) {
@@ -28442,11 +28592,15 @@ var require_dist16 = __commonJS({
       }
       return text;
     }
+    var ENGINEERING_KEYWORDS;
+    var FILE_REFERENCE;
     var POLITENESS_PREFIX;
     var IntentRouter;
     var init_intent_router = __esm({
       "src/interaction/intent_router.ts"() {
         "use strict";
+        ENGINEERING_KEYWORDS = /\b(fail|failing|broken|bug|error|tests?|issue|repair|patch|changes?|edits?|mutation|refactor|benchmark|cancellation|e2e|prompt)\b/i;
+        FILE_REFERENCE = /[\\/]|\b[\w-]+\.[a-z0-9]{1,5}\b/i;
         POLITENESS_PREFIX = /^(?:(?:hey|hi|hello|ok|okay)[,!]?\s+)?(?:comu[,:]?\s+)?(?:please|kindly|can you|could you|would you|will you|would you mind|i need you to|i want you to|i'd like you to|i would like you to|i need to|i want to|i'd like to|i would like to|let's|lets|go ahead and|just)\s+/i;
         IntentRouter = class {
           /**
@@ -28505,9 +28659,8 @@ var require_dist16 = __commonJS({
                 requiresClarification: true
               };
             }
-            const agentRegex = /^(fix|implement|refactor|add|update|create|delete|remove|run|test|build|check|modify|write|verify|investigate|repair|do|scenario|e2e|break|task|debug)\b/i;
-            const engineeringKeywords = /\b(fail|failing|broken|bug|error|tests?|issue|repair|patch|changes?|edits?|mutation|refactor|benchmark|cancellation|e2e|prompt)\b/i;
-            if (agentRegex.test(text) || engineeringKeywords.test(text)) {
+            const agentRegex = /^(fix|implement|refactor|add|update|create|delete|remove|run|test|build|check|modify|write|verify|investigate|repair|do|scenario|e2e|break|task|debug|undo|revert)\b/i;
+            if (agentRegex.test(text) || ENGINEERING_KEYWORDS.test(text)) {
               return {
                 mode: "AGENT",
                 confidence: 0.8,
@@ -28524,6 +28677,18 @@ var require_dist16 = __commonJS({
           checkContext(message, context) {
             if (!context) return null;
             const text = message.trim().toLowerCase();
+            if ((context.previousMode === "ASK" || context.previousMode === "CHAT") && context.previousChangedFiles === 0 && !FILE_REFERENCE.test(text) && !ENGINEERING_KEYWORDS.test(text)) {
+              const own = this.checkDeterministic(message);
+              if (!own || own.mode === "AGENT" || own.mode === "AMBIGUOUS") {
+                return {
+                  mode: context.previousMode,
+                  confidence: 0.8,
+                  source: "context",
+                  reasons: ["follow-up to a text answer that changed no files"],
+                  requiresClarification: false
+                };
+              }
+            }
             if (context.previousMode === "AGENT") {
               if (text.startsWith("why") || text.includes("explain")) {
                 return {
@@ -28746,6 +28911,13 @@ var require_dist16 = __commonJS({
       AgentKernel: () => AgentKernel,
       CHAT_SYSTEM_PROMPT: () => CHAT_SYSTEM_PROMPT
     });
+    function routerContext(input) {
+      const previous = input.session?.previousTurn;
+      return {
+        activeTaskId: input.taskId,
+        ...previous?.mode ? { previousMode: previous.mode, previousChangedFiles: previous.changedFiles } : {}
+      };
+    }
     var import_protocol2;
     var import_model_core22;
     var import_shared;
@@ -28762,6 +28934,7 @@ var require_dist16 = __commonJS({
         import_model_core22 = require_dist9();
         import_shared = require_dist();
         import_path2 = require("path");
+        init_system_prompt();
         CHAT_SYSTEM_PROMPT = "You are COMU, an AI software engineer working inside VS Code. This is a conversational turn: answer directly, concisely and helpfully. You have no tools in this turn and cannot read or change files or run commands; if the user wants work done in the repository, say what you would do and suggest switching to Agent, Plan or Ask mode. Do not invent details about the workspace you cannot see.";
         AgentKernel = class {
           constructor(orchestrator) {
@@ -28901,8 +29074,11 @@ var require_dist16 = __commonJS({
                 input.runId,
                 {
                   prompt: input.userPrompt,
-                  systemPrompt: `${input.systemPrompt ? input.systemPrompt + "\n\n" : ""}${CHAT_SYSTEM_PROMPT}${workspaceHint}`,
-                  messages: [{ role: "user", content: input.userPrompt }]
+                  systemPrompt: [
+                    `${input.systemPrompt ? input.systemPrompt + "\n\n" : ""}${CHAT_SYSTEM_PROMPT}${workspaceHint}`,
+                    input.session ? sessionSection(input.session).text : ""
+                  ].filter(Boolean).join("\n\n"),
+                  messages: [...sessionHistory(input.session), { role: "user", content: input.userPrompt }]
                   // no tools: CHAT never executes anything
                 },
                 input.abortSignal
@@ -28962,7 +29138,7 @@ var require_dist16 = __commonJS({
             }
             return this.router.routeWithFallback(
               input.userPrompt,
-              { activeTaskId: input.taskId },
+              routerContext(input),
               this.buildClassifier(input),
               { taskId: input.taskId, runId: input.runId },
               input.abortSignal
@@ -29059,7 +29235,7 @@ var require_dist16 = __commonJS({
             }
             const rerouted = await this.router.routeWithFallback(
               userPrompt,
-              { activeTaskId: input.taskId },
+              routerContext(input),
               this.buildClassifier(input),
               { taskId: input.taskId, runId: input.runId },
               input.abortSignal
@@ -29127,9 +29303,13 @@ var require_dist16 = __commonJS({
       ModelIntentClassifier: () => ModelIntentClassifier,
       SubagentManager: () => SubagentManager2,
       buildTaskSystemPrompt: () => buildTaskSystemPrompt,
+      buildTaskSystemPromptSections: () => buildTaskSystemPromptSections,
       describeToolTarget: () => describeToolTarget,
       formatStepSummary: () => formatStepSummary,
+      joinSections: () => joinSections,
       permissionsFromContract: () => permissionsFromContract,
+      sessionHistory: () => sessionHistory,
+      sessionSection: () => sessionSection,
       stripPoliteness: () => stripPoliteness,
       toolAllowedByContract: () => toolAllowedByContract,
       validateTaskContract: () => validateTaskContract
@@ -29828,84 +30008,14 @@ var require_dist16 = __commonJS({
       }
     };
     var import_context_engine = require_dist15();
-    var TOOL_GUIDE = [
-      {
-        names: ["get_workspace_tree", "list_directory", "search_text", "read_file"],
-        guide: "Finding your way: get_workspace_tree for the layout, list_directory for one folder, search_text to find where a symbol or string is used, read_file to read a file. Search before reading many files, and read a file before you change it."
-      },
-      {
-        names: ["edit_file", "write_file", "create_file"],
-        guide: "Changing files: edit_file for a targeted change to an existing file (preferred, it keeps the rest of the file intact), write_file to replace a file's whole content, create_file for a new file the task needs."
-      },
-      {
-        names: ["run_tests", "run_typecheck", "run_build", "run_linter"],
-        guide: "Checking your work: run_tests, run_typecheck, run_build and run_linter run the project's own configured commands. Use them to confirm a change rather than assuming it works."
-      },
-      {
-        names: ["execute_command"],
-        guide: "execute_command runs one program with arguments, without a shell, in the workspace. Use it when no dedicated tool fits; prefer the dedicated tools above."
-      },
-      {
-        names: ["git_status", "git_diff", "git_create_branch", "git_stage_files", "git_commit", "git_push"],
-        guide: "Git: git_status and git_diff to see what has changed. Do not stage, commit, branch or push unless the task asks for it."
-      },
-      { names: ["web_docs"], guide: "web_docs looks up library or API documentation when the code alone does not answer a question." },
-      {
-        names: ["delegate_subtask"],
-        guide: "delegate_subtask hands a bounded read-only investigation to a supervised worker. Use it for a self-contained question, not for the main work."
-      }
-    ];
-    function buildTaskSystemPrompt(input) {
-      const offered = new Set(input.tools);
-      const sections = [];
-      sections.push(
-        "You are COMU, a software engineering agent working inside the user's repository. You act through the tools you are given; you cannot see or change anything any other way."
-      );
-      sections.push(
-        [
-          "## The workspace",
-          `The workspace root is ${input.workspaceRoot}. Every path you pass to a tool is resolved relative to that root; prefer relative paths such as src/index.ts. A path that resolves outside the root is refused.`
-        ].join("\n")
-      );
-      const guides = TOOL_GUIDE.filter((g) => g.names.some((n) => offered.has(n))).map((g) => `- ${g.guide}`);
-      if (guides.length > 0) {
-        sections.push(["## Your tools", ...guides].join("\n"));
-      }
-      const canWrite = ["edit_file", "write_file", "create_file"].some((n) => offered.has(n));
-      const canRun = offered.has("execute_command");
-      if (!canWrite && !canRun) {
-        sections.push(
-          [
-            "## This task is read-only",
-            "You cannot change files or run commands on this task. Answer from what you read, and say so if something cannot be determined without running it."
-          ].join("\n")
-        );
-      } else if (input.autonomy === "ask") {
-        sections.push(
-          [
-            "## Approval",
-            "Every file change and every command you request is shown to the user and waits for their approval before it happens. A request that is refused comes back to you as APPROVAL_DENIED; a request nobody answers in time is treated the same way. A denial means the user does not want that action: do not repeat it in another form. Propose a different approach, or ask the user how they want to proceed."
-          ].join("\n")
-        );
-      }
-      if (canWrite) {
-        sections.push(
-          [
-            "## Leave the workspace as you would want it reviewed",
-            "Change only the files the task needs. Do not create scratch files, debugging scripts, notes, backups or copies of files anywhere in the workspace: you have no tool to delete them afterwards, and every file you create is part of your change and will be reviewed as such. If you need to try something, use the project's existing tests and commands."
-          ].join("\n")
-        );
-      }
-      sections.push(
-        [
-          "## Finishing",
-          input.expectedMutation ? "You are finished when the change the task asks for is made and you have checked it with the project's tests or checks. When you stop calling tools, your final message is your report: say what you changed, in which files, and how you checked it. After you finish, COMU runs its own verification; it decides whether the task is verified, not your report." : "When you stop calling tools, your final message is your answer. Base it on what you actually read.",
-          "Never claim something you have not seen happen. If you did not run the tests, do not say they pass. If a check failed or could not run, say so plainly. An honest report of an unfinished task is better than a claim of a finished one."
-        ].join("\n")
-      );
-      return sections.join("\n\n");
-    }
+    init_system_prompt();
+    var import_node_fs = require("fs");
+    var import_node_path = require("path");
     var MAX_TOOL_TARGET_CHARS = 160;
+    function spokenText(text) {
+      const clean = text?.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim();
+      return clean || void 0;
+    }
     function describeVerificationStop(result) {
       if (result.status === "UNAVAILABLE") {
         const names = result.checks.filter((c) => c.required && c.status === "UNAVAILABLE").map((c) => c.name);
@@ -30044,6 +30154,8 @@ var require_dist16 = __commonJS({
           autonomy: ctx.autonomy,
           systemPrompt: ctx.systemPrompt,
           userPrompt: ctx.userPrompt,
+          session: ctx.session,
+          checkpoint: ctx.checkpoint,
           workspaceRoot: ctx.workspaceRoot,
           workspaceId: ctx.workspaceId,
           limits: ctx.limits,
@@ -30138,7 +30250,9 @@ var require_dist16 = __commonJS({
         let currentPlan;
         try {
           this.transition(ctx, "PLANNING", "Generating structured engineering plan");
-          currentPlan = await this.planner.createPlan(ctx.taskId, ctx.userPrompt, ctx.abortSignal);
+          currentPlan = await this.planner.createPlan(ctx.taskId, ctx.userPrompt, ctx.abortSignal, {
+            expectedMutation: contract.expectedMutation
+          });
         } catch (planError) {
           if (ctx.abortSignal?.aborted) {
             this.transition(ctx, "CANCELLED", "Task was cancelled");
@@ -30174,7 +30288,7 @@ var require_dist16 = __commonJS({
 
 [SUPPLEMENTARY PROJECT KNOWLEDGE - Active workspace files remain authoritative]:
 ${memoryContext}` : ctx.userPrompt;
-        const messages = [{ role: "user", content: initialPrompt }];
+        const messages = [...sessionHistory(ctx.session), { role: "user", content: initialPrompt }];
         const tools = toolsEnabled ? this.registry.getAll().filter((t) => toolAllowedByContract(contract, t)).map((t) => ({
           name: t.name,
           description: t.description,
@@ -30200,7 +30314,8 @@ ${memoryContext}` : ctx.userPrompt;
             workspaceRoot: ctx.workspaceRoot,
             autonomy,
             tools: tools.map((t) => t.name),
-            expectedMutation: contract.expectedMutation
+            expectedMutation: contract.expectedMutation,
+            session: ctx.session
           }),
           ctx.systemPrompt?.trim()
         ].filter(Boolean).join("\n\n");
@@ -30468,6 +30583,7 @@ Please implement targeted fixes to resolve this failure.`
                     return {
                       status: "failed",
                       error: reason,
+                      finalText: spokenText(lastAssistantText),
                       steps,
                       changeSet,
                       plan: planManager.getPlan(),
@@ -30492,6 +30608,7 @@ Please implement targeted fixes to resolve this failure.`
                 return {
                   status: "failed",
                   error: errSummary,
+                  finalText: spokenText(lastAssistantText),
                   steps,
                   changeSet,
                   plan: planManager.getPlan(),
@@ -30540,7 +30657,7 @@ Please implement targeted fixes to resolve this failure.`
               taskId: ctx.taskId,
               timestamp: (/* @__PURE__ */ new Date()).toISOString()
             });
-            return { status: "failed", error: err.message, steps, changeSet, plan: planManager.getPlan() };
+            return { status: "failed", error: err.message, finalText: spokenText(lastAssistantText), steps, changeSet, plan: planManager.getPlan() };
           }
           if (response.text && response.text !== "Default completion") {
             lastAssistantText = response.text;
@@ -30702,6 +30819,16 @@ Please implement targeted fixes to resolve this failure.`
                     } catch (e) {
                       baselineExists = false;
                     }
+                    if (ctx.checkpoint && typeof targetPath === "string") {
+                      const existed = baselineExists || (0, import_node_fs.existsSync)((0, import_node_path.resolve)(ctx.workspaceRoot, targetPath));
+                      ctx.checkpoint({
+                        path: targetPath,
+                        existed,
+                        ...baselineExists && baselineHash ? { hash: baselineHash } : {},
+                        ...existed && !baselineExists ? { unreadable: true } : {},
+                        capturedAt: (/* @__PURE__ */ new Date()).toISOString()
+                      });
+                    }
                   } else {
                     baselineContent = existingRecord.originalContent;
                     baselineHash = existingRecord.originalHash;
@@ -30807,7 +30934,7 @@ Please implement targeted fixes to resolve this failure.`
                           taskId: ctx.taskId,
                           timestamp: (/* @__PURE__ */ new Date()).toISOString()
                         });
-                        return { status: "failed", error: "WORKSPACE_STATE_UNKNOWN", steps, changeSet, plan: planManager.getPlan() };
+                        return { status: "failed", error: "WORKSPACE_STATE_UNKNOWN", finalText: spokenText(lastAssistantText), steps, changeSet, plan: planManager.getPlan() };
                       } else {
                         this.transition(ctx, "FAILED", "Integrity Error: Workspace mutated despite tool failure");
                         ctx.onEvent({
@@ -30818,7 +30945,7 @@ Please implement targeted fixes to resolve this failure.`
                           taskId: ctx.taskId,
                           timestamp: (/* @__PURE__ */ new Date()).toISOString()
                         });
-                        return { status: "failed", error: "WORKSPACE_STATE_CHANGED_AFTER_TOOL_FAILURE", steps, changeSet, plan: planManager.getPlan() };
+                        return { status: "failed", error: "WORKSPACE_STATE_CHANGED_AFTER_TOOL_FAILURE", finalText: spokenText(lastAssistantText), steps, changeSet, plan: planManager.getPlan() };
                       }
                     }
                     throw toolError;
@@ -31103,6 +31230,7 @@ Please implement targeted fixes to resolve this failure.`
           return {
             status: "failed",
             error: gateFailureReason,
+            finalText: spokenText(finalText),
             steps,
             changeSet,
             plan: planManager.getPlan(),
@@ -31346,6 +31474,7 @@ Please implement targeted fixes to resolve this failure.`
     init_clarification_handler();
     init_model_intent_classifier();
     init_agent_kernel();
+    init_system_prompt();
   }
 });
 
@@ -34591,6 +34720,335 @@ ${joinedThoughts}` : joinedThoughts;
   }
 });
 
+// ../../packages/session-store/dist/index.js
+var require_dist20 = __commonJS({
+  "../../packages/session-store/dist/index.js"(exports2, module2) {
+    "use strict";
+    var __create2 = Object.create;
+    var __defProp2 = Object.defineProperty;
+    var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
+    var __getOwnPropNames2 = Object.getOwnPropertyNames;
+    var __getProtoOf2 = Object.getPrototypeOf;
+    var __hasOwnProp2 = Object.prototype.hasOwnProperty;
+    var __export2 = (target, all) => {
+      for (var name in all)
+        __defProp2(target, name, { get: all[name], enumerable: true });
+    };
+    var __copyProps2 = (to, from, except, desc) => {
+      if (from && typeof from === "object" || typeof from === "function") {
+        for (let key of __getOwnPropNames2(from))
+          if (!__hasOwnProp2.call(to, key) && key !== except)
+            __defProp2(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc2(from, key)) || desc.enumerable });
+      }
+      return to;
+    };
+    var __toESM2 = (mod, isNodeMode, target) => (target = mod != null ? __create2(__getProtoOf2(mod)) : {}, __copyProps2(
+      // If the importer is in node compatibility mode or this is not an ESM
+      // file that has been converted to a CommonJS file using a Babel-
+      // compatible transform (i.e. "__esModule" has not been set), then set
+      // "default" to the CommonJS "module.exports" for node compatibility.
+      isNodeMode || !mod || !mod.__esModule ? __defProp2(target, "default", { value: mod, enumerable: true }) : target,
+      mod
+    ));
+    var __toCommonJS2 = (mod) => __copyProps2(__defProp2({}, "__esModule", { value: true }), mod);
+    var index_exports = {};
+    __export2(index_exports, {
+      LAST_CHANGE_DIFF_CHAR_BUDGET: () => LAST_CHANGE_DIFF_CHAR_BUDGET,
+      MAX_DIFF_CHARS_PER_FILE: () => MAX_DIFF_CHARS_PER_FILE,
+      MAX_FINAL_TEXT_CHARS: () => MAX_FINAL_TEXT_CHARS,
+      MAX_SESSION_BYTES: () => MAX_SESSION_BYTES,
+      MAX_USER_MESSAGE_CHARS: () => MAX_USER_MESSAGE_CHARS,
+      RECENT_HISTORY_CHAR_BUDGET: () => RECENT_HISTORY_CHAR_BUDGET,
+      appendTurn: () => appendTurn2,
+      buildTurnContext: () => buildTurnContext2,
+      defaultBaseDir: () => defaultBaseDir,
+      deriveWorkingState: () => deriveWorkingState,
+      emptyWorkingState: () => emptyWorkingState,
+      loadSession: () => loadSession2,
+      newSession: () => newSession,
+      normaliseRoot: () => normaliseRoot,
+      recordCheckpoint: () => recordCheckpoint2,
+      redactSecrets: () => redactSecrets,
+      relativePath: () => relativePath3,
+      sessionFilePath: () => sessionFilePath
+    });
+    module2.exports = __toCommonJS2(index_exports);
+    var import_node_fs = __toESM2(require("fs"));
+    var import_node_path = __toESM2(require("path"));
+    var import_node_os = __toESM2(require("os"));
+    var import_node_crypto = __toESM2(require("crypto"));
+    var MAX_SESSION_BYTES = 1e6;
+    var MAX_USER_MESSAGE_CHARS = 2e4;
+    var MAX_FINAL_TEXT_CHARS = 5e4;
+    var MAX_DIFF_CHARS_PER_FILE = 2e4;
+    var MAX_FILES_READ_PER_TURN = 50;
+    var MAX_WORKING_FILES_READ = 50;
+    var MAX_WORKING_VERIFICATION = 10;
+    function defaultBaseDir() {
+      const platform = import_node_os.default.platform();
+      let appDataDir;
+      if (platform === "win32") {
+        appDataDir = process.env.LOCALAPPDATA || process.env.APPDATA || import_node_path.default.join(import_node_os.default.homedir(), "AppData", "Local");
+      } else if (platform === "darwin") {
+        appDataDir = import_node_path.default.join(import_node_os.default.homedir(), "Library", "Application Support");
+      } else {
+        appDataDir = process.env.XDG_DATA_HOME || import_node_path.default.join(import_node_os.default.homedir(), ".local", "share");
+      }
+      return import_node_path.default.join(appDataDir, "comu", "workspaces");
+    }
+    function normaliseRoot(workspaceRoot) {
+      const resolved = import_node_path.default.resolve(workspaceRoot);
+      return import_node_os.default.platform() === "win32" ? resolved.toLowerCase() : resolved;
+    }
+    function sessionFilePath(workspaceRoot, options = {}) {
+      const key = import_node_crypto.default.createHash("sha256").update(normaliseRoot(workspaceRoot)).digest("hex").substring(0, 16);
+      return import_node_path.default.join(options.baseDir ?? defaultBaseDir(), key, "session.json");
+    }
+    function emptyWorkingState() {
+      return { goal: "", filesRead: [], filesChanged: [], decisions: [], openQuestions: [], verification: [] };
+    }
+    function newSession(workspaceRoot) {
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      return {
+        version: 1,
+        sessionId: `session-${Date.now()}-${import_node_crypto.default.randomBytes(4).toString("hex")}`,
+        workspaceRoot: normaliseRoot(workspaceRoot),
+        createdAt: now,
+        updatedAt: now,
+        turns: [],
+        workingState: emptyWorkingState(),
+        changeSet: {}
+      };
+    }
+    function loadSession2(workspaceRoot, options = {}) {
+      const file = sessionFilePath(workspaceRoot, options);
+      if (!import_node_fs.default.existsSync(file)) return newSession(workspaceRoot);
+      let parsed;
+      try {
+        parsed = JSON.parse(import_node_fs.default.readFileSync(file, "utf8"));
+      } catch {
+        if (!options.readOnly) import_node_fs.default.renameSync(file, `${file}.corrupt.${Date.now()}`);
+        return newSession(workspaceRoot);
+      }
+      if (parsed.version !== 1 || parsed.workspaceRoot !== normaliseRoot(workspaceRoot)) return newSession(workspaceRoot);
+      return parsed;
+    }
+    function appendTurn2(workspaceRoot, turn, options = {}) {
+      const file = sessionFilePath(workspaceRoot, options);
+      if (import_node_fs.default.existsSync(file)) {
+        const owner = readOwner(file);
+        if (owner !== void 0 && owner !== normaliseRoot(workspaceRoot)) {
+          throw new Error(`The session file at ${file} belongs to another workspace; the turn was not recorded.`);
+        }
+      }
+      const session = loadSession2(workspaceRoot, options);
+      const bounded = redactTurn(boundTurn(turn), options.secrets ?? []);
+      const checkpoint = session.openCheckpoints?.[turn.taskId];
+      if (checkpoint && checkpoint.length > 0) bounded.checkpoint = checkpoint;
+      if (session.openCheckpoints) delete session.openCheckpoints[turn.taskId];
+      session.turns.push(bounded);
+      accumulateChanges(session, bounded);
+      session.workingState = deriveWorkingState(session);
+      session.updatedAt = bounded.endedAt;
+      writeSession(file, enforceCap(session));
+      return session;
+    }
+    var MAX_OPEN_CHECKPOINT_TASKS = 20;
+    function recordCheckpoint2(workspaceRoot, taskId, entry, options = {}) {
+      const file = sessionFilePath(workspaceRoot, options);
+      if (import_node_fs.default.existsSync(file)) {
+        const owner = readOwner(file);
+        if (owner !== void 0 && owner !== normaliseRoot(workspaceRoot)) {
+          throw new Error(`The session file at ${file} belongs to another workspace; the checkpoint was not recorded.`);
+        }
+      }
+      const session = loadSession2(workspaceRoot, options);
+      const open = session.openCheckpoints ??= {};
+      const entries = open[taskId] ??= [];
+      if (entries.some((e) => e.path === entry.path)) return;
+      entries.push(entry);
+      const tasks = Object.keys(open);
+      for (const stale of tasks.slice(0, Math.max(0, tasks.length - MAX_OPEN_CHECKPOINT_TASKS))) delete open[stale];
+      writeSession(file, session);
+    }
+    function readOwner(file) {
+      try {
+        return JSON.parse(import_node_fs.default.readFileSync(file, "utf8")).workspaceRoot;
+      } catch {
+        return void 0;
+      }
+    }
+    function writeSession(file, session) {
+      import_node_fs.default.mkdirSync(import_node_path.default.dirname(file), { recursive: true, mode: 448 });
+      const temp = `${file}.${process.pid}.${import_node_crypto.default.randomBytes(4).toString("hex")}.tmp`;
+      import_node_fs.default.writeFileSync(temp, `${JSON.stringify(session, null, 2)}
+`, { encoding: "utf8", mode: 384 });
+      import_node_fs.default.renameSync(temp, file);
+    }
+    function clip(text, max) {
+      return text.length > max ? `${text.slice(0, max)}
+[... ${text.length - max} characters not kept]` : text;
+    }
+    function boundTurn(turn) {
+      return {
+        ...turn,
+        userMessage: clip(turn.userMessage, MAX_USER_MESSAGE_CHARS),
+        finalText: clip(turn.finalText, MAX_FINAL_TEXT_CHARS),
+        filesRead: turn.filesRead.slice(0, MAX_FILES_READ_PER_TURN),
+        changes: turn.changes.map(
+          (change) => change.diff.length > MAX_DIFF_CHARS_PER_FILE ? { ...change, diff: change.diff.slice(0, MAX_DIFF_CHARS_PER_FILE), diffTruncated: true } : change
+        )
+      };
+    }
+    var KEY_SHAPES = [
+      /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z ]+ )?PRIVATE KEY-----/g,
+      /Bearer\s+[A-Za-z0-9_\-.]{16,}/g,
+      /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}/g,
+      /(?<![A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{16,}/g,
+      /(?<![A-Za-z0-9_-])exp-[A-Za-z0-9_-]{16,}/g,
+      /gh[pousr]_[A-Za-z0-9]{20,}/g,
+      /AKIA[0-9A-Z]{16}/g
+    ];
+    function redactSecrets(text, secrets = []) {
+      let out = text;
+      for (const secret of secrets) {
+        if (secret && secret.length >= 8) out = out.split(secret).join("[redacted credential]");
+      }
+      for (const shape of KEY_SHAPES) out = out.replace(shape, "[redacted credential]");
+      return out;
+    }
+    function redactTurn(turn, secrets) {
+      const r = (text) => redactSecrets(text, secrets);
+      return {
+        ...turn,
+        userMessage: r(turn.userMessage),
+        finalText: r(turn.finalText),
+        error: turn.error === void 0 ? void 0 : r(turn.error),
+        verificationSummary: turn.verificationSummary === void 0 ? void 0 : r(turn.verificationSummary),
+        changes: turn.changes.map((change) => ({ ...change, diff: r(change.diff) }))
+      };
+    }
+    function accumulateChanges(session, turn) {
+      for (const change of turn.changes) {
+        const existing = session.changeSet[change.path];
+        if (existing) {
+          existing.currentHash = change.newHash;
+          existing.additions += change.additions;
+          existing.deletions += change.deletions;
+          if (!existing.taskIds.includes(turn.taskId)) existing.taskIds.push(turn.taskId);
+        } else {
+          session.changeSet[change.path] = {
+            path: change.path,
+            originalExisted: change.operation === "MODIFY",
+            originalHash: change.originalHash,
+            currentHash: change.newHash,
+            taskIds: [turn.taskId],
+            additions: change.additions,
+            deletions: change.deletions
+          };
+        }
+      }
+    }
+    function deriveWorkingState(session) {
+      const turns = session.turns;
+      const filesRead = [];
+      for (const turn of [...turns].reverse()) {
+        for (const file of turn.filesRead) {
+          if (!filesRead.includes(file)) filesRead.push(file);
+        }
+      }
+      const filesChanged = Object.values(session.changeSet).map((change) => ({ path: change.path, summary: summariseChange(change) }));
+      const verification = [...turns].reverse().filter((turn) => turn.changes.length > 0 || turn.verification !== "NONE").slice(0, MAX_WORKING_VERIFICATION).map((turn) => ({
+        taskId: turn.taskId,
+        status: turn.verification,
+        files: turn.changes.map((c) => c.path),
+        ...turn.verificationSummary ? { summary: turn.verificationSummary } : {}
+      }));
+      return {
+        goal: turns.at(-1)?.userMessage ?? "",
+        filesRead: filesRead.slice(0, MAX_WORKING_FILES_READ),
+        filesChanged,
+        decisions: [],
+        openQuestions: [],
+        verification
+      };
+    }
+    function summariseChange(change) {
+      const verb = change.originalExisted ? "modified" : "created";
+      const turns = change.taskIds.length === 1 ? "in 1 turn" : `across ${change.taskIds.length} turns`;
+      const reverted = change.originalExisted && change.originalHash !== void 0 && change.originalHash === change.currentHash;
+      return reverted ? `${verb} ${turns}, now back to its original content` : `${verb} ${turns}, +${change.additions} -${change.deletions}`;
+    }
+    function enforceCap(session) {
+      const size = () => Buffer.byteLength(JSON.stringify(session, null, 2), "utf8");
+      for (let i = 0; i < session.turns.length - 1 && size() > MAX_SESSION_BYTES; i++) {
+        const turn = session.turns[i];
+        if (turn.textDropped) continue;
+        session.turns[i] = {
+          ...turn,
+          userMessage: "",
+          finalText: "",
+          error: void 0,
+          changes: turn.changes.map((change) => ({ ...change, diff: "", diffTruncated: true })),
+          textDropped: true
+        };
+      }
+      while (session.turns.length > 1 && size() > MAX_SESSION_BYTES) session.turns.shift();
+      return session;
+    }
+    function relativePath3(workspaceRoot, filePath) {
+      const absolute = import_node_path.default.isAbsolute(filePath) ? filePath : import_node_path.default.join(workspaceRoot, filePath);
+      return import_node_path.default.relative(workspaceRoot, absolute).split(import_node_path.default.sep).join("/");
+    }
+    var RECENT_HISTORY_CHAR_BUDGET = 24e3;
+    var LAST_CHANGE_DIFF_CHAR_BUDGET = 12e3;
+    function buildTurnContext2(session, historyBudget = RECENT_HISTORY_CHAR_BUDGET) {
+      const last = session.turns.at(-1);
+      if (!last) return void 0;
+      const history = [];
+      let used = 0;
+      for (const turn of [...session.turns].reverse()) {
+        if (turn.textDropped) break;
+        const answer = turn.status === "completed" ? turn.finalText : [`(This turn ${turn.status === "failed" ? "failed" : "was cancelled"}${turn.error ? `: ${turn.error}` : ""}.)`, turn.finalText].filter(Boolean).join("\n\n");
+        const pair = [
+          { role: "user", content: turn.userMessage },
+          { role: "assistant", content: answer || "(No answer was given.)" }
+        ];
+        const size = pair[0].content.length + pair[1].content.length;
+        if (history.length > 0 && used + size > historyBudget) break;
+        if (history.length === 0 && size > historyBudget) {
+          pair[1] = { role: "assistant", content: `[... earlier part of this answer not included]
+${pair[1].content.slice(-(historyBudget - Math.min(pair[0].content.length, historyBudget / 2)))}` };
+          pair[0] = { role: "user", content: pair[0].content.slice(0, historyBudget / 2) };
+        }
+        history.unshift(...pair);
+        used += size;
+      }
+      return {
+        sessionId: session.sessionId,
+        workingState: session.workingState,
+        history,
+        lastChange: lastChangeOf(session),
+        previousTurn: { mode: last.mode, changedFiles: last.changes.length, verification: last.verification }
+      };
+    }
+    function lastChangeOf(session) {
+      const turn = [...session.turns].reverse().find((t) => t.changes.length > 0 && !t.textDropped);
+      if (!turn) return void 0;
+      let remaining = LAST_CHANGE_DIFF_CHAR_BUDGET;
+      let diffOmitted = false;
+      const files = turn.changes.map((change) => {
+        const fits = change.diff.length <= remaining;
+        if (!fits || change.diffTruncated) diffOmitted = true;
+        const diff = fits ? change.diff : "";
+        remaining -= diff.length;
+        return { path: change.path, operation: change.operation, diff };
+      });
+      return { taskId: turn.taskId, userMessage: turn.userMessage, files, diffOmitted };
+    }
+  }
+});
+
 // src/server.ts
 var server_exports = {};
 __export(server_exports, {
@@ -34664,6 +35122,98 @@ var InMemoryTaskEventStore = class {
     this.eventsByTask.delete(taskId);
   }
 };
+
+// src/server.ts
+var import_session_store2 = __toESM(require_dist20());
+
+// src/session_turns.ts
+var import_session_store = __toESM(require_dist20());
+var VERIFICATIONS = /* @__PURE__ */ new Set(["PASSED", "FAILED", "PARTIAL", "UNAVAILABLE", "NOT_VERIFIED"]);
+function turnFromTask(task) {
+  const events = task.events;
+  const terminal = [...events].reverse().find((e) => e.type === "task.completed" || e.type === "task.failed" || e.type === "task.cancelled");
+  const status = terminal?.type === "task.completed" ? "completed" : terminal?.type === "task.cancelled" ? "cancelled" : "failed";
+  const mode = [...events].reverse().find((e) => e.type === "task.mode_resolved")?.mode;
+  const tools = /* @__PURE__ */ new Map();
+  const filesRead = [];
+  for (const event of events) {
+    if (event.type !== "tool.started") continue;
+    tools.set(event.tool, (tools.get(event.tool) ?? 0) + 1);
+    if (event.tool === "read_file" && typeof event.target === "string") {
+      const file = (0, import_session_store.relativePath)(task.workspaceRoot, event.target);
+      if (!filesRead.includes(file)) filesRead.push(file);
+    }
+  }
+  const reported = terminal?.type === "task.completed" ? terminal.verification : void 0;
+  const typed = reported ?? task.result?.verificationResult?.status;
+  const verification = typed && VERIFICATIONS.has(typed) ? typed : "NONE";
+  const finalText = String((terminal?.type === "task.completed" ? terminal.finalText : void 0) ?? task.result?.finalText ?? "");
+  const error = terminal?.type === "task.failed" ? String(terminal.error ?? terminal.payload?.message ?? task.result?.error ?? "") : terminal?.type === "task.cancelled" ? String(terminal.reason ?? "cancelled") : void 0;
+  return {
+    turnId: `turn-${task.taskId}`,
+    taskId: task.taskId,
+    userMessage: task.userMessage,
+    ...mode ? { mode } : {},
+    status,
+    finalText,
+    ...error ? { error } : {},
+    changes: changesOf(task, events),
+    filesRead,
+    tools: [...tools.entries()].map(([tool, calls]) => ({ tool, calls })),
+    verification,
+    ...task.result?.verificationResult?.summary ? { verificationSummary: task.result.verificationResult.summary } : {},
+    startedAt: task.startedAt,
+    endedAt: terminal?.timestamp ?? (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function changesOf(task, events) {
+  const changes = [];
+  const recorded = task.result?.changeSet?.changes;
+  if (recorded instanceof Map && recorded.size > 0) {
+    for (const change of recorded.values()) {
+      const original = change.originalContent ?? "";
+      if (change.operation === "MODIFY" && original === change.newContent) continue;
+      const path = (0, import_session_store.relativePath)(task.workspaceRoot, change.path);
+      const diff = task.diffEngine.createUnifiedDiff(path, original, change.newContent);
+      const { additions, deletions } = countLines(diff);
+      changes.push({
+        path,
+        operation: change.operation,
+        ...change.originalHash ? { originalHash: change.originalHash } : {},
+        ...change.newHash ? { newHash: change.newHash } : {},
+        additions,
+        deletions,
+        diff,
+        diffTruncated: false
+      });
+    }
+    return changes;
+  }
+  for (const event of events) {
+    if (event.type !== "change.created" || typeof event.path !== "string") continue;
+    const path = (0, import_session_store.relativePath)(task.workspaceRoot, event.path);
+    if (changes.some((c) => c.path === path)) continue;
+    changes.push({
+      path,
+      operation: event.operation === "CREATE" ? "CREATE" : "MODIFY",
+      additions: Number(event.additions ?? 0),
+      deletions: Number(event.deletions ?? 0),
+      diff: "",
+      diffTruncated: true
+    });
+  }
+  return changes;
+}
+function countLines(diff) {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
+    if (line.startsWith("+")) additions++;
+    else if (line.startsWith("-")) deletions++;
+  }
+  return { additions, deletions };
+}
 
 // src/server.ts
 var AUTH_HEADER = "authorization";
@@ -34900,6 +35450,18 @@ function createRuntimeApp(options = {}) {
   const taskChangeSets = /* @__PURE__ */ new Map();
   const taskControllers = /* @__PURE__ */ new Map();
   const finishedTasks = /* @__PURE__ */ new Set();
+  const sessionContextFor = (workspaceRoot) => {
+    try {
+      return (0, import_session_store2.buildTurnContext)((0, import_session_store2.loadSession)(workspaceRoot, { baseDir: options.sessionStoreDir }));
+    } catch (e) {
+      console.error(`The session for ${workspaceRoot} could not be read; this turn starts without it: ${e?.message || e}`);
+      return void 0;
+    }
+  };
+  const heldSecrets = () => [
+    ...Object.values(runtimeConfig.providers).map((p) => p?.apiKey).filter((k) => typeof k === "string"),
+    ...["NVIDIA_API_KEY", "OPENAI_API_KEY", "EXPERIENTIAL_API_KEY"].map((name) => process.env[name]).filter((k) => !!k)
+  ];
   app2.post(["/v1/config/providers", "/v1/config"], (req, res) => {
     const providers = req.body.providers || req.body.config;
     if (providers) {
@@ -35247,6 +35809,25 @@ function createRuntimeApp(options = {}) {
         payload: { code: failure.code, message: failure.message }
       });
     };
+    const userPrompt = taskReq.description || taskReq.prompt || "";
+    const turnStartedAt = (/* @__PURE__ */ new Date()).toISOString();
+    emit({ type: "turn.started", eventId: `evt-${Date.now()}-turn`, taskId, timestamp: turnStartedAt, turnId: `turn-${taskId}`, prompt: userPrompt });
+    const recordTurn = (result) => {
+      try {
+        const turn = turnFromTask({
+          taskId,
+          workspaceRoot,
+          userMessage: userPrompt,
+          startedAt: turnStartedAt,
+          events: eventStore.getEvents(taskId),
+          result,
+          diffEngine
+        });
+        (0, import_session_store2.appendTurn)(workspaceRoot, turn, { baseDir: options.sessionStoreDir, secrets: heldSecrets() });
+      } catch (e) {
+        console.error(`[Task ${taskId}] the turn could not be recorded in the session: ${e?.message || e}`);
+      }
+    };
     const runTask = async () => {
       try {
         const model = providerFactory(selection, runtimeConfig.providers);
@@ -35269,7 +35850,19 @@ function createRuntimeApp(options = {}) {
           // The orchestrator builds the task's instructions from its contract and the tools it is
           // offered (agent-core system_prompt.ts). This is only for anything a host wants to add.
           systemPrompt: "",
-          userPrompt: taskReq.description || taskReq.prompt || "",
+          userPrompt,
+          // The session this turn continues. Undefined on a workspace's first turn, which is then built
+          // exactly as a single task always was.
+          session: sessionContextFor(workspaceRoot),
+          // Written to the session before the write it precedes. A checkpoint that cannot be written
+          // is logged and the change goes ahead: it is data for a later restore, not a gate.
+          checkpoint: (entry) => {
+            try {
+              (0, import_session_store2.recordCheckpoint)(workspaceRoot, taskId, { ...entry, path: (0, import_session_store2.relativePath)(workspaceRoot, entry.path) }, { baseDir: options.sessionStoreDir });
+            } catch (e) {
+              console.error(`[Task ${taskId}] checkpoint for ${entry.path} not recorded: ${e?.message || e}`);
+            }
+          },
           limits: {
             ...taskLimits,
             approvalTimeoutMs,
@@ -35290,11 +35883,13 @@ function createRuntimeApp(options = {}) {
           code: result.status === "limit_reached" ? "LIMIT_REACHED" : "RUN_ENDED_WITHOUT_TERMINAL_EVENT",
           message: result.status === "limit_reached" ? `The task stopped early: ${result.error || "an execution limit was reached"}.` : `The task ended with status '${result.status}' and published no terminal event.`
         });
+        recordTurn(result);
         closeStreams();
         scheduleCleanup();
       } catch (e) {
         console.error(`Error executing task ${taskId}:`, e);
         ensureTerminalEvent(taskId, { code: "RUNTIME_ERROR", message: e?.message || String(e) });
+        recordTurn();
         closeStreams();
         scheduleCleanup();
       }
