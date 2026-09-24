@@ -144,8 +144,9 @@ describe("Scripted plumbing campaign: orchestrator wiring under a canned model",
       autonomy: "auto", // unsupervised harness run: no interaction channel is wired
       systemPrompt: "You are an AI software engineer.",
       userPrompt: "Find the bug causing the failing test in the user-profile service. Fix the bug, run relevant tests and typecheck.",
-      // Explicit, as a user choosing Agent would be. Under AUTO the router reads the leading "Find" as
-      // a read-only question (docs/B0_FINDINGS.md), and this scenario is about the fix, not the routing.
+      // Explicit, as a user choosing Agent would be: this scenario is about the fix, not the routing.
+      // (Under AUTO the leading "Find" once routed this to ASK, docs/B0_FINDINGS.md; the router now
+      // reads the "Fix" that follows as a change request.)
       mode: "AGENT",
       limits: { maxSteps: 10, maxToolCalls: 20, maxExecutionTimeMs: 15000 },
       onEvent: e => events.push(e)

@@ -69,8 +69,23 @@ export class IntentRouter {
       };
     }
 
-    // 3. ASK match
+    // 3. ASK match, unless the same message also asks for a change.
+    //
+    // "Find the bug ... fix the bug" opens like a question and is a fix request. Routed to ASK it
+    // verified nothing, changed nothing and reported "Completed · unverified": silent and wrong. So
+    // a leading question verb yields to a mutation verb anywhere in the message. A listed word
+    // right after a determiner is a noun ("the fix failed", "the add button"), not a request.
     const askRegex = /^(explain|how does|what does|why is|why did|why does|why\b|search for|what is|where is|describe|show|give|tell|find|inspect|sample)\b/i;
+    const mutationRegex = /(?<!\b(?:the|a|an|this|that|these|those|my|our|your|its|their)\s+)\b(fix|implement|add|update|refactor|create|remove|rename)\b/i;
+    if (askRegex.test(text) && mutationRegex.test(text)) {
+      return {
+        mode: "AGENT",
+        confidence: 0.8,
+        source: "deterministic",
+        reasons: ["question verb with a mutation verb: the message asks for a change"],
+        requiresClarification: false,
+      };
+    }
     if (askRegex.test(text)) {
       return {
         mode: "ASK",

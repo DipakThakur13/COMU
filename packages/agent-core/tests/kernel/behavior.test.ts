@@ -31,6 +31,22 @@ describe("Agent Kernel & Interaction Boundary (Batch 1)", () => {
       expect(result.requiresClarification).toBe(false);
     });
 
+    // A question verb opens the message; a mutation verb anywhere in it makes it a change request.
+    // Routed to ASK, "find and fix" verified nothing, changed nothing and reported completion.
+    it("routes a question that also asks for a change to AGENT, and a pure question to ASK", () => {
+      expect(router.route("find out why the build fails").mode).toBe("ASK");
+      expect(router.route("find and fix the null check").mode).toBe("AGENT");
+      expect(
+        router.route("Find the bug causing the failing test in the user-profile service. Fix the bug, run relevant tests and typecheck.").mode
+      ).toBe("AGENT");
+      expect(router.route("show me the config loader, then rename it to loadSettings").mode).toBe("AGENT");
+      expect(router.route("explain how the cache works").mode).toBe("ASK");
+      // The listed word as a noun, or inside an identifier, is not a request to change anything.
+      expect(router.route("explain why the fix failed").mode).toBe("ASK");
+      expect(router.route("where is the add button rendered?").mode).toBe("ASK");
+      expect(router.route("what does updateUser do?").mode).toBe("ASK");
+    });
+
     it("should classify 'How does authentication work in this repository?' as ASK", () => {
       const result = router.route("How does authentication work in this repository?");
       expect(result.mode).toBe("ASK");
