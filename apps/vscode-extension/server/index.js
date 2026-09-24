@@ -28476,6 +28476,16 @@ var require_dist16 = __commonJS({
               };
             }
             const askRegex = /^(explain|how does|what does|why is|why did|why does|why\b|search for|what is|where is|describe|show|give|tell|find|inspect|sample)\b/i;
+            const mutationRegex = /(?<!\b(?:the|a|an|this|that|these|those|my|our|your|its|their)\s+)\b(fix|implement|add|update|refactor|create|remove|rename)\b/i;
+            if (askRegex.test(text) && mutationRegex.test(text)) {
+              return {
+                mode: "AGENT",
+                confidence: 0.8,
+                source: "deterministic",
+                reasons: ["question verb with a mutation verb: the message asks for a change"],
+                requiresClarification: false
+              };
+            }
             if (askRegex.test(text)) {
               return {
                 mode: "ASK",
@@ -29116,6 +29126,7 @@ var require_dist16 = __commonJS({
       InteractionManager: () => InteractionManager2,
       ModelIntentClassifier: () => ModelIntentClassifier,
       SubagentManager: () => SubagentManager2,
+      buildTaskSystemPrompt: () => buildTaskSystemPrompt,
       describeToolTarget: () => describeToolTarget,
       formatStepSummary: () => formatStepSummary,
       permissionsFromContract: () => permissionsFromContract,
@@ -29817,7 +29828,97 @@ var require_dist16 = __commonJS({
       }
     };
     var import_context_engine = require_dist15();
+    var TOOL_GUIDE = [
+      {
+        names: ["get_workspace_tree", "list_directory", "search_text", "read_file"],
+        guide: "Finding your way: get_workspace_tree for the layout, list_directory for one folder, search_text to find where a symbol or string is used, read_file to read a file. Search before reading many files, and read a file before you change it."
+      },
+      {
+        names: ["edit_file", "write_file", "create_file"],
+        guide: "Changing files: edit_file for a targeted change to an existing file (preferred, it keeps the rest of the file intact), write_file to replace a file's whole content, create_file for a new file the task needs."
+      },
+      {
+        names: ["run_tests", "run_typecheck", "run_build", "run_linter"],
+        guide: "Checking your work: run_tests, run_typecheck, run_build and run_linter run the project's own configured commands. Use them to confirm a change rather than assuming it works."
+      },
+      {
+        names: ["execute_command"],
+        guide: "execute_command runs one program with arguments, without a shell, in the workspace. Use it when no dedicated tool fits; prefer the dedicated tools above."
+      },
+      {
+        names: ["git_status", "git_diff", "git_create_branch", "git_stage_files", "git_commit", "git_push"],
+        guide: "Git: git_status and git_diff to see what has changed. Do not stage, commit, branch or push unless the task asks for it."
+      },
+      { names: ["web_docs"], guide: "web_docs looks up library or API documentation when the code alone does not answer a question." },
+      {
+        names: ["delegate_subtask"],
+        guide: "delegate_subtask hands a bounded read-only investigation to a supervised worker. Use it for a self-contained question, not for the main work."
+      }
+    ];
+    function buildTaskSystemPrompt(input) {
+      const offered = new Set(input.tools);
+      const sections = [];
+      sections.push(
+        "You are COMU, a software engineering agent working inside the user's repository. You act through the tools you are given; you cannot see or change anything any other way."
+      );
+      sections.push(
+        [
+          "## The workspace",
+          `The workspace root is ${input.workspaceRoot}. Every path you pass to a tool is resolved relative to that root; prefer relative paths such as src/index.ts. A path that resolves outside the root is refused.`
+        ].join("\n")
+      );
+      const guides = TOOL_GUIDE.filter((g) => g.names.some((n) => offered.has(n))).map((g) => `- ${g.guide}`);
+      if (guides.length > 0) {
+        sections.push(["## Your tools", ...guides].join("\n"));
+      }
+      const canWrite = ["edit_file", "write_file", "create_file"].some((n) => offered.has(n));
+      const canRun = offered.has("execute_command");
+      if (!canWrite && !canRun) {
+        sections.push(
+          [
+            "## This task is read-only",
+            "You cannot change files or run commands on this task. Answer from what you read, and say so if something cannot be determined without running it."
+          ].join("\n")
+        );
+      } else if (input.autonomy === "ask") {
+        sections.push(
+          [
+            "## Approval",
+            "Every file change and every command you request is shown to the user and waits for their approval before it happens. A request that is refused comes back to you as APPROVAL_DENIED; a request nobody answers in time is treated the same way. A denial means the user does not want that action: do not repeat it in another form. Propose a different approach, or ask the user how they want to proceed."
+          ].join("\n")
+        );
+      }
+      if (canWrite) {
+        sections.push(
+          [
+            "## Leave the workspace as you would want it reviewed",
+            "Change only the files the task needs. Do not create scratch files, debugging scripts, notes, backups or copies of files anywhere in the workspace: you have no tool to delete them afterwards, and every file you create is part of your change and will be reviewed as such. If you need to try something, use the project's existing tests and commands."
+          ].join("\n")
+        );
+      }
+      sections.push(
+        [
+          "## Finishing",
+          input.expectedMutation ? "You are finished when the change the task asks for is made and you have checked it with the project's tests or checks. When you stop calling tools, your final message is your report: say what you changed, in which files, and how you checked it. After you finish, COMU runs its own verification; it decides whether the task is verified, not your report." : "When you stop calling tools, your final message is your answer. Base it on what you actually read.",
+          "Never claim something you have not seen happen. If you did not run the tests, do not say they pass. If a check failed or could not run, say so plainly. An honest report of an unfinished task is better than a claim of a finished one."
+        ].join("\n")
+      );
+      return sections.join("\n\n");
+    }
     var MAX_TOOL_TARGET_CHARS = 160;
+    function describeVerificationStop(result) {
+      if (result.status === "UNAVAILABLE") {
+        const names = result.checks.filter((c) => c.required && c.status === "UNAVAILABLE").map((c) => c.name);
+        return {
+          code: "VERIFICATION_UNAVAILABLE",
+          message: `Verification could not run: ${names.join(", ") || "a required check"} could not be run for this project, so the change is unchecked.`
+        };
+      }
+      return {
+        code: "VERIFICATION_FAILED",
+        message: `Required verification checks did not pass (status: ${result.status}): ${result.summary}`
+      };
+    }
     function describeToolTarget(tool, args) {
       if (!args || typeof args !== "object") return void 0;
       let raw;
@@ -29981,6 +30082,7 @@ var require_dist16 = __commonJS({
         const autonomy = ctx.autonomy || "ask";
         let waitingMs = 0;
         const elapsedMs = () => Date.now() - startTime - waitingMs;
+        let repairStartedAtMs;
         const approvalGate = new ApprovalGate({
           taskId: ctx.taskId,
           autonomy,
@@ -30093,6 +30195,29 @@ ${memoryContext}` : ctx.userPrompt;
         let lastVerification;
         let lastDiagnosis;
         let lastAssistantText;
+        const systemPrompt = [
+          buildTaskSystemPrompt({
+            workspaceRoot: ctx.workspaceRoot,
+            autonomy,
+            tools: tools.map((t) => t.name),
+            expectedMutation: contract.expectedMutation
+          }),
+          ctx.systemPrompt?.trim()
+        ].filter(Boolean).join("\n\n");
+        const verification = {
+          requirement: { expectedMutation: contract.expectedMutation, verificationRequired: contract.verificationRequired }
+        };
+        if (contract.expectedMutation && contract.verificationRequired && !ctx.abortSignal?.aborted) {
+          verification.baseline = await this.verificationEngine.runVerification({
+            taskId: ctx.taskId,
+            workspaceRoot: ctx.workspaceRoot,
+            changedFiles: [],
+            requirement: verification.requirement,
+            toolExecutor: this.executor,
+            toolContext: runtimeToolCtx,
+            abortSignal: ctx.abortSignal
+          });
+        }
         while (true) {
           if (ctx.abortSignal?.aborted) {
             this.transition(ctx, "CANCELLED", "Task was cancelled");
@@ -30156,7 +30281,8 @@ ${memoryContext}` : ctx.userPrompt;
                 startTime + waitingMs,
                 steps,
                 runtimeToolCtx,
-                lastAssistantText
+                lastAssistantText,
+                verification
               );
             }
           }
@@ -30176,7 +30302,8 @@ ${memoryContext}` : ctx.userPrompt;
               workspaceRoot: ctx.workspaceRoot,
               changedFiles,
               changeSet,
-              userPrompt: ctx.userPrompt,
+              requirement: verification.requirement,
+              baseline: verification.baseline,
               toolExecutor: this.executor,
               toolContext: runtimeToolCtx,
               abortSignal: ctx.abortSignal
@@ -30199,7 +30326,7 @@ ${memoryContext}` : ctx.userPrompt;
                 }))
               );
             }
-            if (lastVerification.status === "PASSED") {
+            if (lastVerification.status === "PASSED" || lastVerification.status === "NOT_VERIFIED") {
               planManager.completeStep(currentStep.id, lastVerification.summary);
               ctx.onEvent({
                 type: "plan.step.completed",
@@ -30223,7 +30350,8 @@ ${memoryContext}` : ctx.userPrompt;
                   startTime + waitingMs,
                   steps,
                   runtimeToolCtx,
-                  lastAssistantText
+                  lastAssistantText,
+                  verification
                 );
               }
               continue;
@@ -30251,12 +30379,14 @@ ${memoryContext}` : ctx.userPrompt;
                   diagnosisId: lastDiagnosis.diagnosisId,
                   diagnosis: lastDiagnosis
                 });
+                repairStartedAtMs ??= elapsedMs();
                 const repairDecision = this.repairEngine.evaluateRepair({
                   taskId: ctx.taskId,
                   diagnosis: lastDiagnosis,
                   proposedTargetFiles: lastDiagnosis.affectedFiles,
                   existingChangedFiles: Array.from(changeSet.changes.keys()),
-                  startTimeMs: startTime + waitingMs,
+                  // The engine measures Date.now() - startTimeMs, so this is "now, minus time spent repairing".
+                  startTimeMs: Date.now() - (elapsedMs() - repairStartedAtMs),
                   totalValidationRuns,
                   limits: {
                     maxRepairAttempts: ctx.limits.maxRepairAttempts,
@@ -30348,11 +30478,13 @@ Please implement targeted fixes to resolve this failure.`
                   }
                 }
               } else {
-                const errSummary = lastVerification.summary;
+                const stop = describeVerificationStop(lastVerification);
+                const errSummary = stop.message;
                 this.transition(ctx, "FAILED", errSummary);
                 ctx.onEvent({
                   type: "task.failed",
                   error: errSummary,
+                  payload: stop,
                   eventId: `evt-${Date.now()}`,
                   taskId: ctx.taskId,
                   timestamp: (/* @__PURE__ */ new Date()).toISOString()
@@ -30383,7 +30515,7 @@ Please implement targeted fixes to resolve this failure.`
               // runId
               {
                 prompt: ctx.userPrompt,
-                systemPrompt: ctx.systemPrompt,
+                systemPrompt,
                 messages,
                 tools
               },
@@ -30449,7 +30581,8 @@ Please implement targeted fixes to resolve this failure.`
               startTime + waitingMs,
               steps,
               runtimeToolCtx,
-              lastAssistantText
+              lastAssistantText,
+              verification
             );
           }
           if (!toolsEnabled) {
@@ -30771,7 +30904,7 @@ Please implement targeted fixes to resolve this failure.`
           this.transition(ctx, "OBSERVING", "Observing results");
         }
       }
-      async evaluateCompletionGate(ctx, planManager, changeSet, lastVerification, startTime, steps, toolCtx, finalText) {
+      async evaluateCompletionGate(ctx, planManager, changeSet, lastVerification, startTime, steps, toolCtx, finalText, verification) {
         this.transition(ctx, "VERIFYING", "Evaluating completion gate and workspace integrity");
         if (!lastVerification || lastVerification.status !== "PASSED") {
           const changedFiles = Array.from(changeSet.changes.keys());
@@ -30780,7 +30913,8 @@ Please implement targeted fixes to resolve this failure.`
             workspaceRoot: ctx.workspaceRoot,
             changedFiles,
             changeSet,
-            userPrompt: ctx.userPrompt,
+            requirement: verification.requirement,
+            baseline: verification.baseline,
             toolExecutor: this.executor,
             toolContext: toolCtx,
             abortSignal: ctx.abortSignal
@@ -30796,7 +30930,7 @@ Please implement targeted fixes to resolve this failure.`
         }
         const workspaceIntegrity = await import_verification_engine2.WorkspaceIntegrityVerifier.verifyIntegrity(changeSet, this.executor, toolCtx);
         const implementationComplete = true;
-        const requiredVerificationPassed = lastVerification.status === "PASSED";
+        const requiredVerificationPassed = lastVerification.status === "PASSED" || lastVerification.status === "NOT_VERIFIED";
         const noCriticalFailures = !lastVerification.checks.some(
           (c) => c.required && (c.status === "FAILED" || c.status === "UNAVAILABLE")
         );
@@ -30807,9 +30941,10 @@ Please implement targeted fixes to resolve this failure.`
         const executionStateKnown = true;
         const passesCompletionGate = implementationComplete && requiredVerificationPassed && noCriticalFailures && workspaceIntegrityVerified && noPendingInteraction && withinLimits && changeSetValid && executionStateKnown;
         if (passesCompletionGate) {
+          const verified = lastVerification.status === "PASSED";
           let gitCommitResult;
           let gitPushResult;
-          if (changeSet && changeSet.changes.size > 0) {
+          if (verified && changeSet && changeSet.changes.size > 0) {
             const changedFiles = Array.from(changeSet.changes.keys());
             const commitMessageProposal = `feat(${changedFiles[0]?.split("/").pop()?.split(".")[0] || "core"}): complete verified task changes`;
             ctx.onEvent({
@@ -30876,7 +31011,7 @@ Please implement targeted fixes to resolve this failure.`
                 createdAt: (/* @__PURE__ */ new Date()).toISOString(),
                 evidenceReferences: [lastVerification.verificationId]
               });
-              if (changeSet.changes.size > 0) {
+              if (verified && changeSet.changes.size > 0) {
                 const changedFiles = Array.from(changeSet.changes.keys());
                 const lessonContent = `Task '${ctx.userPrompt.slice(0, 80)}' verified across: ${changedFiles.join(", ")}`;
                 const recorded = await this.memoryEngine.record({
@@ -30909,13 +31044,14 @@ Please implement targeted fixes to resolve this failure.`
             }
           }
           const cleanFinalText = finalText ? finalText.replace(/<(think|thought)>[\s\S]*?<\/\1>/gi, "").trim() : void 0;
-          this.transition(ctx, "COMPLETED", "Task verified and completed successfully");
+          this.transition(ctx, "COMPLETED", verified ? "Task verified and completed" : "Task completed, not verified");
           ctx.onEvent({
             type: "task.completed",
             eventId: `evt-${Date.now()}`,
             taskId: ctx.taskId,
             timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-            finalText: cleanFinalText
+            finalText: cleanFinalText,
+            verification: lastVerification.status
           });
           return {
             status: "completed",
@@ -30930,8 +31066,9 @@ Please implement targeted fixes to resolve this failure.`
           };
         } else {
           let gateFailureReason = "Completion gate invariant check failed.";
+          let gateFailureCode = "COMPLETION_GATE_FAILED";
           if (!requiredVerificationPassed) {
-            gateFailureReason = `Required verification checks did not pass (status: ${lastVerification.status}): ${lastVerification.summary}`;
+            ({ code: gateFailureCode, message: gateFailureReason } = describeVerificationStop(lastVerification));
           } else if (!workspaceIntegrityVerified) {
             gateFailureReason = `Workspace integrity verification failed: ${workspaceIntegrity.details || "conflict detected"}`;
           }
@@ -30958,6 +31095,7 @@ Please implement targeted fixes to resolve this failure.`
           ctx.onEvent({
             type: "task.failed",
             error: gateFailureReason,
+            payload: { code: gateFailureCode, message: gateFailureReason },
             eventId: `evt-${Date.now()}`,
             taskId: ctx.taskId,
             timestamp: (/* @__PURE__ */ new Date()).toISOString()
