@@ -7,18 +7,24 @@ import { createRuntimeApp, resolveTaskLimits } from "../../apps/agent-runtime/sr
 import { fixturesRoot, loadFixtures } from "./fixture.js";
 import { executeFixture } from "./execute.js";
 import { summarise } from "./metrics.js";
+import { DEFAULT_GATEWAY_MULTIPLE, gatewayBaseline, judgeGateway, probeGateway } from "./gateway.js";
 import {
   acquireRunLock,
+  appendMarker,
   appendMixedLimitsMarker,
   appendRecord,
+  describeGatewayCheck,
   latestPerCell,
   readJournal,
+  readJournalEvents,
   readJournalMarkers,
   readAnnotations,
   annotate,
+  updateRunLock,
   writeRun
 } from "./report.js";
-import { describeLimitDifferences, limitDifferences, planResume } from "./resume.js";
+import { cellKey, describeLimitDifferences, limitDifferences, planResume } from "./resume.js";
+import { describeStatus } from "./status.js";
 import { configureProvider, startRuntime } from "./runner.js";
 import { SelfTestModel } from "./selftest_model.js";
 import { assertNoSecretInArgv, loadLocalEnv } from "./secrets.js";
@@ -51,12 +57,26 @@ interface Args {
   redoProviderFailures: boolean;
   /** Resume under a budget that differs from the journal's, and mark the journal as mixed. */
   acceptMixedLimits: boolean;
+  /** Report on a run from its lock and journal, and measure nothing. */
+  status: boolean;
+  /** Launch into a gateway the launch gate judges too slow, and mark the journal as such. */
+  acceptSlowGateway: boolean;
+  /** The frozen run whose per-request latency the launch gate compares against. */
+  gatewayBaseline: string;
+  /** How many times the baseline's median latency the probed median may reach. */
+  gatewayMultiple: number;
 }
 
-/** The journal's mixed-budget markers, as the optional field of a run: absent when there are none. */
-function mixedLimitsOf(outDir: string, label: string): Pick<BenchmarkRun, "mixedLimits"> {
-  const markers = readJournalMarkers(outDir, label);
-  return markers.length > 0 ? { mixedLimits: markers } : {};
+/** The journal's markers, as the optional fields of a run: each absent when there are none. */
+function markersOf(outDir: string, label: string): Pick<BenchmarkRun, "mixedLimits" | "gatewayProbes" | "slowGateway"> {
+  const mixed = readJournalMarkers(outDir, label);
+  const probes = readJournalEvents(outDir, label, "gateway_probe");
+  const slow = readJournalEvents(outDir, label, "slow_gateway");
+  return {
+    ...(mixed.length > 0 ? { mixedLimits: mixed } : {}),
+    ...(probes.length > 0 ? { gatewayProbes: probes } : {}),
+    ...(slow.length > 0 ? { slowGateway: slow } : {})
+  };
 }
 
 function parseArgs(argv: string[]): Args {
@@ -75,12 +95,24 @@ function parseArgs(argv: string[]): Args {
     selftest: argv.includes("--selftest"),
     timeoutMs: Number(get("timeout") ?? 1_800_000),
     outDir: get("out") ?? path.resolve(path.dirname(fixturesRoot()), "results"),
-    limits: parseLimits(get("limits")),
+    limits: parseLimits(get("limits") ?? readLimitsFile(get("limits-file"))),
     concurrency: Math.max(1, Number(get("concurrency") ?? 1)),
     reportOnly: argv.includes("--report-only"),
     redoProviderFailures: argv.includes("--redo-provider-failures"),
-    acceptMixedLimits: argv.includes("--accept-mixed-limits")
+    acceptMixedLimits: argv.includes("--accept-mixed-limits"),
+    status: argv.includes("--status"),
+    acceptSlowGateway: argv.includes("--accept-slow-gateway"),
+    gatewayBaseline: get("gateway-baseline") ?? "B0",
+    gatewayMultiple: Number(get("gateway-multiple") ?? DEFAULT_GATEWAY_MULTIPLE)
   };
+}
+
+/**
+ * The budget from a JSON file. A detached launch goes through Windows command-line quoting twice,
+ * which JSON does not survive; a path does.
+ */
+function readLimitsFile(file: string | undefined): string | undefined {
+  return file ? fs.readFileSync(file, "utf8") : undefined;
 }
 
 /**
@@ -139,6 +171,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (args.status) {
+    const scope = fixtures.flatMap(f => Array.from({ length: args.reps }, (_, i) => cellKey({ fixtureId: f.spec.id, rep: i + 1 })));
+    for (const line of describeStatus({ outDir: args.outDir, label: args.label, scope })) console.log(line);
+    return;
+  }
+
   /*
    * Re-render a finished run from its journal.
    *
@@ -165,7 +203,7 @@ async function main(): Promise<void> {
       reps: args.reps,
       concurrency: args.concurrency,
       records,
-      ...mixedLimitsOf(args.outDir, args.label)
+      ...markersOf(args.outDir, args.label)
     };
     const written = writeRun(annotate(run, readAnnotations(args.outDir, args.label)), args.outDir);
     console.log(`Re-rendered ${records.length} records from the journal.`);
@@ -288,12 +326,38 @@ async function main(): Promise<void> {
     }
   }
 
+  if (!args.selftest) {
+    updateRunLock(args.outDir, args.label, state => {
+      state.planned = jobs.map(j => cellKey({ fixtureId: j.fixture.spec.id, rep: j.rep }));
+    });
+  }
+
+  /*
+   * The launch gate.
+   *
+   * Only when there is something to measure, and on every launch including a resume: the provider
+   * a resumed run meets is a new condition, and the journal records each one it was launched into.
+   */
+  if (!args.selftest && jobs.length > 0) {
+    const passed = await gateLaunch(args, model, credentials[model.provider]?.apiKey ?? "");
+    if (!passed) {
+      releaseLock();
+      process.exit(1);
+    }
+  }
+
   let started = 0;
   let finished = 0;
 
   const runJob = async ({ fixture, rep }: { fixture: (typeof fixtures)[number]; rep: number }) => {
     const label = `${fixture.spec.id} rep ${rep}/${args.reps}`;
+    const cell = cellKey({ fixtureId: fixture.spec.id, rep });
     console.log(`[${++started}/${jobs.length}] start ${label}`);
+    if (!args.selftest) {
+      updateRunLock(args.outDir, args.label, state => {
+        state.inFlight.push({ cell, startedAt: new Date().toISOString() });
+      });
+    }
 
     {
       // A fresh runtime per run, so no state, cache or session grant crosses between measurements.
@@ -337,6 +401,7 @@ async function main(): Promise<void> {
           `[${++finished}/${jobs.length}] ${label}:`,
           record.grader.correct ? "correct" : `incorrect (${record.failureClass ?? "unclassified"})`,
           `${Math.round(record.durationMs / 1000)}s`,
+          record.requestLatency ? `(request latency median ${(record.requestLatency.medianMs / 1000).toFixed(1)}s over ${record.requestLatency.count})` : "",
           record.harnessError ? `[harness: ${record.harnessError}]` : ""
         );
         if (!record.grader.correct) {
@@ -353,6 +418,12 @@ async function main(): Promise<void> {
         process.exitCode = 1;
       } finally {
         await runtime.stop();
+        if (!args.selftest) {
+          updateRunLock(args.outDir, args.label, state => {
+            state.inFlight = state.inFlight.filter(c => c.cell !== cell);
+            state.finished.push(cell);
+          });
+        }
       }
     }
   };
@@ -403,12 +474,46 @@ async function main(): Promise<void> {
     reps: args.reps,
     concurrency: args.concurrency,
     records: measured,
-    ...mixedLimitsOf(args.outDir, args.label)
+    ...markersOf(args.outDir, args.label)
   };
   const written = writeRun(annotate(run, readAnnotations(args.outDir, args.label)), args.outDir);
   console.log(`\nWrote ${written.jsonPath}`);
   console.log(`Wrote ${written.markdownPath}`);
   releaseLock();
+}
+
+/**
+ * Probes the provider and decides whether to launch. Writes what it found into the journal either
+ * way, so the result says what provider it was measured against.
+ */
+async function gateLaunch(args: Args, model: { id: string; provider: string }, apiKey: string): Promise<boolean> {
+  const refuse = (why: string): boolean => {
+    console.error(`${why}\nRefusing to launch. Pass --accept-slow-gateway to launch anyway and mark the journal.`);
+    return args.acceptSlowGateway;
+  };
+
+  const baseline = gatewayBaseline(args.outDir, args.gatewayBaseline);
+  if (!baseline) return refuse(`No committed result for '${args.gatewayBaseline}' in ${args.outDir} to compare the gateway against.`);
+  if (model.provider !== "nvidia") return refuse(`The launch gate can only probe NVIDIA, and this run uses ${model.provider}.`);
+
+  const thresholdMs = Math.round(baseline.medianMs * args.gatewayMultiple);
+  console.log(`Probing the gateway: three requests, one at a time, each capped at ${(thresholdMs / 1000).toFixed(0)}s.`);
+  const probes = await probeGateway(model.id, apiKey, thresholdMs, (probe, i) =>
+    console.log(`  probe ${i + 1}: ${probe.latencyMs === null ? `failed (${probe.error ?? "no answer"})` : `${(probe.latencyMs / 1000).toFixed(1)}s`}`)
+  );
+  const check = judgeGateway(probes, baseline, args.gatewayMultiple);
+  const now = new Date().toISOString();
+  appendMarker({ journalEvent: "gateway_probe", probedAt: now, check }, args.outDir, args.label);
+  for (const line of describeGatewayCheck(check)) console.log(line);
+
+  if (!check.slow) return true;
+  if (!args.acceptSlowGateway) {
+    refuse("The gateway is slower than the baseline allows, so this run would measure the provider, not COMU.");
+    return false;
+  }
+  appendMarker({ journalEvent: "slow_gateway", acceptedAt: now, check }, args.outDir, args.label);
+  console.error("Going ahead under --accept-slow-gateway. The journal is now marked as measured on a slow gateway.");
+  return true;
 }
 
 /** The window the pinned model advertises, used to report peak prompt size as a share of it. */
@@ -418,7 +523,19 @@ function contextWindowFor(modelId: string): number {
   return 128_000;
 }
 
-main().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+/*
+ * Exit when main is done, rather than when the event loop drains.
+ *
+ * It never drained: after "Self test complete" a detached self test sat alive with nothing left to
+ * do, held open by a handle something in the engine leaves behind. A run that does not end never
+ * restores the machine's sleep setting, which the detached wrapper does after the run exits, and
+ * its lock names a pid that is still alive, so --status reports it running forever. Every write
+ * here is synchronous, so nothing is lost by exiting.
+ */
+main().then(
+  () => process.exit(process.exitCode ?? 0),
+  error => {
+    console.error(error);
+    process.exit(1);
+  }
+);

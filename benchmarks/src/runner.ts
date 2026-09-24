@@ -66,6 +66,14 @@ export interface TaskOutcome {
   repairAttempts: number;
   repairRecovered: boolean;
   verificationStatus?: string;
+  /**
+   * How long each settled model request took, in milliseconds, successes and failures alike.
+   *
+   * A request that hangs for eight minutes and then fails is the latency the run was measured
+   * under just as much as one that answers, so both count. A request still in flight when the task
+   * ended has no latency to record.
+   */
+  requestLatenciesMs: number[];
   /** Set when the harness itself could not complete the run. */
   harnessError?: string;
   limits: Record<string, number>;
@@ -103,7 +111,16 @@ export interface Counters {
   finalText: string;
   assistantText: string;
   terminalError: string;
+  requestLatenciesMs: number[];
   streamBuffer: string;
+  /** When each request attempt started, by requestId and attempt, so a failure's latency can be measured. */
+  requestStarts: Map<string, number>;
+}
+
+/** The fields of Counters that are scratch for folding and not part of an outcome. */
+function outcomeOf(counters: Counters): Omit<Counters, "streamBuffer" | "requestStarts"> {
+  const { streamBuffer: _buffer, requestStarts: _starts, ...outcome } = counters;
+  return outcome;
 }
 
 /**
@@ -132,8 +149,22 @@ export function createCounters(): Counters {
     finalText: "",
     assistantText: "",
     terminalError: "",
-    streamBuffer: ""
+    requestLatenciesMs: [],
+    streamBuffer: "",
+    requestStarts: new Map()
   };
+}
+
+function attemptKey(e: Record<string, any>): string {
+  return `${e.requestId}#${e.attempt ?? 1}`;
+}
+
+/** Started to settled, from the events' own timestamps, when both are known. */
+function elapsedSinceStart(counters: Counters, e: Record<string, any>): number | undefined {
+  const started = counters.requestStarts.get(attemptKey(e));
+  const settled = Date.parse(String(e.timestamp ?? ""));
+  counters.requestStarts.delete(attemptKey(e));
+  return started !== undefined && Number.isFinite(settled) ? settled - started : undefined;
 }
 
 export function fold(counters: Counters, event: AgentEvent): void {
@@ -150,8 +181,17 @@ export function fold(counters: Counters, event: AgentEvent): void {
       }
       break;
     }
+    case "model_request.started": {
+      const started = Date.parse(String(e.timestamp ?? ""));
+      if (Number.isFinite(started)) counters.requestStarts.set(attemptKey(e), started);
+      break;
+    }
     case "model_request.succeeded": {
       counters.modelRequests += 1;
+      // The runtime's own measurement where it gives one; the event timestamps otherwise.
+      const elapsed = elapsedSinceStart(counters, e);
+      const latency = typeof e.latencyMs === "number" ? e.latencyMs : elapsed;
+      if (latency !== undefined) counters.requestLatenciesMs.push(latency);
       if (counters.streamBuffer.trim()) {
         counters.assistantText = counters.streamBuffer;
       }
@@ -189,9 +229,15 @@ export function fold(counters: Counters, event: AgentEvent): void {
        * ends, and the run is recorded as a failure the agent did not commit.
        */
       counters.providerFailures.timeouts += 1;
+      {
+        const elapsed = elapsedSinceStart(counters, e) ?? (typeof e.timeoutMs === "number" ? e.timeoutMs : undefined);
+        if (elapsed !== undefined) counters.requestLatenciesMs.push(elapsed);
+      }
       break;
     case "model_request.failed": {
       counters.providerFailures[classifyProviderFailure(String(e.error ?? ""))] += 1;
+      const elapsed = elapsedSinceStart(counters, e);
+      if (elapsed !== undefined) counters.requestLatenciesMs.push(elapsed);
       break;
     }
     case "interaction.requested":
@@ -268,9 +314,8 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
 
   if (created.status !== 201) {
     const body = await created.text();
-    const { streamBuffer: _unused, ...partial } = counters;
     return {
-      ...partial,
+      ...outcomeOf(counters),
       events,
       limits: {},
       harnessError: `Task creation failed with ${created.status}: ${body.slice(0, 500)}`
@@ -333,9 +378,7 @@ export async function runTask(input: TaskRequestInput): Promise<TaskOutcome> {
     clearTimeout(timer);
   }
 
-  // streamBuffer is scratch for accumulating the current turn; it is not part of the outcome.
-  const { streamBuffer: _discard, ...outcome } = counters;
-  return { ...outcome, events, limits: limits ?? {}, harnessError };
+  return { ...outcomeOf(counters), events, limits: limits ?? {}, harnessError };
 }
 
 /** Starts a runtime on an ephemeral loopback port and returns how to talk to it. */

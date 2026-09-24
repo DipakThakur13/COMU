@@ -56,7 +56,40 @@ must repeat the original `--limits`: leaving them off means the runtime's defaul
 before". A resume whose effective limits differ from the records already in the journal is refused,
 with the differences printed. `--accept-mixed-limits` goes ahead anyway and writes a marker into the
 journal, and the rendered result then states that its records were measured under more than one
-budget.
+budget. `--limits-file results/B0.limits.json` passes B0's budget from a file, which is the form a
+detached launch needs.
+
+### Launching a long run
+
+A run that takes hours must outlive the shell that started it; B0 died at 31 of 75 cells and B1 at
+2 of 15 because they did not. Launch it detached:
+
+```powershell
+powershell -File benchmarks\scripts\launch-detached.ps1 -Label B1 -Bench "--reps 1 --model nvidia/nemotron-3.5-lightning-30b-a3b --limits-file results\B0.limits.json"
+```
+
+The script has WMI create the run, so it has no parent in the launching shell and survives that
+shell, its terminal and the editor that owns them. A hidden `Start-Process` does not: it was tested
+side by side and died with its parent. Output goes to `results/<label>.console.log`. Sleep is
+switched off for the run and restored to the values found at launch when the run exits, however it
+exits.
+
+From any shell, `pnpm bench --status --label B1 --reps 1` reports whether the run's pid is alive,
+what this launch has finished, what is in flight and for how long, and what the journal holds.
+
+### The launch gate
+
+Before measuring anything, every launch probes the provider three times, one request at a time,
+and refuses to start when the median exceeds twice the frozen baseline's median per-request latency
+(`--gateway-baseline B0`, `--gateway-multiple 2`). B1 was once launched into a gateway four to seven
+times slower than B0's because the check accepted any 200, and a run on that gateway measures the
+provider rather than COMU. The probes are written into the journal on every launch and the result
+states them. `--accept-slow-gateway` launches anyway and marks the journal, and the result then says
+it was measured on a slow gateway.
+
+Each record carries its own median model request latency, and the report shows it per fixture beside
+wall clock per request, so the conditions a run met are in the result rather than reconstructed
+afterwards.
 
 What becomes known about a run after its records are written goes in `results/<label>.annotations.json`
 beside the journal, never into the journal itself: a correction to the model that actually served

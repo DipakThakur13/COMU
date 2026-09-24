@@ -19,3 +19,5 @@ Claude outputs/
 benchmarks/results/*.console.log
 # A run lock names a live process; it is never state worth keeping.
 benchmarks/results/*.lock
+# The wrapper a detached launch writes for itself; regenerated on every launch.
+benchmarks/results/*.launch.cmd

@@ -211,6 +211,7 @@ describe("Failure classification", () => {
     repairRecovered: false,
     limitReached: false,
     providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 },
+    requestLatenciesMs: [],
     limits: {},
     ...over
   });
@@ -309,8 +310,8 @@ describe("Summarising", () => {
       record({ fixtureId: "b", rep: 1 })
     ]);
     expect(summary.perFixture).toEqual([
-      { fixtureId: "a", tier: "T1", correct: 1, of: 2, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0, providerKilled: 0 },
-      { fixtureId: "b", tier: "T1", correct: 1, of: 1, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0, providerKilled: 0 }
+      { fixtureId: "a", tier: "T1", correct: 1, of: 2, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0, providerKilled: 0, requestLatencyMs: null, wallClockPerRequestMs: null },
+      { fixtureId: "b", tier: "T1", correct: 1, of: 1, peakContextRatio: 0.05, providerFailures: { timeouts: 0, rateLimits: 0, gateway: 0, other: 0 }, falseFailures: 0, falseCompletions: 0, unverifiedCompletions: 0, providerKilled: 0, requestLatencyMs: null, wallClockPerRequestMs: null }
     ]);
     expect(summary.failureCounts).toEqual({ planning_miss: 1 });
   });

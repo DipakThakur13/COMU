@@ -4,6 +4,8 @@ import {
   TIER_NAMES,
   providerKill,
   type BenchmarkRun,
+  type GatewayCheck,
+  type JournalMarker,
   type MixedLimitsMarker,
   type RunAnnotations,
   type RunRecord,
@@ -43,13 +45,31 @@ export function readJournal(outDir: string, label: string): RunRecord[] {
 
 /** Every time a resume was allowed to change the budget under this label. */
 export function readJournalMarkers(outDir: string, label: string): MixedLimitsMarker[] {
-  return readJournalLines(outDir, label).filter(isMarker);
+  return readJournalEvents(outDir, label, "mixed_limits");
+}
+
+/** Every marker of one kind written into this label's journal, oldest first. */
+export function readJournalEvents<K extends JournalMarker["journalEvent"]>(
+  outDir: string,
+  label: string,
+  kind: K
+): Array<Extract<JournalMarker, { journalEvent: K }>> {
+  return readJournalLines(outDir, label).filter(
+    (entry): entry is Extract<JournalMarker, { journalEvent: K }> => isMarker(entry) && entry.journalEvent === kind
+  );
 }
 
 /** Marks the journal as mixed before any record is measured under the new budget. */
 export function appendMixedLimitsMarker(marker: MixedLimitsMarker, outDir: string, label: string): void {
+  appendMarker(marker, outDir, label);
+}
+
+/** Writes a marker into the journal. Checked for the credential like a record: a probe's error text is the provider's. */
+export function appendMarker(marker: JournalMarker, outDir: string, label: string): void {
   fs.mkdirSync(outDir, { recursive: true });
-  fs.appendFileSync(path.join(outDir, `${journalStem(label)}.jsonl`), `${JSON.stringify(marker)}\n`, "utf8");
+  const line = `${JSON.stringify(marker)}\n`;
+  assertNoSecret(line, `the run journal for ${label}`);
+  fs.appendFileSync(path.join(outDir, `${journalStem(label)}.jsonl`), line, "utf8");
 }
 
 /** The run's annotations, when a correction or caveat has been recorded beside its journal. */
@@ -73,18 +93,19 @@ export function annotate(run: BenchmarkRun, annotations: RunAnnotations | undefi
   return { ...run, annotations, model, records: run.records.map(r => ({ ...r, model })) };
 }
 
-function readJournalLines(outDir: string, label: string): Array<RunRecord | MixedLimitsMarker> {
+function readJournalLines(outDir: string, label: string): Array<RunRecord | JournalMarker> {
   const file = path.join(outDir, `${journalStem(label)}.jsonl`);
   if (!fs.existsSync(file)) return [];
   return fs
     .readFileSync(file, "utf8")
     .split("\n")
     .filter(line => line.trim())
-    .map(line => JSON.parse(line) as RunRecord | MixedLimitsMarker);
+    .map(line => JSON.parse(line) as RunRecord | JournalMarker);
 }
 
-function isMarker(entry: RunRecord | MixedLimitsMarker): entry is MixedLimitsMarker {
-  return (entry as MixedLimitsMarker).journalEvent === "mixed_limits";
+/** Any line with a journalEvent is a marker, never a record, whichever kind it is. */
+function isMarker(entry: RunRecord | JournalMarker): entry is JournalMarker {
+  return typeof (entry as JournalMarker).journalEvent === "string";
 }
 
 /**
@@ -111,11 +132,11 @@ function journalStem(label: string): string {
  */
 export function acquireRunLock(outDir: string, label: string): () => void {
   fs.mkdirSync(outDir, { recursive: true });
-  const file = path.join(outDir, `${label}.lock`);
+  const file = lockFile(outDir, label);
 
   if (fs.existsSync(file)) {
-    const holder = Number(fs.readFileSync(file, "utf8").trim());
-    if (Number.isInteger(holder) && holder > 0 && isAlive(holder)) {
+    const holder = readRunLock(outDir, label)?.pid;
+    if (holder !== undefined && isAlive(holder)) {
       throw new Error(
         `Another run of '${label}' is already going (pid ${holder}). Two runners share one journal, ` +
           "triple the provider load and each write the result file from their own partial records. " +
@@ -126,12 +147,62 @@ export function acquireRunLock(outDir: string, label: string): () => void {
     fs.rmSync(file, { force: true });
   }
 
-  fs.writeFileSync(file, String(process.pid), "utf8");
-  return () => fs.rmSync(file, { force: true });
+  const state: RunLockState = { pid: process.pid, startedAt: new Date().toISOString(), planned: [], inFlight: [], finished: [] };
+  fs.writeFileSync(file, JSON.stringify(state), "utf8");
+  return () => {
+    // Only ever our own lock: a release that runs after another runner took over must not remove theirs.
+    if (readRunLock(outDir, label)?.pid === process.pid) fs.rmSync(file, { force: true });
+  };
+}
+
+/**
+ * What a live run is doing, kept in its lock so another shell can ask.
+ *
+ * The run has outlived the shell that started it (it is launched detached), so its console is not
+ * something anyone is watching. `bench --status` reads this and the journal instead.
+ */
+export interface RunLockState {
+  pid: number;
+  startedAt: string;
+  /** Cells this launch set out to measure, by cellKey. */
+  planned: string[];
+  /** Cells started and not yet finished. */
+  inFlight: Array<{ cell: string; startedAt: string }>;
+  /** Cells this launch finished, whatever their outcome, including a harness error. */
+  finished: string[];
+}
+
+function lockFile(outDir: string, label: string): string {
+  return path.join(outDir, `${label}.lock`);
+}
+
+/**
+ * The lock's contents. A lock written before it carried state holds a bare pid, which still reads.
+ * Undefined when there is no lock or it cannot be read.
+ */
+export function readRunLock(outDir: string, label: string): RunLockState | undefined {
+  const file = lockFile(outDir, label);
+  if (!fs.existsSync(file)) return undefined;
+  const text = fs.readFileSync(file, "utf8").trim();
+  if (/^\d+$/.test(text)) return { pid: Number(text), startedAt: "", planned: [], inFlight: [], finished: [] };
+  try {
+    const state = JSON.parse(text) as RunLockState;
+    return Number.isInteger(state.pid) && state.pid > 0 ? state : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Rewrites this process's lock with its progress. Never touches a lock another process holds. */
+export function updateRunLock(outDir: string, label: string, change: (state: RunLockState) => void): void {
+  const state = readRunLock(outDir, label);
+  if (!state || state.pid !== process.pid) return;
+  change(state);
+  fs.writeFileSync(lockFile(outDir, label), JSON.stringify(state), "utf8");
 }
 
 /** Whether a pid is running. Signal 0 checks for existence without delivering anything. */
-function isAlive(pid: number): boolean {
+export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -204,6 +275,25 @@ function fmtSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** A gateway check in two lines: what the probes measured, and what they were held to. */
+export function describeGatewayCheck(check: GatewayCheck): string[] {
+  const probes = check.probes.map(p => (p.latencyMs === null ? `failed (${p.error ?? "no answer"})` : fmtSeconds(p.latencyMs)));
+  const measure = check.baseline.measure === "request_latency" ? "model request latency" : "wall clock per successful request";
+  const median = check.medianMs === null ? `over the ${fmtSeconds(check.thresholdMs)} cap` : fmtSeconds(check.medianMs);
+  return [
+    `Probes: ${probes.join(", ")}. Median ${median}: ${check.slow ? "too slow" : "within the threshold"}.`,
+    `Threshold ${fmtSeconds(check.thresholdMs)}: ${check.multiple}x ${check.baseline.label}'s median ${measure} of ${fmtSeconds(check.baseline.medianMs)}, over ${check.baseline.cells} cells (${check.baseline.source}).`
+  ];
+}
+
+function fmtOptionalSeconds(ms: number | null): string {
+  return ms === null ? "-" : fmtSeconds(ms);
+}
+
+function fmtSpreadSeconds(s: { median: number; min: number; max: number }): string {
+  return `${fmtSeconds(s.median)} (${fmtSeconds(s.min)} to ${fmtSeconds(s.max)})`;
+}
+
 export function renderMarkdown(run: BenchmarkRun): string {
   const summary = summarise(run.records);
   const lines: string[] = [];
@@ -240,6 +330,27 @@ export function renderMarkdown(run: BenchmarkRun): string {
       for (const line of describeLimitDifferences(marker.differences)) lines.push(`  - ${line.trim()}`);
     }
   }
+  if (run.slowGateway && run.slowGateway.length > 0) {
+    lines.push("");
+    lines.push(
+      "**Slow gateway.** This run was launched into a provider slower than the launch gate allows, under " +
+        "--accept-slow-gateway. Its wall clock, and any budget measured in time, are not comparable with the baseline:"
+    );
+    lines.push("");
+    for (const marker of run.slowGateway) {
+      lines.push(`- Accepted ${marker.acceptedAt}:`);
+      for (const line of describeGatewayCheck(marker.check)) lines.push(`  - ${line}`);
+    }
+  }
+  if (run.gatewayProbes && run.gatewayProbes.length > 0) {
+    lines.push("");
+    lines.push("**Provider at launch.** Probed before each launch under this label:");
+    lines.push("");
+    for (const marker of run.gatewayProbes) {
+      lines.push(`- ${marker.probedAt}:`);
+      for (const line of describeGatewayCheck(marker.check)) lines.push(`  - ${line}`);
+    }
+  }
   if (run.concurrency > 1) {
     lines.push("");
     lines.push(
@@ -254,17 +365,19 @@ export function renderMarkdown(run: BenchmarkRun): string {
   // that never does reports something true of neither.
   lines.push("## Per fixture");
   lines.push("");
+  // The last two columns describe the provider the cell ran against, so the run's own conditions
+  // sit beside its results. "-" is a cell that recorded no latency: written before it was measured.
   lines.push(
-    "| Fixture | Tier | Correct | False failures | False completions | Unverified completions | Peak prompt, share of window | Provider failures (t/r/g/o) |"
+    "| Fixture | Tier | Correct | False failures | False completions | Unverified completions | Peak prompt, share of window | Provider failures (t/r/g/o) | Request latency, median | Wall clock per request |"
   );
-  lines.push("|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|");
   for (const entry of summary.perFixture) {
     const tier = TIER_NAMES[entry.tier as Tier] ?? entry.tier;
     // A fixture whose every cell the provider ended has no result, which is not the same as 0 of 0.
     const correct = entry.of > 0 ? `${entry.correct} of ${entry.of}` : "not measured";
     const killedNote = entry.providerKilled > 0 ? ` (+${entry.providerKilled} killed by provider)` : "";
     lines.push(
-      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${correct}${killedNote} | ${entry.falseFailures} | ${entry.falseCompletions} | ${entry.unverifiedCompletions} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} |`
+      `| ${entry.fixtureId} | ${entry.tier} ${tier} | ${correct}${killedNote} | ${entry.falseFailures} | ${entry.falseCompletions} | ${entry.unverifiedCompletions} | ${(entry.peakContextRatio * 100).toFixed(1)}% | ${fmtFailures(entry.providerFailures)} | ${fmtOptionalSeconds(entry.requestLatencyMs)} | ${fmtOptionalSeconds(entry.wallClockPerRequestMs)} |`
     );
   }
   lines.push("");
@@ -293,6 +406,13 @@ export function renderMarkdown(run: BenchmarkRun): string {
   const worst = summary.perFixture.filter(f => f.of > 0).sort((a, b) => b.peakContextRatio - a.peakContextRatio)[0];
   lines.push(
     `| Largest prompt seen, as a share of the window | ${worst ? `${(summary.maxPeakContextRatio * 100).toFixed(1)}%, by ${worst.fixtureId}` : none} |`
+  );
+  // Across every cell, killed ones included: this is the provider the run was measured against.
+  lines.push(
+    `| Model request latency, per-cell median (range across cells) | ${summary.requestLatencyMs ? fmtSpreadSeconds(summary.requestLatencyMs) : "not recorded"} |`
+  );
+  lines.push(
+    `| Wall clock per successful request, per cell (range across cells) | ${summary.wallClockPerRequestMs.max > 0 ? fmtSpreadSeconds(summary.wallClockPerRequestMs) : "no request succeeded"} |`
   );
   lines.push(`| Total prompt tokens | ${fmtCount(summary.totalPromptTokens)} |`);
   lines.push(`| Total completion tokens | ${fmtCount(summary.totalCompletionTokens)} |`);

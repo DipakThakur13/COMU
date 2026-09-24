@@ -5,6 +5,7 @@ import {
   type GraderVerdict,
   type ProviderFailureCounts,
   type ProviderKillCause,
+  type RequestLatency,
   type RunRecord
 } from "./types.js";
 
@@ -180,6 +181,11 @@ export interface AssembleInput {
   unnecessary: string[];
 }
 
+function latencyOf(latencies: number[]): RequestLatency {
+  const s = spread(latencies.map(Math.round));
+  return { medianMs: s.median, minMs: s.min, maxMs: s.max, count: latencies.length };
+}
+
 export function assembleRecord(input: AssembleInput): RunRecord {
   const { outcome, verdict } = input;
   const peakContextRatio = input.contextWindow > 0 ? outcome.peakPromptTokens / input.contextWindow : 0;
@@ -219,6 +225,7 @@ export function assembleRecord(input: AssembleInput): RunRecord {
     contextWindow: input.contextWindow,
     peakContextRatio: Number(peakContextRatio.toFixed(4)),
     providerFailures: outcome.providerFailures,
+    ...(outcome.requestLatenciesMs.length > 0 ? { requestLatency: latencyOf(outcome.requestLatenciesMs) } : {}),
     planSteps: outcome.planSteps,
     planVersions: outcome.planVersions,
     repairAttempts: outcome.repairAttempts,
@@ -265,6 +272,17 @@ export interface Summary {
   providerFailures: ProviderFailureCounts;
   durationMs: Spread;
   promptTokens: Spread;
+  /**
+   * Per-cell median model request latency, across cells, including cells the provider killed: it
+   * describes the provider the run was measured against, which is what makes two runs comparable
+   * or not. Null when no record carries it (every record written before it was measured).
+   */
+  requestLatencyMs: Spread | null;
+  /**
+   * Wall clock per successful model request, across cells. Cruder than the latency, since it
+   * includes tool and test time, but every record back to B0 carries what it is computed from.
+   */
+  wallClockPerRequestMs: Spread;
   maxPeakContextRatio: number;
   failureCounts: Record<string, number>;
   /**
@@ -296,9 +314,24 @@ export interface Summary {
     unverifiedCompletions: number;
     /** Runs the provider ended, not counted in `of`. */
     providerKilled: number;
+    /** Median of this fixture's per-cell median request latency; null when never measured. */
+    requestLatencyMs: number | null;
+    /** Median of this fixture's wall clock per successful model request; null with no request. */
+    wallClockPerRequestMs: number | null;
   }>;
   /** Fixtures that always, sometimes and never produced correct work. A fixture with no measured cell is none of these. */
   reliability: { always: number; sometimes: number; never: number };
+}
+
+/**
+ * Wall clock per successful model request: how B0's "71 seconds per request" was computed.
+ *
+ * Kept because every record back to B0 carries its inputs, so it is the one latency measure that
+ * compares across the whole history. It overstates the provider's share, since tool and test time
+ * are in the numerator. Undefined for a cell with no successful request.
+ */
+export function wallClockPerRequestMs(record: Pick<RunRecord, "durationMs" | "modelRequests">): number | undefined {
+  return record.modelRequests > 0 ? record.durationMs / record.modelRequests : undefined;
 }
 
 function spread(values: number[]): Spread {
@@ -344,6 +377,8 @@ export function summarise(records: RunRecord[]): Summary {
       falseCompletions: number;
       unverifiedCompletions: number;
       providerKilled: number;
+      latencies: number[];
+      wallPerRequest: number[];
     }
   >();
   for (const record of records) {
@@ -356,10 +391,15 @@ export function summarise(records: RunRecord[]): Summary {
       falseFailures: 0,
       falseCompletions: 0,
       unverifiedCompletions: 0,
-      providerKilled: 0
+      providerKilled: 0,
+      latencies: [],
+      wallPerRequest: []
     };
-    // What the provider did is counted for every cell.
+    // What the provider did, and how fast, is counted for every cell.
     for (const k of FAILURE_KEYS) entry.providerFailures[k] += record.providerFailures?.[k] ?? 0;
+    if (record.requestLatency) entry.latencies.push(record.requestLatency.medianMs);
+    const perRequest = wallClockPerRequestMs(record);
+    if (perRequest !== undefined) entry.wallPerRequest.push(perRequest);
 
     // What COMU did is counted only for cells that measured it.
     if (providerKill(record)) {
@@ -386,11 +426,14 @@ export function summarise(records: RunRecord[]): Summary {
       falseFailures: v.falseFailures,
       falseCompletions: v.falseCompletions,
       unverifiedCompletions: v.unverifiedCompletions,
-      providerKilled: v.providerKilled
+      providerKilled: v.providerKilled,
+      requestLatencyMs: v.latencies.length > 0 ? spread(v.latencies).median : null,
+      wallClockPerRequestMs: v.wallPerRequest.length > 0 ? spread(v.wallPerRequest).median : null
     }))
     .sort((a, b) => a.fixtureId.localeCompare(b.fixtureId));
 
   const scored = perFixture.filter(f => f.of > 0);
+  const latencies = records.flatMap(r => (r.requestLatency ? [r.requestLatency.medianMs] : []));
 
   return {
     runs: measured.length,
@@ -410,6 +453,8 @@ export function summarise(records: RunRecord[]): Summary {
     ),
     durationMs: spread(measured.map(r => r.durationMs)),
     promptTokens: spread(measured.map(r => r.promptTokens)),
+    requestLatencyMs: latencies.length > 0 ? spread(latencies) : null,
+    wallClockPerRequestMs: spread(records.flatMap(r => wallClockPerRequestMs(r) ?? [])),
     maxPeakContextRatio: measured.reduce((max, r) => Math.max(max, r.peakContextRatio), 0),
     failureCounts,
     perFixture,

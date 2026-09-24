@@ -199,6 +199,15 @@ export function providerKill(record: {
 }
 
 
+/** Per-request latency within one cell, in milliseconds. */
+export interface RequestLatency {
+  medianMs: number;
+  minMs: number;
+  maxMs: number;
+  /** Settled requests measured, including failed and timed-out ones. */
+  count: number;
+}
+
 export interface GraderVerdict {
   correct: boolean;
   /** Why, in words, for whoever reads the result file. */
@@ -270,6 +279,15 @@ export interface RunRecord {
 
   /** Why the provider rejected a request, counted by cause: timeouts, rate limits, gateway, other. */
   providerFailures: ProviderFailureCounts;
+  /**
+   * How long this cell's model requests took, successes and failures alike.
+   *
+   * Recorded so the provider a run was measured against is visible in the result rather than
+   * reconstructed from logs afterwards. B1 launched into a gateway several times slower than B0's,
+   * and nothing in either record said so. Absent on records written before it was measured, and on
+   * a cell in which no request settled.
+   */
+  requestLatency?: RequestLatency;
 
   planSteps: number;
   planVersions: number;
@@ -301,6 +319,10 @@ export interface BenchmarkRun {
   records: RunRecord[];
   /** Present when a resume was allowed to change the budget, so the result says it is mixed. */
   mixedLimits?: MixedLimitsMarker[];
+  /** The gateway as probed at each launch under this label, so the result states its conditions. */
+  gatewayProbes?: GatewayProbeMarker[];
+  /** Present when a launch went ahead into a gateway slower than the gate allows. */
+  slowGateway?: SlowGatewayMarker[];
   /** Corrections and caveats established after the records were written. See RunAnnotations. */
   annotations?: RunAnnotations;
 }
@@ -342,3 +364,51 @@ export interface MixedLimitsMarker {
   acceptedAt: string;
   differences: LimitDifference[];
 }
+
+/** One minimal request sent to the provider before a launch. */
+export interface GatewayProbe {
+  at: string;
+  /** Null when the probe failed or did not answer within its cap. */
+  latencyMs: number | null;
+  error?: string;
+}
+
+/** The per-request latency a launch is compared against. */
+export interface GatewayBaseline {
+  label: string;
+  /** The committed result file it was read from. */
+  source: string;
+  /**
+   * Which latency: the measured per-request latency when the baseline recorded it, otherwise wall
+   * clock per successful request, which every record back to B0 carries.
+   */
+  measure: "request_latency" | "wall_clock_per_request";
+  medianMs: number;
+  cells: number;
+}
+
+export interface GatewayCheck {
+  probes: GatewayProbe[];
+  /** Null when the median probe failed or passed the cap. */
+  medianMs: number | null;
+  thresholdMs: number;
+  multiple: number;
+  baseline: GatewayBaseline;
+  slow: boolean;
+}
+
+/** The gateway as it was probed when a run under this label was launched. Written on every launch. */
+export interface GatewayProbeMarker {
+  journalEvent: "gateway_probe";
+  probedAt: string;
+  check: GatewayCheck;
+}
+
+/** A launch went ahead into a gateway the gate judged too slow, because --accept-slow-gateway said so. */
+export interface SlowGatewayMarker {
+  journalEvent: "slow_gateway";
+  acceptedAt: string;
+  check: GatewayCheck;
+}
+
+export type JournalMarker = MixedLimitsMarker | GatewayProbeMarker | SlowGatewayMarker;

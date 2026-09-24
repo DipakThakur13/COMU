@@ -1,0 +1,1 @@
+{"maxSteps":60,"maxToolCalls":200,"maxExecutionTimeMs":1500000,"maxRepairAttempts":3,"maxValidationRuns":6,"maxRepairFiles":5,"maxRepairTimeMs":180000,"modelRequestTimeoutMs":600000}
