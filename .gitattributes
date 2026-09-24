@@ -1,0 +1,10 @@
+# Text is stored and checked out with LF line endings, whatever core.autocrlf says on the machine.
+#
+# Without this the tree's cleanliness depended on local configuration: Git for Windows sets
+# core.autocrlf=true in its system config, under which the working tree reads as clean, while any git
+# that does not read that config saw 163 files as modified that differed only in line endings. A
+# clean tree could not be verified, and a `git add -A` from the wrong shell was a junk commit.
+* text=auto eol=lf
+
+# Binary files already tracked. Never converted.
+*.png -text
